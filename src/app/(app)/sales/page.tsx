@@ -5,6 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { salesByMonth, salesByRegion, topProducts } from "@/lib/data"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import { ArrowLeft } from "lucide-react"
 
 const chartConfig = {
   sales: {
@@ -20,11 +23,19 @@ const chartConfig = {
 export default function SalesPage() {
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Sales Analysis</h1>
-        <p className="text-muted-foreground">
-          Interactive charts and graphs for sales analysis.
-        </p>
+       <div className="flex items-center gap-4">
+        <Button asChild variant="outline" size="icon">
+            <Link href="/dashboard">
+                <ArrowLeft className="h-4 w-4"/>
+                <span className="sr-only">Back</span>
+            </Link>
+        </Button>
+        <div>
+            <h1 className="text-3xl font-bold tracking-tight">Sales Analysis</h1>
+            <p className="text-muted-foreground">
+            Interactive charts and graphs for sales analysis.
+            </p>
+        </div>
       </div>
 
       <Tabs defaultValue="overview">

@@ -4,31 +4,31 @@
 
 @layer base {
   :root {
-    --background: 216 28% 95%; /* #f2f4f7 */
+    --background: 220 20% 97%; /* #f5f6f8 */
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 207 70% 53%; /* #3498db */
+    --primary: 221 83% 53%; /* #4f46e5 */
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 145 63% 49%; /* #2ecc71 */
+    --accent: 262 83% 58%; /* #8b5cf6 */
     --accent-foreground: 210 40% 98%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 207 70% 53%;
-    --chart-1: 207 70% 53%;
-    --chart-2: 145 63% 49%;
+    --ring: 221 83% 53%;
+    --chart-1: 221 83% 53%;
+    --chart-2: 262 83% 58%;
     --chart-3: 27 87% 67%;
     --chart-4: 173 58% 39%;
     --chart-5: 43 74% 66%;
-    --radius: 0.5rem;
+    --radius: 0.8rem;
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 222.2 84% 4.9%;
     --sidebar-primary: 240 5.9% 10%;
@@ -45,21 +45,21 @@
     --card-foreground: 210 40% 98%;
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
-    --primary: 207 70% 53%;
+    --primary: 221 83% 53%;
     --primary-foreground: 210 40% 98%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 145 63% 49%;
+    --accent: 262 83% 58%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 207 70% 53%;
-    --chart-1: 207 70% 53%;
-    --chart-2: 145 63% 49%;
+    --ring: 221 83% 53%;
+    --chart-1: 221 83% 53%;
+    --chart-2: 262 83% 58%;
     --chart-3: 27 87% 67%;
     --chart-4: 173 58% 39%;
     --chart-5: 43 74% 66%;

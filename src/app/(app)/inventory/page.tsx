@@ -9,9 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Lightbulb, Wrench } from 'lucide-react';
+import { Loader2, Lightbulb, Wrench, ArrowLeft } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
 
 const formSchema = z.object({
   inventoryData: z.string().min(50, 'Please paste a representative sample of your inventory data.'),
@@ -56,11 +57,19 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Inventory Movement Analysis</h1>
-        <p className="text-muted-foreground">
-          Paste your inventory data to get AI-powered insights and optimization suggestions.
-        </p>
+      <div className="flex items-center gap-4">
+        <Button asChild variant="outline" size="icon">
+            <Link href="/dashboard">
+                <ArrowLeft className="h-4 w-4"/>
+                <span className="sr-only">Back</span>
+            </Link>
+        </Button>
+        <div>
+            <h1 className="text-3xl font-bold tracking-tight">Inventory Movement Analysis</h1>
+            <p className="text-muted-foreground">
+            Paste your inventory data to get AI-powered insights and optimization suggestions.
+            </p>
+        </div>
       </div>
 
       <Card>

@@ -1,16 +1,25 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Upload, Sheet } from "lucide-react"
+import { Upload, Sheet, ArrowLeft } from "lucide-react"
+import Link from "next/link"
 
 export default function DataImportPage() {
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Data Import</h1>
-        <p className="text-muted-foreground">
-          Import data from Excel files or connect your Google Sheets.
-        </p>
+       <div className="flex items-center gap-4">
+        <Button asChild variant="outline" size="icon">
+            <Link href="/dashboard">
+                <ArrowLeft className="h-4 w-4"/>
+                <span className="sr-only">Back</span>
+            </Link>
+        </Button>
+        <div>
+            <h1 className="text-3xl font-bold tracking-tight">Data Import</h1>
+            <p className="text-muted-foreground">
+            Import data from Excel files or connect your Google Sheets.
+            </p>
+        </div>
       </div>
 
       <div className="grid gap-8 md:grid-cols-2">

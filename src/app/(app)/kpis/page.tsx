@@ -1,5 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Activity, DollarSign, Users, CreditCard, Truck, CheckCircle, TrendingUp, Frown } from "lucide-react"
+import { Activity, DollarSign, Users, CreditCard, Truck, CheckCircle, TrendingUp, Frown, ArrowLeft } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 type KpiCardProps = {
   title: string;
@@ -39,11 +41,19 @@ export default function KpiPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">KPI Monitoring</h1>
-        <p className="text-muted-foreground">
-          Track key performance indicators across your business.
-        </p>
+      <div className="flex items-center gap-4">
+        <Button asChild variant="outline" size="icon">
+            <Link href="/dashboard">
+                <ArrowLeft className="h-4 w-4"/>
+                <span className="sr-only">Back</span>
+            </Link>
+        </Button>
+        <div>
+            <h1 className="text-3xl font-bold tracking-tight">KPI Monitoring</h1>
+            <p className="text-muted-foreground">
+            Track key performance indicators across your business.
+            </p>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

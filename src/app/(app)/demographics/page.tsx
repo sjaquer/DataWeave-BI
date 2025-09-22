@@ -9,15 +9,26 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart"
 import { customerDemographics } from "@/lib/data"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import { ArrowLeft } from "lucide-react"
 
 export default function DemographicsPage() {
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Demographic Analysis</h1>
-        <p className="text-muted-foreground">
-          Gain insights into your customer base to tailor marketing and product development.
-        </p>
+      <div className="flex items-center gap-4">
+        <Button asChild variant="outline" size="icon">
+            <Link href="/dashboard">
+                <ArrowLeft className="h-4 w-4"/>
+                <span className="sr-only">Back</span>
+            </Link>
+        </Button>
+        <div>
+            <h1 className="text-3xl font-bold tracking-tight">Demographic Analysis</h1>
+            <p className="text-muted-foreground">
+            Gain insights into your customer base to tailor marketing and product development.
+            </p>
+        </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <Card>

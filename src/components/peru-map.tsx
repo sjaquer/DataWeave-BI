@@ -90,3 +90,5 @@ const PeruMap: React.FC<PeruMapProps> = ({ data, maxOrders }) => {
 };
 
 export default PeruMap;
+
+    

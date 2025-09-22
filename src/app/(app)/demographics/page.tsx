@@ -29,21 +29,21 @@ export default function DemographicsPage() {
         <Button asChild variant="outline" size="icon">
             <Link href="/dashboard">
                 <ArrowLeft className="h-4 w-4"/>
-                <span className="sr-only">Back</span>
+                <span className="sr-only">Volver</span>
             </Link>
         </Button>
         <div>
-            <h1 className="text-3xl font-bold tracking-tight">Demographic Analysis</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Análisis Demográfico</h1>
             <p className="text-muted-foreground">
-            Gain insights into your customer base to tailor marketing and product development.
+            Obtén información sobre tu base de clientes para adaptar el marketing y el desarrollo de productos.
             </p>
         </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Order Heatmap by Department</CardTitle>
-            <CardDescription>Order density across departments in Peru. Redder areas indicate more orders.</CardDescription>
+            <CardTitle>Mapa de Calor de Pedidos por Departamento</CardTitle>
+            <CardDescription>Densidad de pedidos en los departamentos de Perú. Las áreas más rojas indican más pedidos.</CardDescription>
           </CardHeader>
           <CardContent className="h-[500px] w-full p-0">
              <PeruMap data={peruOrderData} maxOrders={maxOrders} />
@@ -52,8 +52,8 @@ export default function DemographicsPage() {
 
         <Card>
             <CardHeader>
-                <CardTitle>Orders by Department</CardTitle>
-                <CardDescription>Percentage and total orders for each department.</CardDescription>
+                <CardTitle>Pedidos por Departamento</CardTitle>
+                <CardDescription>Porcentaje y total de pedidos por cada departamento.</CardDescription>
             </CardHeader>
             <CardContent>
                 <ScrollArea className="h-[450px]">
@@ -64,7 +64,7 @@ export default function DemographicsPage() {
                         <div key={d.province} className="space-y-1">
                             <div className="flex justify-between text-sm">
                                 <span className="font-medium">{d.province}</span>
-                                <span className="text-muted-foreground">{d.orders.toLocaleString()} orders</span>
+                                <span className="text-muted-foreground">{d.orders.toLocaleString()} pedidos</span>
                             </div>
                             <div className="flex items-center gap-2">
                                <Progress value={percentage} className="h-2" />
@@ -80,8 +80,8 @@ export default function DemographicsPage() {
 
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle>Customers by Age Group</CardTitle>
-            <CardDescription>Breakdown of customers by their age range.</CardDescription>
+            <CardTitle>Clientes por Grupo de Edad</CardTitle>
+            <CardDescription>Distribución de clientes por rango de edad.</CardDescription>
           </CardHeader>
           <CardContent>
             <ChartContainer config={{}} className="h-[300px] w-full">

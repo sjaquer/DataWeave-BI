@@ -29,14 +29,14 @@ const KpiCard = ({ title, value, change, icon: Icon, isPositive, description }: 
 
 export default function KpiPage() {
   const kpis = [
-    { title: "Total Revenue", value: "$4,203,190", change: "+12.5%", icon: DollarSign, isPositive: true, description: "from last quarter" },
-    { title: "Avg. Order Value", value: "$124.50", change: "+3.2%", icon: CreditCard, isPositive: true, description: "from last quarter" },
-    { title: "Conversion Rate", value: "3.45%", change: "+0.5%", icon: TrendingUp, isPositive: true, description: "from last quarter" },
-    { title: "New Customers", value: "1,284", change: "+8.1%", icon: Users, isPositive: true, description: "from last quarter" },
-    { title: "Marketing ROI", value: "5.2x", change: "-0.5x", icon: Activity, isPositive: false, description: "from last campaign" },
-    { title: "On-Time Delivery", value: "98.2%", change: "+1.2%", icon: Truck, isPositive: true, description: "from last month" },
-    { title: "Customer Satisfaction", value: "92%", change: "+2%", icon: CheckCircle, isPositive: true, description: "from last survey" },
-    { title: "Cart Abandonment Rate", value: "68%", change: "-3%", icon: Frown, isPositive: true, description: "from last month" },
+    { title: "Ingresos Totales", value: "$4,203,190", change: "+12.5%", icon: DollarSign, isPositive: true, description: "del último trimestre" },
+    { title: "Valor Promedio de Pedido", value: "$124.50", change: "+3.2%", icon: CreditCard, isPositive: true, description: "del último trimestre" },
+    { title: "Tasa de Conversión", value: "3.45%", change: "+0.5%", icon: TrendingUp, isPositive: true, description: "del último trimestre" },
+    { title: "Nuevos Clientes", value: "1,284", change: "+8.1%", icon: Users, isPositive: true, description: "del último trimestre" },
+    { title: "ROI de Marketing", value: "5.2x", change: "-0.5x", icon: Activity, isPositive: false, description: "de la última campaña" },
+    { title: "Entrega a Tiempo", value: "98.2%", change: "+1.2%", icon: Truck, isPositive: true, description: "del último mes" },
+    { title: "Satisfacción del Cliente", value: "92%", change: "+2%", icon: CheckCircle, isPositive: true, description: "de la última encuesta" },
+    { title: "Tasa de Abandono de Carrito", value: "68%", change: "-3%", icon: Frown, isPositive: true, description: "del último mes" },
   ];
 
   return (
@@ -45,13 +45,13 @@ export default function KpiPage() {
         <Button asChild variant="outline" size="icon">
             <Link href="/dashboard">
                 <ArrowLeft className="h-4 w-4"/>
-                <span className="sr-only">Back</span>
+                <span className="sr-only">Volver</span>
             </Link>
         </Button>
         <div>
-            <h1 className="text-3xl font-bold tracking-tight">KPI Monitoring</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Monitoreo de KPIs</h1>
             <p className="text-muted-foreground">
-            Track key performance indicators across your business.
+            Sigue los indicadores clave de rendimiento en todo tu negocio.
             </p>
         </div>
       </div>

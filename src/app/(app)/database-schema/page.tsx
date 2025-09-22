@@ -17,9 +17,9 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
 const formSchema = z.object({
-  salesDataDescription: z.string().min(10, 'Please provide more detail.'),
-  customerDataDescription: z.string().min(10, 'Please provide more detail.'),
-  regionalSalesDataDescription: z.string().min(10, 'Please provide more detail.'),
+  salesDataDescription: z.string().min(10, 'Por favor, proporciona más detalles.'),
+  customerDataDescription: z.string().min(10, 'Por favor, proporciona más detalles.'),
+  regionalSalesDataDescription: z.string().min(10, 'Por favor, proporciona más detalles.'),
 });
 
 export default function DatabaseSchemaPage() {
@@ -46,8 +46,8 @@ export default function DatabaseSchemaPage() {
       console.error(error);
       toast({
         variant: "destructive",
-        title: "An error occurred",
-        description: "Failed to generate database schema. Please try again.",
+        title: "Ocurrió un error",
+        description: "No se pudo generar el esquema de la base de datos. Por favor, inténtalo de nuevo.",
       });
     }
     setIsLoading(false);
@@ -59,20 +59,20 @@ export default function DatabaseSchemaPage() {
             <Button asChild variant="outline" size="icon">
                 <Link href="/dashboard">
                     <ArrowLeft className="h-4 w-4"/>
-                    <span className="sr-only">Back</span>
+                    <span className="sr-only">Volver</span>
                 </Link>
             </Button>
             <div>
-                 <h1 className="text-3xl font-bold tracking-tight">Database Schema AI</h1>
+                 <h1 className="text-3xl font-bold tracking-tight">Esquema de BD con IA</h1>
                 <p className="text-muted-foreground">
-                    Describe your data, and let AI generate an optimal database schema for KPI analysis.
+                    Describe tus datos y deja que la IA genere un esquema de base de datos óptimo para el análisis de KPIs.
                 </p>
             </div>
        </div>
         <div className="grid gap-8 md:grid-cols-2">
             <Card>
             <CardHeader>
-                <CardTitle>Data Descriptions</CardTitle>
+                <CardTitle>Descripción de Datos</CardTitle>
             </CardHeader>
             <CardContent>
                 <Form {...form}>
@@ -82,9 +82,9 @@ export default function DatabaseSchemaPage() {
                     name="salesDataDescription"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Sales Data</FormLabel>
+                        <FormLabel>Datos de Ventas</FormLabel>
                         <FormControl>
-                            <Textarea placeholder="e.g., Data includes order ID, product SKU, quantity, price, order date..." {...field} />
+                            <Textarea placeholder="Ej: Los datos incluyen ID de pedido, SKU de producto, cantidad, precio, fecha de pedido..." {...field} />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -95,9 +95,9 @@ export default function DatabaseSchemaPage() {
                     name="customerDataDescription"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Customer Data</FormLabel>
+                        <FormLabel>Datos de Clientes</FormLabel>
                         <FormControl>
-                            <Textarea placeholder="e.g., Data includes customer ID, name, email, sign-up date, location..." {...field} />
+                            <Textarea placeholder="Ej: Los datos incluyen ID de cliente, nombre, email, fecha de registro, ubicación..." {...field} />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -108,9 +108,9 @@ export default function DatabaseSchemaPage() {
                     name="regionalSalesDataDescription"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Regional Sales Data</FormLabel>
+                        <FormLabel>Datos de Ventas Regionales</FormLabel>
                         <FormControl>
-                            <Textarea placeholder="e.g., Data includes province, city, sales amount per region..." {...field} />
+                            <Textarea placeholder="Ej: Los datos incluyen provincia, ciudad, monto de ventas por región..." {...field} />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -118,7 +118,7 @@ export default function DatabaseSchemaPage() {
                     />
                     <Button type="submit" disabled={isLoading}>
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Generate Schema
+                    Generar Esquema
                     </Button>
                 </form>
                 </Form>
@@ -126,8 +126,8 @@ export default function DatabaseSchemaPage() {
             </Card>
             <Card className="min-h-[600px]">
             <CardHeader>
-                <CardTitle>Generated Schema</CardTitle>
-                <CardDescription>The optimal database schema will appear here.</CardDescription>
+                <CardTitle>Esquema Generado</CardTitle>
+                <CardDescription>El esquema de base de datos óptimo aparecerá aquí.</CardDescription>
             </CardHeader>
             <CardContent>
                 {isLoading && (

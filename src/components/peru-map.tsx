@@ -78,7 +78,7 @@ const PeruMap: React.FC<PeruMapProps> = ({ data, maxOrders }) => {
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="font-medium">{name}</p>
-                  <p className="text-sm text-muted-foreground">{orders.toLocaleString()} orders</p>
+                  <p className="text-sm text-muted-foreground">{orders.toLocaleString()} pedidos</p>
                 </TooltipContent>
               </Tooltip>
             );

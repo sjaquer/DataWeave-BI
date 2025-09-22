@@ -11,13 +11,13 @@ export default function DataImportPage() {
         <Button asChild variant="outline" size="icon">
             <Link href="/dashboard">
                 <ArrowLeft className="h-4 w-4"/>
-                <span className="sr-only">Back</span>
+                <span className="sr-only">Volver</span>
             </Link>
         </Button>
         <div>
-            <h1 className="text-3xl font-bold tracking-tight">Data Import</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Importar Datos</h1>
             <p className="text-muted-foreground">
-            Import data from Excel files or connect your Google Sheets.
+            Importa datos desde archivos de Excel o conecta tus Hojas de Cálculo de Google.
             </p>
         </div>
       </div>
@@ -30,18 +30,18 @@ export default function DataImportPage() {
                 <Upload className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <CardTitle>Import from Excel</CardTitle>
-                <CardDescription>Upload a .xlsx or .csv file.</CardDescription>
+                <CardTitle>Importar desde Excel</CardTitle>
+                <CardDescription>Sube un archivo .xlsx o .csv.</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex w-full max-w-sm items-center space-x-2">
               <Input type="file" accept=".xlsx, .csv" />
-              <Button type="submit">Upload</Button>
+              <Button type="submit">Subir</Button>
             </div>
              <p className="text-xs text-muted-foreground">
-              Supports automatic refresh for live dashboards upon re-upload.
+              Soporta actualización automática para paneles en vivo al volver a subir.
             </p>
           </CardContent>
         </Card>
@@ -53,15 +53,15 @@ export default function DataImportPage() {
                 <Sheet className="h-6 w-6 text-accent" />
               </div>
               <div>
-                <CardTitle>Connect Google Sheets</CardTitle>
-                <CardDescription>Sync data directly from your spreadsheets.</CardDescription>
+                <CardTitle>Conectar Hojas de Cálculo de Google</CardTitle>
+                <CardDescription>Sincroniza datos directamente desde tus hojas de cálculo.</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-             <Button>Connect to Google Sheets</Button>
+             <Button>Conectar a Hojas de Cálculo de Google</Button>
              <p className="text-xs text-muted-foreground">
-              Allow DataWeave BI to access your Google Sheets. Data can be refreshed automatically.
+              Permite que DataWeave BI acceda a tus Hojas de Cálculo de Google. Los datos pueden ser actualizados automáticamente.
             </p>
           </CardContent>
         </Card>

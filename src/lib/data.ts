@@ -1,16 +1,16 @@
 export const salesByMonth = [
-  { month: "Jan", total: Math.floor(Math.random() * 5000) + 1000 },
+  { month: "Ene", total: Math.floor(Math.random() * 5000) + 1000 },
   { month: "Feb", total: Math.floor(Math.random() * 5000) + 1000 },
   { month: "Mar", total: Math.floor(Math.random() * 5000) + 1000 },
-  { month: "Apr", total: Math.floor(Math.random() * 5000) + 1000 },
+  { month: "Abr", total: Math.floor(Math.random() * 5000) + 1000 },
   { month: "May", total: Math.floor(Math.random() * 5000) + 1000 },
   { month: "Jun", total: Math.floor(Math.random() * 5000) + 1000 },
   { month: "Jul", total: Math.floor(Math.random() * 5000) + 1000 },
-  { month: "Aug", total: Math.floor(Math.random() * 5000) + 1000 },
+  { month: "Ago", total: Math.floor(Math.random() * 5000) + 1000 },
   { month: "Sep", total: Math.floor(Math.random() * 5000) + 1000 },
   { month: "Oct", total: Math.floor(Math.random() * 5000) + 1000 },
   { month: "Nov", total: Math.floor(Math.random() * 5000) + 1000 },
-  { month: "Dec", total: Math.floor(Math.random() * 5000) + 1000 },
+  { month: "Dic", total: Math.floor(Math.random() * 5000) + 1000 },
 ];
 
 export const topProducts = [
@@ -31,8 +31,8 @@ export const salesByRegion = [
 
 export const customerDemographics = {
     byLocation: [
-        { name: 'Urban', value: 400, fill: 'var(--color-chart-1)' },
-        { name: 'Suburban', value: 300, fill: 'var(--color-chart-2)' },
+        { name: 'Urbano', value: 400, fill: 'var(--color-chart-1)' },
+        { name: 'Suburbano', value: 300, fill: 'var(--color-chart-2)' },
         { name: 'Rural', value: 300, fill: 'var(--color-chart-3)' },
     ],
     byAge: [

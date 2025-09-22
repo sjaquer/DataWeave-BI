@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
 const formSchema = z.object({
-  inventoryData: z.string().min(50, 'Please paste a representative sample of your inventory data.'),
+  inventoryData: z.string().min(50, 'Por favor, pega una muestra representativa de tus datos de inventario.'),
 });
 
 const exampleData = `ID_MOVIMIENTO	TIMESTAMP	USUARIO_REGISTRADOR	SKU	PRODUCTO	VARIANTE	CANTIDAD	STOCK_ANTERIOR	STOCK_POSTERIOR	TIPO_MOVIMIENTO	MOTIVO_DETALLE	ID_REFERENCIA	ALMACEN	NUM _PEDIDO	TIENDA
@@ -44,8 +44,8 @@ export default function InventoryPage() {
       console.error('Error analyzing inventory:', error);
       toast({
         variant: 'destructive',
-        title: 'Analysis Failed',
-        description: 'There was an error analyzing your data. Please try again.',
+        title: 'Análisis Fallido',
+        description: 'Hubo un error al analizar tus datos. Por favor, inténtalo de nuevo.',
       });
     }
     setIsLoading(false);
@@ -61,22 +61,22 @@ export default function InventoryPage() {
         <Button asChild variant="outline" size="icon">
             <Link href="/dashboard">
                 <ArrowLeft className="h-4 w-4"/>
-                <span className="sr-only">Back</span>
+                <span className="sr-only">Volver</span>
             </Link>
         </Button>
         <div>
-            <h1 className="text-3xl font-bold tracking-tight">Inventory Movement Analysis</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Análisis de Movimiento de Inventario</h1>
             <p className="text-muted-foreground">
-            Paste your inventory data to get AI-powered insights and optimization suggestions.
+            Pega tus datos de inventario para obtener información y sugerencias de optimización impulsadas por IA.
             </p>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Inventory Data Input</CardTitle>
+          <CardTitle>Entrada de Datos de Inventario</CardTitle>
           <CardDescription>
-            Paste your tab-separated inventory data below.
+            Pega tus datos de inventario separados por tabulaciones a continuación.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -87,10 +87,10 @@ export default function InventoryPage() {
                 name="inventoryData"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Tab-separated data from your spreadsheet</FormLabel>
+                    <FormLabel>Datos separados por tabulaciones de tu hoja de cálculo</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Paste your data here..."
+                        placeholder="Pega tus datos aquí..."
                         className="min-h-[200px] font-mono text-xs"
                         {...field}
                       />
@@ -104,10 +104,10 @@ export default function InventoryPage() {
                   {isLoading ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : null}
-                  Analyze Data
+                  Analizar Datos
                 </Button>
                  <Button type="button" variant="outline" onClick={handlePasteExample}>
-                  Paste Example
+                  Pegar Ejemplo
                 </Button>
               </div>
             </form>
@@ -141,7 +141,7 @@ export default function InventoryPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Lightbulb className="text-primary" /> Key Insights
+                <Lightbulb className="text-primary" /> Perspectivas Clave
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -155,7 +155,7 @@ export default function InventoryPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Wrench className="text-accent" /> Optimization Suggestions
+                <Wrench className="text-accent" /> Sugerencias de Optimización
               </CardTitle>
             </CardHeader>
             <CardContent>

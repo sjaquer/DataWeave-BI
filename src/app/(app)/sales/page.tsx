@@ -11,7 +11,7 @@ import { ArrowLeft } from "lucide-react"
 
 const chartConfig = {
   sales: {
-    label: "Sales",
+    label: "Ventas",
     color: "hsl(var(--chart-1))",
   },
   total: {
@@ -27,28 +27,28 @@ export default function SalesPage() {
         <Button asChild variant="outline" size="icon">
             <Link href="/dashboard">
                 <ArrowLeft className="h-4 w-4"/>
-                <span className="sr-only">Back</span>
+                <span className="sr-only">Volver</span>
             </Link>
         </Button>
         <div>
-            <h1 className="text-3xl font-bold tracking-tight">Sales Analysis</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Análisis de Ventas</h1>
             <p className="text-muted-foreground">
-            Interactive charts and graphs for sales analysis.
+            Gráficos interactivos para el análisis de ventas.
             </p>
         </div>
       </div>
 
       <Tabs defaultValue="overview">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="products">By Product</TabsTrigger>
-          <TabsTrigger value="regions">By Region</TabsTrigger>
+          <TabsTrigger value="overview">Resumen</TabsTrigger>
+          <TabsTrigger value="products">Por Producto</TabsTrigger>
+          <TabsTrigger value="regions">Por Región</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Sales Trends</CardTitle>
-              <CardDescription>Monthly sales over the last year.</CardDescription>
+              <CardTitle>Tendencias de Ventas</CardTitle>
+              <CardDescription>Ventas mensuales durante el último año.</CardDescription>
             </CardHeader>
             <CardContent>
               <ChartContainer config={chartConfig} className="h-[300px] w-full">
@@ -85,8 +85,8 @@ export default function SalesPage() {
         <TabsContent value="products" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Product Performance</CardTitle>
-              <CardDescription>Top 5 selling products.</CardDescription>
+              <CardTitle>Rendimiento de Productos</CardTitle>
+              <CardDescription>Top 5 de productos más vendidos.</CardDescription>
             </CardHeader>
             <CardContent>
               <ChartContainer config={chartConfig} className="h-[300px] w-full">
@@ -114,8 +114,8 @@ export default function SalesPage() {
         <TabsContent value="regions" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Regional Sales</CardTitle>
-              <CardDescription>Breakdown of sales by region.</CardDescription>
+              <CardTitle>Ventas Regionales</CardTitle>
+              <CardDescription>Desglose de ventas por región.</CardDescription>
             </CardHeader>
             <CardContent>
                <ChartContainer config={chartConfig} className="h-[300px] w-full">

@@ -15,48 +15,49 @@ import {
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Logo } from "@/components/icons";
+import { Button } from "@/components/ui/button";
 
 const menuItems = [
   {
     href: "/sales",
-    label: "Sales Analysis",
+    label: "Análisis de Ventas",
     icon: BarChart3,
-    description: "Deep dive into sales performance",
+    description: "Análisis profundo del rendimiento de ventas",
     className: "md:col-span-2",
   },
   {
     href: "/inventory",
-    label: "Inventory",
+    label: "Inventario",
     icon: Warehouse,
-    description: "Monitor and analyze stock levels",
+    description: "Monitorea y analiza los niveles de stock",
     className: "",
   },
    {
     href: "/kpis",
     label: "KPIs",
     icon: Target,
-    description: "Track key performance indicators",
+    description: "Seguimiento de indicadores clave de rendimiento",
     className: "",
   },
   {
     href: "/demographics",
-    label: "Demographics",
+    label: "Demografía",
     icon: Users,
-    description: "Understand your customer base",
+    description: "Comprende tu base de clientes",
     className: "",
   },
   {
     href: "/database-schema",
-    label: "DB Schema AI",
+    label: "Esquema de BD con IA",
     icon: Database,
-    description: "Generate schemas with AI",
+    description: "Genera esquemas con IA",
     className: "md:col-span-2",
   },
   {
     href: "/data-import",
-    label: "Data Import",
+    label: "Importar Datos",
     icon: Upload,
-    description: "Import data from various sources",
+    description: "Importa datos de diversas fuentes",
     className: "",
   },
 ];
@@ -75,13 +76,12 @@ export default function Dashboard() {
                     <Settings className="h-5 w-5" />
                 </Button>
             </Link>
-             <UserNav />
         </div>
       </header>
       <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
         <div>
-            <h1 className="text-3xl font-bold tracking-tight">Welcome, John Doe</h1>
-            <p className="text-muted-foreground">Here's a quick overview of your business.</p>
+            <h1 className="text-3xl font-bold tracking-tight">Bienvenido, John Doe</h1>
+            <p className="text-muted-foreground">Aquí tienes un resumen rápido de tu negocio.</p>
         </div>
         <div className="grid gap-6 md:grid-cols-3">
             {menuItems.map((item) => (
@@ -103,71 +103,5 @@ export default function Dashboard() {
         </div>
       </main>
     </div>
-  );
-}
-
-// Re-add UserNav and Button to be used on this page
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { PlaceHolderImages } from '@/lib/placeholder-images';
-import { CreditCard, LogOut, User } from 'lucide-react';
-
-function UserNav() {
-  const userAvatar = PlaceHolderImages.find((img) => img.id === 'user-avatar');
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-          <Avatar className="h-9 w-9">
-            <AvatarImage
-              src={userAvatar?.imageUrl}
-              alt="User Avatar"
-              data-ai-hint={userAvatar?.imageHint}
-            />
-            <AvatarFallback>JD</AvatarFallback>
-          </Avatar>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56" align="end" forceMount>
-        <DropdownMenuLabel className="font-normal">
-          <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">John Doe</p>
-            <p className="text-xs leading-none text-muted-foreground">
-              john.doe@example.com
-            </p>
-          </div>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem>
-            <User className="mr-2 h-4 w-4" />
-            <span>Profile</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem>
-            <CreditCard className="mr-2 h-4 w-4" />
-            <span>Billing</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem>
-            <Settings className="mr-2 h-4 w-4" />
-            <span>Settings</span>
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          <LogOut className="mr-2 h-4 w-4" />
-          <span>Log out</span>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

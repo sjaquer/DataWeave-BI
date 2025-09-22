@@ -43,6 +43,35 @@ export const customerDemographics = {
     ]
 }
 
+export const peruOrderData = [
+  { province: "Amazonas", orders: 15 },
+  { province: "Ancash", orders: 40 },
+  { province: "Apurimac", orders: 20 },
+  { province: "Arequipa", orders: 85 },
+  { province: "Ayacucho", orders: 30 },
+  { province: "Cajamarca", orders: 50 },
+  { province: "Callao", orders: 110 },
+  { province: "Cusco", orders: 70 },
+  { province: "Huancavelica", orders: 10 },
+  { province: "Huanuco", orders: 25 },
+  { province: "Ica", orders: 60 },
+  { province: "Junin", orders: 55 },
+  { province: "La Libertad", orders: 75 },
+  { province: "Lambayeque", orders: 65 },
+  { province: "Lima", orders: 200 },
+  { province: "Loreto", orders: 45 },
+  { province: "Madre de Dios", orders: 5 },
+  { province: "Moquegua", orders: 12 },
+  { province: "Pasco", orders: 8 },
+  { province: "Piura", orders: 80 },
+  { province: "Puno", orders: 35 },
+  { province: "San Martin", orders: 48 },
+  { province: "Tacna", orders: 28 },
+  { province: "Tumbes", orders: 22 },
+  { province: "Ucayali", orders: 18 },
+];
+
+
 export const kpiData = {
     totalRevenue: {
         value: '$45,231.89',

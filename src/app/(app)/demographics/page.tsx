@@ -8,12 +8,15 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart"
-import { customerDemographics } from "@/lib/data"
+import { customerDemographics, peruOrderData } from "@/lib/data"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
+import PeruMap from "@/components/peru-map"
 
 export default function DemographicsPage() {
+  const maxOrders = Math.max(...peruOrderData.map(d => d.orders));
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -31,35 +34,15 @@ export default function DemographicsPage() {
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+        <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Customers by Location</CardTitle>
-            <CardDescription>Distribution of customers across different area types.</CardDescription>
+            <CardTitle>Order Heatmap by Province</CardTitle>
+            <CardDescription>Order density across provinces in Peru. Redder areas indicate more orders.</CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={{}} className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={customerDemographics.byLocation}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    label
-                  >
-                    {customerDemographics.byLocation.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <ChartTooltip
-                    cursor={false}
-                    content={<ChartTooltipContent hideLabel />}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartContainer>
+            <div className="h-[400px] w-full">
+              <PeruMap data={peruOrderData} maxOrders={maxOrders} />
+            </div>
           </CardContent>
         </Card>
 

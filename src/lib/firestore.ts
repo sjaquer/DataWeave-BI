@@ -66,24 +66,23 @@ export async function processNewShopifyOrder(order: Order) {
 
 /**
  * Normaliza el número de pedido a un formato estándar que empieza con '#'.
- * Acepta formatos como 'N-1234' o '#1234' y los convierte a '#1234'.
+ * Acepta formatos como 'N-1234', '#B1234', '1234' y los convierte a '#1234'.
  */
 function normalizeOrderName(name: string): string {
+  if (!name) return '';
   let normalized = name.trim().toUpperCase();
   
-  // Maneja formatos 'N-1234', '#B1234', etc.
-  if (normalized.startsWith('N-')) {
-    normalized = '#' + normalized.substring(2);
-  } else if (!normalized.startsWith('#') && /^[A-Z]?-?\d+$/.test(normalized)) {
-    // Si tiene un prefijo opcional y luego números
-    const match = normalized.match(/(\d+)$/);
-    if (match) {
-        normalized = '#' + match[1];
-    }
-  } else if (!normalized.startsWith('#')) {
-     normalized = '#' + normalized;
+  // Extrae solo los dígitos del final del string.
+  const match = normalized.match(/\d+$/);
+  if (match) {
+    return '#' + match[0];
   }
   
+  // Si no encuentra dígitos, devuelve el nombre original precedido de # por si acaso.
+  if (!normalized.startsWith('#')) {
+    return '#' + normalized;
+  }
+
   return normalized;
 }
 
@@ -97,7 +96,7 @@ export async function updateConfirmedOrders(
 
   const validOrderNames = confirmedOrders
     .map(item => normalizeOrderName(String(item.PEDIDO || '')))
-    .filter(name => name.startsWith('#'));
+    .filter(name => name.length > 1);
 
   if (validOrderNames.length === 0) {
     return { status: 'success', message: 'No se encontraron números de pedido válidos para procesar.' };
@@ -106,6 +105,7 @@ export async function updateConfirmedOrders(
   const confirmationsByDate: { [key: string]: number } = {};
   const metricsRef = collection(db, 'daily_metrics');
   
+  // Búsqueda por lotes para no superar los límites de Firestore.
   const chunkSize = 30;
   for (let i = 0; i < validOrderNames.length; i += chunkSize) {
       const chunk = validOrderNames.slice(i, i + chunkSize);
@@ -141,17 +141,22 @@ export async function updateConfirmedOrders(
 
   try {
     await runTransaction(db, async (transaction) => {
-      for (const [dateId, incrementValue] of Object.entries(confirmationsByDate)) {
-        if (incrementValue === 0) continue;
+      const docRefs: { [key: string]: any } = {};
+      const docPromises = Object.keys(confirmationsByDate).map(dateId => {
+          const dailyMetricDocRef = doc(db, 'daily_metrics', dateId);
+          docRefs[dateId] = dailyMetricDocRef;
+          return transaction.get(dailyMetricDocRef);
+      });
 
-        const dailyMetricDocRef = doc(db, 'daily_metrics', dateId);
-        const metricDoc = await transaction.get(dailyMetricDocRef);
+      const metricDocs = await Promise.all(docPromises);
 
+      for (let i = 0; i < metricDocs.length; i++) {
+        const metricDoc = metricDocs[i];
+        const dateId = Object.keys(confirmationsByDate)[i];
+        const incrementValue = confirmationsByDate[dateId];
+        
         if (metricDoc.exists()) {
-          const currentConfirmed = metricDoc.data().confirmedOrders || 0;
-          transaction.update(dailyMetricDocRef, {
-            confirmedOrders: currentConfirmed + incrementValue,
-          });
+           transaction.update(docRefs[dateId], { confirmedOrders: increment(incrementValue) });
         }
       }
     });

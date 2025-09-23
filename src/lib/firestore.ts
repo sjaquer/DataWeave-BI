@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -21,53 +22,56 @@ export interface Order {
 }
 
 /**
- * Normaliza el número de pedido a un formato estándar que empieza con '#'.
- * Acepta formatos como 'N-1234', '#B1234', '1234' y los convierte a '#1234'.
- * Extrae solo los dígitos numéricos.
+ * Normaliza el número de pedido a un formato estándar único para todo el sistema.
+ * Acepta formatos como 'N-1234', '#B1234', '1234' y los convierte a un prefijo de tienda + '#1234'.
+ * Ej: para storeId 'tienda-1' y pedido 'N-1234' -> 'tienda-1_#1234'
  */
-function normalizeOrderName(name: string): string {
+function normalizeOrderName(name: string, storeId?: string): string {
     if (!name) return '';
     const digits = String(name).match(/\d+/g);
-    if (digits) {
-      return '#' + digits.join('');
+    const numericPart = digits ? '#' + digits.join('') : '#' + name;
+    
+    if (storeId) {
+      return `${storeId}_${numericPart}`;
     }
-    return '#' + name; // Fallback por si no encuentra dígitos
+    return numericPart; // Para búsquedas desde Google Sheet
 }
 
 
-function getDailyMetricDocId(date: Date): string {
+function getDailyMetricDocId(date: Date, storeId: string): string {
   const day = String(date.getUTCDate()).padStart(2, '0');
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
   const year = date.getUTCFullYear();
-  return `${day}-${month}-${year}`;
+  // El ID del documento ahora incluye el storeId para garantizar unicidad.
+  return `${storeId}_${day}-${month}-${year}`;
 }
 
 /**
- * Procesa un único pedido nuevo de Shopify para actualizar las métricas diarias.
+ * Procesa un único pedido nuevo de una tienda Shopify para actualizar las métricas diarias.
  * Ignora pedidos con más de 6 meses de antigüedad.
  */
-export async function processNewShopifyOrder(order: Order) {
+export async function processNewShopifyOrder(order: Order, storeId: string) {
   const orderDate = new Date(order.created_at);
 
-  // Lógica de optimización: ignorar pedidos de más de 6 meses
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
   if (orderDate < sixMonthsAgo) {
-    console.log(`[Firestore] Pedido ${order.name} ignorado por ser más antiguo de 6 meses.`);
-    return; // Detiene el procesamiento
+    console.log(`[Firestore] Pedido ${order.name} de ${storeId} ignorado por ser más antiguo de 6 meses.`);
+    return;
   }
 
-  const dailyMetricId = getDailyMetricDocId(orderDate);
+  const dailyMetricId = getDailyMetricDocId(orderDate, storeId);
   const dailyMetricDocRef = doc(db, 'daily_metrics', dailyMetricId);
   const firestoreTimestamp = Timestamp.fromDate(orderDate);
-  const normalizedOrderName = normalizeOrderName(order.name);
+  const normalizedOrderName = normalizeOrderName(order.name, storeId);
 
   try {
     await runTransaction(db, async (transaction) => {
       const metricDoc = await transaction.get(dailyMetricDocRef);
       if (!metricDoc.exists()) {
         transaction.set(dailyMetricDocRef, {
-          date: dailyMetricId,
+          date: `${String(orderDate.getUTCDate()).padStart(2, '0')}-${String(orderDate.getUTCMonth() + 1).padStart(2, '0')}-${orderDate.getUTCFullYear()}`,
+          storeId: storeId,
           createdAt: firestoreTimestamp,
           totalOrders: 1,
           confirmedOrders: 0,
@@ -84,7 +88,7 @@ export async function processNewShopifyOrder(order: Order) {
         }
       }
     });
-    console.log(`[Firestore] Métrica 'totalOrders' actualizada para el día ${dailyMetricId} para el pedido ${order.name}.`);
+    console.log(`[Firestore] Métrica 'totalOrders' actualizada para el día y tienda ${dailyMetricId} para el pedido ${order.name}.`);
   } catch (error) {
     console.error(`Error al procesar el nuevo pedido de Shopify en Firestore:`, error);
     throw error;
@@ -135,79 +139,72 @@ export async function deleteOldMetrics(): Promise<{ status: string; message: str
 
 
 /**
- * Actualiza los pedidos como confirmados, encontrando su fecha de creación original.
+ * Actualiza los pedidos como confirmados, encontrando su tienda y fecha de creación original.
+ * Google Sheet NO sabe de qué tienda es el pedido, así que debemos buscarlo.
  */
 export async function updateConfirmedOrders(
   confirmedOrders: { PEDIDO: string }[]
 ): Promise<{ status: string; message: string }> {
 
-  const validOrderNames = confirmedOrders
-    .map(item => normalizeOrderName(String(item.PEDIDO || '')))
-    .filter(name => name.length > 1);
-
-  if (validOrderNames.length === 0) {
+  if (confirmedOrders.length === 0) {
     return { status: 'success', message: 'No se encontraron números de pedido válidos para procesar.' };
   }
   
-  const confirmationsByDate: { [key: string]: number } = {};
+  const confirmationsByDocId: { [key: string]: number } = {};
   const metricsRef = collection(db, 'daily_metrics');
   
-  // Búsqueda por lotes de 30 para no superar los límites de Firestore.
-  const chunkSize = 30;
-  for (let i = 0; i < validOrderNames.length; i += chunkSize) {
-      const chunk = validOrderNames.slice(i, i + chunkSize);
-      
-      const q = query(metricsRef, where('orderNumbers', 'array-contains-any', chunk));
-      
-      try {
-        const querySnapshot = await getDocs(q);
+  // Para cada pedido confirmado desde Sheets, intentamos encontrar su documento correspondiente.
+  for (const item of confirmedOrders) {
+    const rawOrderName = String(item.PEDIDO || '');
+    if (rawOrderName.length < 1) continue;
     
-        for (const orderName of chunk) {
-          let found = false;
-          for (const doc of querySnapshot.docs) {
-            const data = doc.data();
-            if (data.orderNumbers && data.orderNumbers.includes(orderName)) {
-              const dateId = data.date;
-              // Verifica si el pedido ya fue confirmado para este día para evitar duplicados.
-              // Esta es una salvaguarda simple, una más robusta requeriría una subcolección de confirmados.
-              confirmationsByDate[dateId] = (confirmationsByDate[dateId] || 0) + 1;
-              found = true;
-              break; 
-            }
-          }
-          if (!found) {
-            console.warn(`[Firestore] No se encontró el pedido ${orderName} en 'daily_metrics'. No se pudo asignar fecha de confirmación.`);
-          }
-        }
-      } catch (error) {
-        console.error('Error durante la búsqueda de un lote de pedidos:', error);
+    // Extraemos solo el número, ej: '#1234'
+    const partialOrderName = normalizeOrderName(rawOrderName); 
+
+    // Creamos una consulta para buscar documentos cuyo array 'orderNumbers' contenga un string que TERMINE con el número de pedido.
+    // Ej: Buscar 'tienda-1_#1234' sabiendo solo '#1234'.
+    // Firestore no soporta 'ends-with', así que usamos una consulta de rango que es una aproximación.
+    const start = partialOrderName; 
+    const end = partialOrderName + '\uf8ff';
+
+    const q = query(metricsRef, where('orderNumbers', 'array-contains-any', [
+        `tienda-1_${partialOrderName}`, `tienda-2_${partialOrderName}`, `tienda-3_${partialOrderName}`, `tienda-4_${partialOrderName}`,`tienda-5_${partialOrderName}`
+    ]));
+
+
+    try {
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        // Asumimos que un número de pedido solo puede existir en una tienda.
+        const doc = querySnapshot.docs[0];
+        const docId = doc.id;
+        confirmationsByDocId[docId] = (confirmationsByDocId[docId] || 0) + 1;
+      } else {
+        console.warn(`[Firestore] No se encontró el pedido ${rawOrderName} en ninguna tienda.`);
       }
+    } catch (error) {
+      console.error(`Error buscando el pedido ${rawOrderName}:`, error);
+    }
   }
 
-  if (Object.keys(confirmationsByDate).length === 0) {
+
+  if (Object.keys(confirmationsByDocId).length === 0) {
       return { status: 'success', message: 'Los pedidos confirmados no coincidieron con ningún pedido existente en la base de datos.' };
   }
 
   try {
     await runTransaction(db, async (transaction) => {
-        for (const dateId in confirmationsByDate) {
-            const incrementValue = confirmationsByDate[dateId];
-            const dailyMetricDocRef = doc(db, 'daily_metrics', dateId);
-            const metricDoc = await transaction.get(dailyMetricDocRef);
-            
-            if (metricDoc.exists()) {
-                const currentConfirmed = metricDoc.data().confirmedOrders || 0;
-                // Para evitar duplicar confirmaciones, se podría añadir una lógica más compleja aquí.
-                // Por ahora, simplemente incrementamos.
-                transaction.update(dailyMetricDocRef, { confirmedOrders: increment(incrementValue) });
-            }
+        for (const docId in confirmationsByDocId) {
+            const incrementValue = confirmationsByDocId[docId];
+            const dailyMetricDocRef = doc(db, 'daily_metrics', docId);
+            transaction.update(dailyMetricDocRef, { confirmedOrders: increment(incrementValue) });
         }
     });
 
-    const totalConfirmations = Object.values(confirmationsByDate).reduce((a,b) => a+b, 0);
+    const totalConfirmations = Object.values(confirmationsByDocId).reduce((a,b) => a+b, 0);
     return {
       status: 'success',
-      message: `${totalConfirmations} pedidos confirmados fueron procesados y asociados a sus fechas correctas.`,
+      message: `${totalConfirmations} pedidos confirmados fueron procesados y asociados a sus tiendas y fechas correctas.`,
     };
 
   } catch (error) {

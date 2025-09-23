@@ -57,7 +57,6 @@ export default function Dashboard() {
   useEffect(() => {
     setIsLoading(true);
     const metricsCollectionRef = collection(db, "daily_metrics");
-    // Corregido: Solo ordenar por fecha de creación. El filtro de 6 meses se aplica en el cliente.
     const q = query(metricsCollectionRef, orderBy("createdAt", "desc"));
 
     const sixMonthsAgo = new Date();
@@ -65,23 +64,36 @@ export default function Dashboard() {
     const sixMonthsAgoTimestamp = Timestamp.fromDate(sixMonthsAgo);
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const fetchedMetrics: DailyMetric[] = [];
+      const dailyData: { [key: string]: DailyMetric } = {};
+
       querySnapshot.forEach((doc) => {
         const data = doc.data();
         
-        // Aplicar el filtro de los últimos 6 meses en el cliente.
         if (data.createdAt >= sixMonthsAgoTimestamp) {
-            const rate = (data.totalOrders > 0) ? (data.confirmedOrders / data.totalOrders) * 100 : 0;
-            fetchedMetrics.push({
-              date: data.date,
-              totalOrders: data.totalOrders || 0,
-              confirmedOrders: data.confirmedOrders || 0,
-              confirmationRate: parseFloat(rate.toFixed(2)),
-            });
+            const dateStr = data.date;
+            if (!dailyData[dateStr]) {
+              dailyData[dateStr] = {
+                date: dateStr,
+                totalOrders: 0,
+                confirmedOrders: 0,
+                confirmationRate: 0,
+              };
+            }
+            dailyData[dateStr].totalOrders += data.totalOrders || 0;
+            dailyData[dateStr].confirmedOrders += data.confirmedOrders || 0;
         }
       });
 
-      setMetrics(fetchedMetrics);
+      const aggregatedMetrics = Object.values(dailyData).map(metric => {
+          const rate = metric.totalOrders > 0 ? (metric.confirmedOrders / metric.totalOrders) * 100 : 0;
+          return {
+              ...metric,
+              confirmationRate: parseFloat(rate.toFixed(2)),
+          };
+      }).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
+
+
+      setMetrics(aggregatedMetrics);
       setIsLoading(false);
     }, (error) => {
       console.error("Error fetching metrics from Firestore:", error);
@@ -104,7 +116,7 @@ export default function Dashboard() {
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard de Tasa de Confirmación</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Dashboard de Tasa de Confirmación (Todas las Tiendas)</h2>
          <AlertDialog>
           <AlertDialogTrigger asChild>
              <Button variant="destructive" disabled={isCleaning}>
@@ -116,7 +128,7 @@ export default function Dashboard() {
             <AlertDialogHeader>
               <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta acción eliminará permanentemente todos los registros de métricas con más de 6 meses de antigüedad. Esta operación no se puede deshacer.
+                Esta acción eliminará permanentemente todos los registros de métricas con más de 6 meses de antigüedad de TODAS las tiendas. Esta operación no se puede deshacer.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -131,7 +143,7 @@ export default function Dashboard() {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Dashboard en Tiempo Real</AlertTitle>
           <AlertDescription>
-           Este dashboard se actualiza automáticamente. Los nuevos pedidos de Shopify y las confirmaciones de Google Sheets se reflejarán aquí en tiempo real. Solo se muestran datos de los últimos 6 meses.
+           Este dashboard se actualiza automáticamente con datos agregados de todas tus tiendas. Solo se muestran datos de los últimos 6 meses.
           </AlertDescription>
         </Alert>
 
@@ -149,41 +161,41 @@ export default function Dashboard() {
           <div className="grid gap-4 md:grid-cols-3">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Pedidos Totales (Últimos 6 Meses)</CardTitle>
+                <CardTitle className="text-sm font-medium">Pedidos Totales (Global)</CardTitle>
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalOrders.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">Total de pedidos recibidos de Shopify</p>
+                <p className="text-xs text-muted-foreground">Total de pedidos de todas las tiendas</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Pedidos Confirmados</CardTitle>
+                <CardTitle className="text-sm font-medium">Pedidos Confirmados (Global)</CardTitle>
                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalConfirmedOrders.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">Total de pedidos confirmados en logística</p>
+                <p className="text-xs text-muted-foreground">Total de confirmados en logística</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Tasa de Confirmación General</CardTitle>
+                <CardTitle className="text-sm font-medium">Tasa de Confirmación (Global)</CardTitle>
                 <Percent className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{overallConfirmationRate.toFixed(2)}%</div>
-                <p className="text-xs text-muted-foreground">Porcentaje de pedidos confirmados</p>
+                <p className="text-xs text-muted-foreground">Porcentaje global de confirmados</p>
               </CardContent>
             </Card>
           </div>
           
           <Card>
             <CardHeader>
-              <CardTitle>Análisis Detallado por Día</CardTitle>
+              <CardTitle>Análisis Detallado por Día (Agregado)</CardTitle>
               <CardDescription>
-                Métricas de confirmación diarias de los últimos 6 meses.
+                Métricas de confirmación diarias sumando todas las tiendas.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -191,8 +203,8 @@ export default function Dashboard() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Fecha</TableHead>
-                    <TableHead className="text-right">Pedidos Totales (Shopify)</TableHead>
-                    <TableHead className="text-right">Pedidos Confirmados (Sheets)</TableHead>
+                    <TableHead className="text-right">Pedidos Totales</TableHead>
+                    <TableHead className="text-right">Pedidos Confirmados</TableHead>
                     <TableHead className="w-[200px]">Tasa de Confirmación</TableHead>
                   </TableRow>
                 </TableHeader>

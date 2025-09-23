@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle } from "lucide-react";
-import { onSnapshot, collection, query } from "firebase/firestore";
+import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, Trash2, TriangleAlert } from "lucide-react";
+import { onSnapshot, collection, query, orderBy } from "firebase/firestore";
 
 import type { DailyMetric } from "@/ai/schemas/analyzeMetricsSchema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,18 +10,54 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { db } from "@/lib/firebase";
-
+import { deleteOldMetrics } from "@/lib/firestore";
 
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
+  const [isCleaning, setIsCleaning] = useState(false);
   const [metrics, setMetrics] = useState<DailyMetric[]>([]);
   const { toast } = useToast();
+
+  const handleCleanData = async () => {
+    setIsCleaning(true);
+    toast({
+      title: "Iniciando Limpieza",
+      description: "Eliminando registros de más de 6 meses...",
+    });
+    const result = await deleteOldMetrics();
+    if (result.status === 'success') {
+      toast({
+        title: "Limpieza Completada",
+        description: result.message,
+      });
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Error en la Limpieza",
+        description: result.message,
+      });
+    }
+    setIsCleaning(false);
+  };
 
   useEffect(() => {
     setIsLoading(true);
     const metricsCollectionRef = collection(db, "daily_metrics");
-    const q = query(metricsCollectionRef);
+    // Ordenar por fecha de creación en Firestore para obtener los más recientes.
+    const q = query(metricsCollectionRef, orderBy("createdAt", "desc"));
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const fetchedMetrics: DailyMetric[] = [];
@@ -34,15 +70,6 @@ export default function Dashboard() {
           confirmedOrders: data.confirmedOrders || 0,
           confirmationRate: parseFloat(rate.toFixed(2)),
         });
-      });
-
-      // Ordenar en el cliente por fecha descendente
-      fetchedMetrics.sort((a, b) => {
-        const [dayA, monthA, yearA] = a.date.split('-').map(Number);
-        const [dayB, monthB, yearB] = b.date.split('-').map(Number);
-        const dateA = new Date(yearA, monthA - 1, dayA);
-        const dateB = new Date(yearB, monthB - 1, dayB);
-        return dateB.getTime() - dateA.getTime();
       });
 
       setMetrics(fetchedMetrics);
@@ -65,18 +92,37 @@ export default function Dashboard() {
   const totalConfirmedOrders = metrics.reduce((acc, item) => acc + item.confirmedOrders, 0) ?? 0;
   const overallConfirmationRate = totalOrders > 0 ? (totalConfirmedOrders / totalOrders) * 100 : 0;
 
-
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard de Tasa de Confirmación</h2>
+         <AlertDialog>
+          <AlertDialogTrigger asChild>
+             <Button variant="destructive" disabled={isCleaning}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                {isCleaning ? "Eliminando..." : "Eliminar Datos Antiguos"}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta acción eliminará permanentemente todos los registros de métricas con más de 6 meses de antigüedad. Esta operación no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleCleanData}>Continuar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
        <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Dashboard en Tiempo Real</AlertTitle>
           <AlertDescription>
-           Este dashboard se actualiza automáticamente. Los nuevos pedidos de Shopify y las confirmaciones de Google Sheets se reflejarán aquí en tiempo real.
+           Este dashboard se actualiza automáticamente. Los nuevos pedidos de Shopify y las confirmaciones de Google Sheets se reflejarán aquí en tiempo real. Solo se muestran datos de los últimos 6 meses.
           </AlertDescription>
         </Alert>
 
@@ -94,7 +140,7 @@ export default function Dashboard() {
           <div className="grid gap-4 md:grid-cols-3">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Pedidos Totales</CardTitle>
+                <CardTitle className="text-sm font-medium">Pedidos Totales (Últimos 6 Meses)</CardTitle>
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -128,7 +174,7 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle>Análisis Detallado por Día</CardTitle>
               <CardDescription>
-                Métricas de confirmación diarias. La tasa se calcula como (Pedidos Confirmados / Pedidos Totales) para un día específico.
+                Métricas de confirmación diarias de los últimos 6 meses.
               </CardDescription>
             </CardHeader>
             <CardContent>

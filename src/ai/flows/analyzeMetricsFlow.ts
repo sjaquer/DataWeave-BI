@@ -28,6 +28,15 @@ function parseCsv(dataUri: string): any[] {
   return records;
 }
 
+// Función para normalizar el número de pedido extrayendo solo los dígitos
+function normalizeOrderNumber(orderId: string): string {
+    if (!orderId) return '';
+    // Extrae todos los dígitos del string.
+    const numericPart = orderId.match(/\d+/g);
+    return numericPart ? numericPart.join('') : '';
+}
+
+
 export async function analyzeMetrics(
   input: AnalyzeMetricsInput
 ): Promise<AnalyzeMetricsOutput> {
@@ -49,8 +58,12 @@ const analyzeMetricsFlow = ai.defineFlow(
 
       // 1. Crear un Set con todos los números de pedidos confirmados para una búsqueda rápida.
       const confirmedOrderNumbers = new Set(
-        logisticsRecords.map((record) => record['PEDIDO'])
+        logisticsRecords.map((record) => normalizeOrderNumber(record['PEDIDO']))
       );
+      
+      // Eliminar valores vacíos si los hubiera
+      confirmedOrderNumbers.delete('');
+
 
       // 2. Procesar archivo de Shopify
       for (const record of shopifyRecords) {
@@ -59,8 +72,8 @@ const analyzeMetricsFlow = ai.defineFlow(
 
         if (!createdAt || !orderNumberWithPrefix) continue;
         
-        // Eliminar el prefijo '#' para la comparación
-        const orderNumber = orderNumberWithPrefix.replace('#', '');
+        const orderNumber = normalizeOrderNumber(orderNumberWithPrefix);
+        if (!orderNumber) continue;
 
         const date = createdAt.split('T')[0];
 

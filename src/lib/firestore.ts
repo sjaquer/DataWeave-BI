@@ -1,6 +1,5 @@
 'use server';
 
-import type { Order } from '@/app/api/webhooks/shopify/route';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -9,6 +8,21 @@ import {
   runTransaction,
   setDoc,
 } from 'firebase/firestore';
+
+// Definición local del tipo Order para desacoplarlo de la ruta eliminada
+interface Order {
+  id: number;
+  created_at: string;
+  name: string; // Este es el número de pedido, ej: "#1001"
+  total_price: string;
+  customer: {
+    id: number;
+    email: string;
+    first_name: string;
+    last_name: string;
+  } | null;
+}
+
 
 // Helper para obtener el ID de documento de métrica diaria
 function getDailyMetricDocId(date: Date): string {

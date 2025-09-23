@@ -8,7 +8,20 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { processNewShopifyOrder } from '@/lib/firestore';
-import type { Order } from '@/app/api/webhooks/shopify/route';
+
+// Definición local del tipo Order para que coincida con la respuesta de la API
+interface Order {
+  id: number;
+  created_at: string;
+  name: string;
+  total_price: string;
+  customer: {
+    id: number;
+    email: string;
+    first_name: string;
+    last_name: string;
+  } | null;
+}
 
 const FetchShopifyOrdersOutputSchema = z.object({
   status: z.string().describe('El estado de la operación (success o error).'),

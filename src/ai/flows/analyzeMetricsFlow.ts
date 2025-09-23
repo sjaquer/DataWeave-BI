@@ -5,32 +5,37 @@
  * - analyzeMetrics - Una función que procesa los datos de los archivos para generar métricas.
  */
 
-import {ai} from '@/ai/genkit';
-import type { AnalyzeMetricsInput, AnalyzeMetricsOutput } from '@/ai/schemas/analyzeMetricsSchema';
-import { AnalyzeMetricsInputSchema, AnalyzeMetricsOutputSchema } from '@/ai/schemas/analyzeMetricsSchema';
+import { ai } from '@/ai/genkit';
+import type {
+  AnalyzeMetricsInput,
+  AnalyzeMetricsOutput,
+  DailyMetric,
+} from '@/ai/schemas/analyzeMetricsSchema';
+import {
+  AnalyzeMetricsInputSchema,
+  AnalyzeMetricsOutputSchema,
+} from '@/ai/schemas/analyzeMetricsSchema';
+import { parse } from 'csv-parse/sync';
 
-
-export async function analyzeMetrics(input: AnalyzeMetricsInput): Promise<AnalyzeMetricsOutput> {
-  return analyzeMetricsFlow(input);
+// Función para decodificar y parsear el CSV
+function parseCsv(dataUri: string): any[] {
+  // Extrae el contenido Base64 del Data URI
+  const base64String = dataUri.split(',')[1];
+  // Decodifica de Base64 a un string normal
+  const csvString = Buffer.from(base64String, 'base64').toString('utf8');
+  // Parsea el string CSV a un array de objetos
+  const records = parse(csvString, {
+    columns: true,
+    skip_empty_lines: true,
+  });
+  return records;
 }
 
-// Este prompt es un placeholder por ahora.
-// La lógica real de parseo y análisis irá aquí cuando nos des los detalles de los archivos.
-const prompt = ai.definePrompt({
-  name: 'analyzeMetricsPrompt',
-  input: {schema: AnalyzeMetricsInputSchema},
-  output: {schema: AnalyzeMetricsOutputSchema},
-  prompt: `
-    Eres un asistente de análisis de datos. Has recibido dos archivos.
-    - Reporte de Shopify: {{{shopifyDataUri}}}
-    - Reporte de Google Sheets: {{{sheetsDataUri}}}
-
-    Tu tarea es analizar estos archivos según las instrucciones del usuario.
-    Por ahora, solo confirma que has recibido los archivos.
-    
-    Responde con un estado de "éxito" y un mensaje de confirmación.
-  `,
-});
+export async function analyzeMetrics(
+  input: AnalyzeMetricsInput
+): Promise<AnalyzeMetricsOutput> {
+  return analyzeMetricsFlow(input);
+}
 
 const analyzeMetricsFlow = ai.defineFlow(
   {
@@ -39,29 +44,89 @@ const analyzeMetricsFlow = ai.defineFlow(
     outputSchema: AnalyzeMetricsOutputSchema,
   },
   async (input) => {
-    // AVISO: La lógica de procesamiento real se implementará aquí.
-    // Por ahora, este flow solo simula la recepción y confirma.
-    // En el siguiente paso, cuando nos des el formato de los archivos,
-    // reemplazaremos esto con código para parsear los CSV/Excel,
-    // cruzar los datos y calcular las métricas.
-    
-    console.log('Flow invocado con éxito. Esperando la lógica de parseo.');
+    try {
+      // 1. Procesar ambos archivos
+      const shopifyRecords = parseCsv(input.shopifyDataUri);
+      const logisticsRecords = parseCsv(input.sheetsDataUri);
 
-    // Simulación de una respuesta exitosa
-    return {
-      status: 'success',
-      message: 'Archivos recibidos. Listo para implementar la lógica de análisis.',
-      dashboardData: {
-        // Datos de ejemplo que se mostrarán en el futuro
-        conversionRate: 0,
-        unconfirmedOrders: 0,
+      const dailyData: Record<string, DailyMetric> = {};
+
+      // 2. Procesar archivo de Shopify para pedidos totales
+      for (const record of shopifyRecords) {
+        const createdAt = record['Created at'];
+        if (!createdAt) continue;
+
+        // Extraer solo la fecha (YYYY-MM-DD)
+        const date = createdAt.split('T')[0];
+
+        if (!dailyData[date]) {
+          dailyData[date] = {
+            date,
+            totalOrders: 0,
+            confirmedOrders: 0,
+            confirmationRate: 0,
+          };
+        }
+        dailyData[date].totalOrders++;
       }
-    };
 
-    /*
-    // Ejemplo de cómo se llamaría al prompt de Genkit en el futuro:
-    const { output } = await prompt(input);
-    return output!;
-    */
+      // 3. Procesar archivo de logística para pedidos confirmados
+      for (const record of logisticsRecords) {
+        const fechaCreado = record['FECHA CREADO'];
+        const pedido = record['PEDIDO'];
+        if (!fechaCreado || !pedido) continue;
+        
+        // Extraer solo la fecha de la columna 'FECHA CREADO'
+        // Asumiendo que el formato puede ser 'DD/MM/YYYY' o similar y necesitamos convertirlo a 'YYYY-MM-DD'
+        // Esta es una suposición, puede que necesitemos ajustar el parseo de fecha.
+        const dateParts = fechaCreado.split(' ')[0].split('/');
+        let date: string;
+        if (dateParts.length === 3) {
+            // Suponiendo formato D/M/YYYY o DD/MM/YYYY
+             const day = dateParts[0].padStart(2, '0');
+             const month = dateParts[1].padStart(2, '0');
+             const year = dateParts[2];
+             // Formato esperado 'YYYY-MM-DD'
+             date = `${year}-${month}-${day}`;
+        } else {
+            // Si el formato es diferente, lo ignoramos por ahora.
+            console.warn(`Formato de fecha no reconocido: ${fechaCreado}`);
+            continue;
+        }
+
+        if (dailyData[date]) {
+          dailyData[date].confirmedOrders++;
+        }
+      }
+
+      // 4. Calcular tasa de confirmación y preparar la salida
+      const dashboardData = Object.values(dailyData).map((data) => {
+        if (data.totalOrders > 0) {
+          data.confirmationRate = parseFloat(
+            ((data.confirmedOrders / data.totalOrders) * 100).toFixed(2)
+          );
+        }
+        return data;
+      });
+
+      // Ordenar los datos por fecha para la visualización
+      dashboardData.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+
+      return {
+        status: 'success',
+        message: 'Análisis completado exitosamente.',
+        dashboardData: dashboardData,
+      };
+    } catch (error) {
+      console.error('Error en el flujo de análisis:', error);
+      // Asegurarse de que el error es un objeto Error
+      const errorMessage = error instanceof Error ? error.message : 'Un error desconocido ocurrió.';
+      return {
+        status: 'error',
+        message: `Hubo un problema al procesar los archivos: ${errorMessage}`,
+        dashboardData: [],
+      };
+    }
   }
 );

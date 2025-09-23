@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { updateConfirmedOrders } from '@/lib/firestore';
+import type { ConfirmedOrderInfo } from '@/lib/firestore';
 
 /**
  * Endpoint para recibir los webhooks desde Google Sheets cuando se confirma un pedido.
+ * Espera un array de objetos con `PEDIDO` y opcionalmente `CONFIRMADO_POR`.
  */
 export async function POST(req: Request) {
   try {
-    // El script de Google Apps Script envía el array de filas directamente en el cuerpo.
-    const confirmedOrders = await req.json();
+    const confirmedOrders: ConfirmedOrderInfo[] = await req.json();
 
     if (!Array.isArray(confirmedOrders)) {
       return NextResponse.json({ status: 'error', message: 'El formato de datos es inválido. Se esperaba un array de pedidos.' }, { status: 400 });
@@ -16,7 +17,6 @@ export async function POST(req: Request) {
     const result = await updateConfirmedOrders(confirmedOrders);
 
     if (result.status === 'error') {
-      // Si la función interna ya manejó el error, pasamos su mensaje y estado.
       return NextResponse.json(result, { status: 500 });
     }
 

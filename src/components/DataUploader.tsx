@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -17,12 +16,7 @@ import { AlertCircle } from "lucide-react";
 
 const formSchema = z.object({
   storeId: z.string().min(1, "El ID de la tienda es requerido."),
-  shopifyFile: z.any().optional(),
-  sheetsFile: z.any().optional(),
-})
-.refine(data => data.shopifyFile?.length || data.sheetsFile?.length, {
-    message: "Debes subir al menos un archivo.",
-    path: ["shopifyFile"], // Attach error to one of the fields
+  shopifyFile: z.any().refine(files => files?.length > 0, "El archivo de Shopify es requerido."),
 });
 
 const fileToDataUri = (file: File): Promise<string> => {
@@ -48,7 +42,7 @@ export default function DataUploader() {
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsProcessing(true);
     toast({
-      title: "Procesando Archivos",
+      title: "Procesando Archivo de Shopify",
       description: "Esto puede tardar unos momentos...",
     });
 
@@ -58,21 +52,19 @@ export default function DataUploader() {
         shopifyDataUri = await fileToDataUri(values.shopifyFile[0]);
       }
 
-      let sheetsDataUri: string | undefined;
-       if (values.sheetsFile && values.sheetsFile.length > 0) {
-        sheetsDataUri = await fileToDataUri(values.sheetsFile[0]);
+      if (!shopifyDataUri) {
+        throw new Error("No se ha seleccionado un archivo de Shopify.");
       }
 
       const result = await analyzeMetrics({
         storeId: values.storeId,
         shopifyDataUri,
-        sheetsDataUri,
       });
 
       if (result.status === "success") {
         toast({
           title: "Procesamiento Completo",
-          description: result.message.replace(/\n/g, ' '),
+          description: result.message,
         });
       } else {
         throw new Error(result.message);
@@ -85,6 +77,7 @@ export default function DataUploader() {
       });
     } finally {
       setIsProcessing(false);
+      form.reset();
     }
   };
 
@@ -97,7 +90,7 @@ export default function DataUploader() {
                 <ul className="list-disc pl-5 space-y-1">
                     <li>Exporta los pedidos de Shopify de los **últimos 6 meses** en formato **CSV sin formato**.</li>
                     <li>Asegúrate de que el `Store ID` (ej: `tienda-1`) sea el mismo que usarás en los webhooks.</li>
-                    <li>Este proceso sobrescribirá los datos de pedidos para las fechas incluidas en el archivo de la tienda especificada.</li>
+                    <li>Este proceso **sobrescribirá los datos** de pedidos para las fechas incluidas en el archivo de la tienda especificada. Los datos de confirmación no se tocarán.</li>
                 </ul>
             </AlertDescription>
         </Alert>
@@ -149,7 +142,7 @@ export default function DataUploader() {
           ) : (
             <>
               <Upload className="mr-2 h-4 w-4" />
-              Procesar Archivos
+              Procesar Archivo
             </>
           )}
         </Button>

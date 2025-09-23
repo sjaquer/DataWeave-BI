@@ -1,11 +1,9 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, Trash2, TriangleAlert, Upload } from "lucide-react";
-import { onSnapshot, collection, query, orderBy, Timestamp } from "firebase/firestore";
+import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, Trash2, Upload } from "lucide-react";
+import { onSnapshot, collection, query, where, Timestamp } from "firebase/firestore";
 
-import type { DailyMetric } from "@/ai/schemas/analyzeMetricsSchema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
@@ -27,10 +25,17 @@ import { db } from "@/lib/firebase";
 import { deleteOldMetrics } from "@/lib/firestore";
 import DataUploader from "@/components/DataUploader";
 
+interface Metric {
+  date: string;
+  totalOrders: number;
+  confirmedOrders: number;
+  confirmationRate: number;
+}
+
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCleaning, setIsCleaning] = useState(false);
-  const [metrics, setMetrics] = useState<DailyMetric[]>([]);
+  const [metrics, setMetrics] = useState<Metric[]>([]);
   const { toast } = useToast();
 
   const handleCleanData = async () => {
@@ -57,38 +62,36 @@ export default function Dashboard() {
 
   useEffect(() => {
     setIsLoading(true);
-    const metricsCollectionRef = collection(db, "daily_metrics");
+    const ordersCollectionRef = collection(db, "shopify_orders");
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     const sixMonthsAgoTimestamp = Timestamp.fromDate(sixMonthsAgo);
 
-    const q = query(metricsCollectionRef, orderBy("createdAt", "desc"));
+    const q = query(ordersCollectionRef, where("createdAt", ">=", sixMonthsAgoTimestamp));
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const dailyData: { [key: string]: DailyMetric } = {};
+      const dailyData: { [key: string]: { total: number; confirmed: number } } = {};
 
       querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        
-        if (data.createdAt && data.createdAt.toDate() >= sixMonthsAgo) {
-            const dateStr = data.date;
-            if (!dailyData[dateStr]) {
-              dailyData[dateStr] = {
-                date: dateStr,
-                totalOrders: 0,
-                confirmedOrders: 0,
-                confirmationRate: 0,
-              };
-            }
-            dailyData[dateStr].totalOrders += data.totalOrders || 0;
-            dailyData[dateStr].confirmedOrders += data.confirmedOrders || 0;
+        const order = doc.data();
+        const orderDate = (order.createdAt as Timestamp).toDate();
+        const dateStr = `${String(orderDate.getUTCDate()).padStart(2, '0')}-${String(orderDate.getUTCMonth() + 1).padStart(2, '0')}-${orderDate.getUTCFullYear()}`;
+
+        if (!dailyData[dateStr]) {
+          dailyData[dateStr] = { total: 0, confirmed: 0 };
+        }
+        dailyData[dateStr].total++;
+        if (order.isConfirmed) {
+          dailyData[dateStr].confirmed++;
         }
       });
 
-      const aggregatedMetrics = Object.values(dailyData).map(metric => {
-          const rate = metric.totalOrders > 0 ? (metric.confirmedOrders / metric.totalOrders) * 100 : 0;
+      const aggregatedMetrics = Object.entries(dailyData).map(([date, data]) => {
+          const rate = data.total > 0 ? (data.confirmed / data.total) * 100 : 0;
           return {
-              ...metric,
+              date: date,
+              totalOrders: data.total,
+              confirmedOrders: data.confirmed,
               confirmationRate: parseFloat(rate.toFixed(2)),
           };
       }).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
@@ -117,7 +120,7 @@ export default function Dashboard() {
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard de Tasa de Confirmación (Todas las Tiendas)</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Dashboard de Tasa de Confirmación (Global)</h2>
          <AlertDialog>
           <AlertDialogTrigger asChild>
              <Button variant="destructive" disabled={isCleaning}>
@@ -129,7 +132,7 @@ export default function Dashboard() {
             <AlertDialogHeader>
               <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta acción eliminará permanentemente todos los registros de métricas con más de 6 meses de antigüedad de TODAS las tiendas. Esta operación no se puede deshacer.
+                Esta acción eliminará permanentemente todos los registros de pedidos con más de 6 meses de antigüedad. Esta operación no se puede deshacer.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -258,5 +261,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-    

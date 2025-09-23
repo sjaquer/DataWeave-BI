@@ -1,9 +1,8 @@
-
 'use server';
 /**
- * @fileOverview Flujo para analizar métricas de Shopify y Google Sheets.
+ * @fileOverview Flujo para procesar cargas masivas de archivos CSV de Shopify.
  *
- * - analyzeMetrics - Procesa los archivos CSV y actualiza la base de datos.
+ * - analyzeMetrics - Procesa el archivo CSV y lo guarda en la colección `shopify_orders`.
  */
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
@@ -14,7 +13,7 @@ import {
   type AnalyzeMetricsInput,
   type AnalyzeMetricsOutput,
 } from '@/ai/schemas/analyzeMetricsSchema';
-import {processShopifyCsv, updateConfirmedOrders} from '@/lib/firestore';
+import {processShopifyCsv} from '@/lib/firestore';
 import type { Order } from '@/lib/firestore';
 
 // Función que será llamada desde la UI
@@ -30,7 +29,6 @@ const analyzeMetricsFlow = ai.defineFlow(
   },
   async (input) => {
     let shopifyMessage = 'No se proporcionó archivo de Shopify.';
-    let sheetsMessage = 'No se proporcionó archivo de Google Sheets.';
 
     // Procesar datos de Shopify si se proporcionaron
     if (input.shopifyDataUri && input.storeId) {
@@ -41,17 +39,23 @@ const analyzeMetricsFlow = ai.defineFlow(
           skip_empty_lines: true,
         });
         
-        // Mapear los nombres de columna del CSV a la interfaz Order
+        // El mapeo de nombres de columna del CSV a la interfaz Order ahora es más detallado
         const orders: Order[] = records.map((r: any) => ({
             id: r.id,
             name: r.Name,
             created_at: r['Created at'],
+            total_price: r['Total'],
+            customer: {
+              first_name: r['Billing Name']?.split(' ')[0],
+              last_name: r['Billing Name']?.split(' ').slice(1).join(' '),
+            },
             shipping_address: {
                 province: r['Shipping Province Name']
             },
-            line_items: [{ // Esto es una simplificación. Un pedido real puede tener muchos.
+            line_items: [{ // Esto sigue siendo una simplificación. La lógica real podría manejar múltiples items.
                 title: r['Lineitem name'],
-                quantity: parseInt(r['Lineitem quantity'], 10)
+                quantity: parseInt(r['Lineitem quantity'], 10),
+                price: r['Lineitem price']
             }]
         }));
 
@@ -62,26 +66,11 @@ const analyzeMetricsFlow = ai.defineFlow(
         throw new Error(shopifyMessage);
       }
     }
-
-    // Procesar datos de Google Sheets si se proporcionaron
-    if (input.sheetsDataUri) {
-        try {
-            const csvData = Buffer.from(input.sheetsDataUri.split(',')[1], 'base64').toString('utf-8');
-            const records = parse(csvData, {
-                columns: true,
-                skip_empty_lines: true,
-            });
-            const result = await updateConfirmedOrders(records.map((r: any) => ({ PEDIDO: r.PEDIDO })));
-            sheetsMessage = result.message;
-        } catch (e: any) {
-            sheetsMessage = `Error procesando el archivo de Google Sheets: ${e.message}`;
-            throw new Error(sheetsMessage);
-        }
-    }
-
+    
+    // El procesamiento de sheets se elimina de este flujo manual, se maneja solo por su propio webhook.
     return {
       status: 'success',
-      message: `Shopify: ${shopifyMessage}\nSheets: ${sheetsMessage}`,
+      message: shopifyMessage,
       dashboardData: [], 
     };
   }

@@ -5,18 +5,17 @@ import {
   collection,
   doc,
   writeBatch,
-  runTransaction,
-  query,
-  where,
   getDocs,
   Timestamp,
   deleteDoc,
-  getDoc
+  getDoc,
+  query,
+  where,
 } from 'firebase/firestore';
 
 export interface Order {
   id: number;
-  name: string; // El número de pedido, ej: '#1001'
+  name: string;
   created_at: string;
   total_price: string;
   customer?: {
@@ -24,12 +23,15 @@ export interface Order {
     last_name?: string;
   };
   shipping_address?: {
-      province?: string;
+    city?: string;
+    province?: string;
+    zip?: string;
+    country?: string;
   };
   line_items?: {
-      title?: string;
-      quantity?: number;
-      price?: string;
+    title?: string;
+    quantity?: number;
+    price?: string;
   }[];
 }
 
@@ -39,32 +41,20 @@ export interface ConfirmedOrderInfo {
   CONFIRMADO_POR?: string;
 }
 
-/**
- * Normaliza el número de pedido a un formato estándar único para todo el sistema.
- * Extrae solo la parte numérica, ignorando prefijos como '#', 'N-', '#B', etc.
- * Ej: 'N-1234', '#B1234', '1234' -> '1234'
- */
+
 function normalizeOrderNumber(name: string): string {
     if (!name) return '';
     const digits = String(name).match(/\d+/g);
     return digits ? digits.join('') : name;
 }
 
-/**
- * Crea un ID de documento único para un pedido en la colección `shopify_orders`.
- * Usa el storeId y el número de pedido normalizado para garantizar que no haya colisiones.
- */
+
 function getShopifyOrderDocId(orderName: string, storeId: string): string {
     const normalizedNumber = normalizeOrderNumber(orderName);
     return `${storeId}-${normalizedNumber}`;
 }
 
 
-/**
- * Procesa un único pedido nuevo de una tienda Shopify.
- * Lo guarda o actualiza en la colección `shopify_orders`.
- * Ignora pedidos con más de 6 meses de antigüedad.
- */
 export async function processNewShopifyOrder(order: Order, storeId: string) {
   const orderDate = new Date(order.created_at);
 
@@ -86,19 +76,20 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
       totalPrice: parseFloat(order.total_price || '0'),
       customerName: `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim(),
       province: order.shipping_address?.province || 'N/A',
+      city: order.shipping_address?.city || 'N/A',
+      zip: order.shipping_address?.zip || 'N/A',
+      country: order.shipping_address?.country || 'N/A',
       products: order.line_items?.map(item => ({ 
           title: item.title || 'N/A', 
           quantity: item.quantity || 0,
           price: parseFloat(item.price || '0')
       })) || [],
-      // Campos de confirmación (inicialmente vacíos)
       isConfirmed: false,
       confirmedAt: null,
       confirmedBy: null,
   };
 
   try {
-    // Usamos `set` con `merge: true` para no sobrescribir los datos de confirmación si ya existen.
     await writeBatch(db).set(orderDocRef, orderData, { merge: true }).commit();
     console.log(`[Firestore] Pedido ${order.name} de ${storeId} guardado/actualizado en 'shopify_orders'.`);
   } catch (error) {
@@ -107,9 +98,7 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
   }
 }
 
-/**
- * Elimina todos los registros de 'shopify_orders' con más de 6 meses.
- */
+
 export async function deleteOldMetrics(): Promise<{ status: string; message: string; deletedCount: number }> {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
@@ -149,10 +138,7 @@ export async function deleteOldMetrics(): Promise<{ status: string; message: str
 }
 
 
-/**
- * Actualiza los pedidos como confirmados en la colección `shopify_orders`.
- * Busca el pedido a través de las 5 tiendas posibles y lo actualiza.
- */
+
 export async function updateConfirmedOrders(
   confirmedOrders: ConfirmedOrderInfo[]
 ): Promise<{ status: string; message: string }> {
@@ -165,8 +151,8 @@ export async function updateConfirmedOrders(
   let processedCount = 0;
   let notFoundCount = 0;
 
-  // Asumimos que los storeId son 'tienda-1', 'tienda-2', ..., 'tienda-5'.
   const storeIds = Array.from({length: 5}, (_, i) => `tienda-${i+1}`);
+  storeIds.push('dearel'); // Añadimos dearel
 
   for (const item of confirmedOrders) {
     const rawOrderName = String(item.PEDIDO || '');
@@ -177,8 +163,6 @@ export async function updateConfirmedOrders(
         const orderDocId = getShopifyOrderDocId(rawOrderName, storeId);
         const orderDocRef = doc(db, 'shopify_orders', orderDocId);
 
-        // Usamos getDoc para verificar si el documento existe antes de intentar actualizarlo.
-        // Esto es más lento pero más seguro para un webhook que puede recibir datos incorrectos.
         const docSnap = await getDoc(orderDocRef);
         
         if (docSnap.exists() && !docSnap.data().isConfirmed) {
@@ -189,9 +173,9 @@ export async function updateConfirmedOrders(
             });
             processedCount++;
             orderFound = true;
-            break; // Salimos del bucle de tiendas una vez que encontramos y actualizamos el pedido.
+            break; 
         } else if (docSnap.exists() && docSnap.data().isConfirmed) {
-            orderFound = true; // El pedido ya estaba confirmado, no hacemos nada pero lo contamos como encontrado.
+            orderFound = true; 
             break;
         }
     }
@@ -218,9 +202,7 @@ export async function updateConfirmedOrders(
 }
 
 
-/**
- * Procesa un lote de pedidos desde un archivo CSV de Shopify para una tienda específica.
- */
+
 export async function processShopifyCsv(orders: Order[], storeId: string) {
   const batch = writeBatch(db);
   const sixMonthsAgo = new Date();
@@ -233,7 +215,6 @@ export async function processShopifyCsv(orders: Order[], storeId: string) {
     const orderDocId = getShopifyOrderDocId(order.name, storeId);
     const orderDocRef = doc(db, 'shopify_orders', orderDocId);
     
-    // Prepara el mismo objeto de datos que el webhook en tiempo real.
     const orderData = {
         storeId: storeId,
         orderId: order.id,
@@ -242,6 +223,9 @@ export async function processShopifyCsv(orders: Order[], storeId: string) {
         totalPrice: parseFloat(order.total_price || '0'),
         customerName: `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim(),
         province: order.shipping_address?.province || 'N/A',
+        city: order.shipping_address?.city || 'N/A',
+        zip: order.shipping_address?.zip || 'N/A',
+        country: order.shipping_address?.country || 'N/A',
         products: order.line_items?.map(item => ({ 
             title: item.title || 'N/A', 
             quantity: item.quantity || 0,
@@ -251,8 +235,7 @@ export async function processShopifyCsv(orders: Order[], storeId: string) {
         confirmedAt: null,
         confirmedBy: null,
     };
-    // `set` con `merge: true` es crucial aquí para no borrar los datos de confirmación
-    // si accidentalmente volvemos a subir un CSV con pedidos ya confirmados.
+
     batch.set(orderDocRef, orderData, { merge: true });
   }
 

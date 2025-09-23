@@ -5,7 +5,6 @@
  * - analyzeMetrics - Procesa el archivo CSV y lo guarda en la colección `shopify_orders`.
  */
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
 import {parse} from 'csv-parse/sync';
 import {
   AnalyzeMetricsInputSchema,

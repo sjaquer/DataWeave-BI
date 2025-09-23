@@ -12,14 +12,12 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 
-// Definición local del tipo Order para que coincida con la respuesta de la API de Shopify
 interface Order {
   id: number;
   created_at: string;
-  name: string; // Este es el nombre del pedido, ej: "#1001"
+  name: string; 
 }
 
-// Helper para obtener el ID de documento de métrica diaria en formato DD-MM-YYYY
 function getDailyMetricDocId(date: Date): string {
   const day = String(date.getUTCDate()).padStart(2, '0');
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
@@ -28,8 +26,7 @@ function getDailyMetricDocId(date: Date): string {
 }
 
 /**
- * Procesa una lista de pedidos de Shopify para actualizar las métricas de `totalOrders`
- * y guardar los números de pedido para referencia futura.
+ * Procesa pedidos de Shopify para guardar el total de pedidos y sus números de referencia por día.
  */
 export async function processShopifyOrders(orders: Order[]) {
   const dailyOrderData: { [key: string]: { numbers: string[]; date: Date } } = {};
@@ -49,8 +46,6 @@ export async function processShopifyOrders(orders: Order[]) {
     const dailyMetricDocRef = doc(db, 'daily_metrics', dateId);
     const firestoreTimestamp = Timestamp.fromDate(data.date);
 
-    // Usamos `set` con `merge: true` para crear o actualizar el documento.
-    // Esto establece `totalOrders` y la lista de `orderNumbers` sin afectar a `confirmedOrders`.
     batch.set(
       dailyMetricDocRef,
       {
@@ -59,7 +54,7 @@ export async function processShopifyOrders(orders: Order[]) {
         totalOrders: data.numbers.length,
         orderNumbers: data.numbers,
       },
-      { merge: true }
+      { merge: true } // Se usa merge para no sobreescribir 'confirmedOrders'
     );
   }
 
@@ -74,47 +69,37 @@ export async function processShopifyOrders(orders: Order[]) {
 
 /**
  * Actualiza los pedidos como confirmados, encontrando su fecha de creación original
- * a través de la lista de `orderNumbers`.
+ * a través de la lista de `orderNumbers` para incrementar el contador del día correcto.
  */
 export async function updateConfirmedOrders(
-  confirmedOrderNumbers: { PEDIDO: string }[]
+  confirmedOrders: { PEDIDO: string }[]
 ): Promise<{ status: string; message: string }> {
-  if (!confirmedOrderNumbers || confirmedOrderNumbers.length === 0) {
-    return { status: 'success', message: 'No hay pedidos para confirmar.' };
-  }
 
-  const validOrderNames = confirmedOrderNumbers
+  const validOrderNames = confirmedOrders
     .map(item => String(item.PEDIDO || '').trim())
     .filter(name => name.startsWith('#'));
 
   if (validOrderNames.length === 0) {
-    return { status: 'success', message: 'No se encontraron números de pedido válidos para procesar (deben empezar con #).' };
+    return { status: 'success', message: 'No se encontraron números de pedido válidos (deben empezar con #).' };
   }
   
   const confirmationsByDate: { [key: string]: number } = {};
   const metricsRef = collection(db, 'daily_metrics');
   
-  // Optimización: Partimos la búsqueda en los últimos 90 días (más probable) y el resto.
-  const ninetyDaysAgo = new Date();
-  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-  const ninetyDaysAgoTimestamp = Timestamp.fromDate(ninetyDaysAgo);
-
-  const recentQuery = query(metricsRef, where('createdAt', '>=', ninetyDaysAgoTimestamp), where('orderNumbers', 'array-contains-any', validOrderNames));
-  const oldQuery = query(metricsRef, where('createdAt', '<', ninetyDaysAgoTimestamp), where('orderNumbers', 'array-contains-any', validOrderNames));
+  const recentQuery = query(metricsRef, where('orderNumbers', 'array-contains-any', validOrderNames));
   
   try {
-    const [recentSnapshot, oldSnapshot] = await Promise.all([getDocs(recentQuery), getDocs(oldQuery)]);
-    const allSnapshots = [...recentSnapshot.docs, ...oldSnapshot.docs];
+    const querySnapshot = await getDocs(recentQuery);
 
     for (const orderName of validOrderNames) {
       let found = false;
-      for (const doc of allSnapshots) {
+      for (const doc of querySnapshot.docs) {
         const data = doc.data();
         if (data.orderNumbers && data.orderNumbers.includes(orderName)) {
           const dateId = data.date;
           confirmationsByDate[dateId] = (confirmationsByDate[dateId] || 0) + 1;
           found = true;
-          break; // Optimización: si ya lo encontré, paso al siguiente pedido.
+          break; 
         }
       }
       if (!found) {
@@ -138,18 +123,11 @@ export async function updateConfirmedOrders(
           transaction.update(dailyMetricDocRef, {
             confirmedOrders: currentConfirmed + increment,
           });
-        } else {
-          // Esto no debería ocurrir si la sincronización de Shopify se ejecuta primero, pero es una salvaguarda.
-          transaction.set(dailyMetricDocRef, {
-            date: dateId,
-            confirmedOrders: increment,
-          }, { merge: true });
         }
       }
     });
 
     const totalConfirmations = Object.values(confirmationsByDate).reduce((a,b) => a+b, 0);
-    console.log(`[Firestore] ${totalConfirmations} pedidos confirmados procesados y agrupados por su fecha de creación.`);
     return {
       status: 'success',
       message: `${totalConfirmations} pedidos confirmados fueron procesados y asociados a sus fechas correctas.`,
@@ -186,7 +164,6 @@ export async function resetConfirmedOrders(): Promise<{ status: string; message:
 
     await batch.commit();
 
-    console.log(`[Firestore] Se resetearon los 'confirmedOrders' para ${docsUpdated} documentos.`);
     return {
       status: 'success',
       message: `Se reinició el contador de pedidos confirmados para ${docsUpdated} días.`,

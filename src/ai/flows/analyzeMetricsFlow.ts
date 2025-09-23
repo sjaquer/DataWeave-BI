@@ -72,13 +72,16 @@ const analyzeMetricsFlow = ai.defineFlow(
         const orderNumber = normalizeOrderNumber(orderNumberWithPrefix);
         if (!orderNumber) continue;
 
-        // Extraer SOLAMENTE la fecha (YYYY-MM-DD), ignorando la hora y la zona horaria.
-        const date = createdAt.split('T')[0];
+        // Extraer la fecha y formatearla como DD-MM-YYYY
+        const datePart = createdAt.split('T')[0]; // "YYYY-MM-DD"
+        const [year, month, day] = datePart.split('-');
+        const formattedDate = `${day}-${month}-${year}`;
+
 
         // Inicializar el objeto para el día si no existe
-        if (!dailyData[date]) {
-          dailyData[date] = {
-            date,
+        if (!dailyData[formattedDate]) {
+          dailyData[formattedDate] = {
+            date: formattedDate,
             totalOrders: 0,
             confirmedOrders: 0,
             confirmationRate: 0,
@@ -86,11 +89,11 @@ const analyzeMetricsFlow = ai.defineFlow(
         }
         
         // Incrementar el total de pedidos para el día
-        dailyData[date].totalOrders++;
+        dailyData[formattedDate].totalOrders++;
 
         // Verificar si el pedido está en la lista de confirmados
         if (confirmedOrderNumbers.has(orderNumber)) {
-          dailyData[date].confirmedOrders++;
+          dailyData[formattedDate].confirmedOrders++;
         }
       }
 
@@ -105,7 +108,14 @@ const analyzeMetricsFlow = ai.defineFlow(
       });
 
       // Ordenar los datos por fecha para la visualización (más recientes primero)
-      dashboardData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      // Se convierte la fecha DD-MM-YYYY a un objeto Date para ordenar correctamente
+      dashboardData.sort((a, b) => {
+        const [dayA, monthA, yearA] = a.date.split('-').map(Number);
+        const [dayB, monthB, yearB] = b.date.split('-').map(Number);
+        const dateA = new Date(yearA, monthA - 1, dayA);
+        const dateB = new Date(yearB, monthB - 1, dayB);
+        return dateB.getTime() - dateA.getTime();
+      });
 
 
       return {

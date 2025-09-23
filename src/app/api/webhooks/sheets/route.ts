@@ -8,19 +8,34 @@ import { NextResponse } from 'next/server';
  */
 export async function POST(request: Request) {
   try {
-    const data = await request.json();
+    const body = await request.json();
 
-    // TODO: Procesar los datos recibidos.
-    // Por ahora, solo registraremos los datos en la consola para verificar que llegan.
-    console.log('Datos recibidos desde Google Sheets:', data);
+    // Verificación de que los datos tienen la estructura esperada
+    if (body && body.logisticsData && Array.isArray(body.logisticsData)) {
+      const recordCount = body.logisticsData.length;
+      
+      // Log detallado para confirmar la recepción
+      console.log(`[Webhook Google Sheets] Datos recibidos exitosamente. Número de registros: ${recordCount}`);
+      
+      // Log de una muestra de los datos para verificación
+      if (recordCount > 0) {
+        console.log('[Webhook Google Sheets] Muestra de datos (primer registro):', JSON.stringify(body.logisticsData[0]));
+      }
+      
+      // TODO: Aquí irá la futura lógica para procesar los datos y guardarlos en Firestore.
 
-    // Aquí iría la lógica para guardar estos datos en Firestore o
-    // volver a ejecutar el análisis y cachear el resultado.
+      return NextResponse.json({ status: 'success', message: `Datos recibidos correctamente. ${recordCount} registros.` });
 
-    return NextResponse.json({ status: 'success', message: 'Datos recibidos correctamente.' });
+    } else {
+      // Log de error si los datos no tienen el formato esperado
+      console.warn('[Webhook Google Sheets] Se recibió una petición pero el formato de los datos es incorrecto o está vacío.', body);
+      return NextResponse.json({ status: 'error', message: 'El formato de los datos recibidos no es el esperado.' }, { status: 400 });
+    }
+
   } catch (error) {
-    console.error('Error al procesar el webhook de Google Sheets:', error);
+    // Log de error si la petición falla (ej. JSON mal formado)
+    console.error('[Webhook Google Sheets] Error al procesar la petición:', error);
     const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-    return NextResponse.json({ status: 'error', message: errorMessage }, { status: 500 });
+    return NextResponse.json({ status: 'error', message: `Error interno del servidor: ${errorMessage}` }, { status: 500 });
   }
 }

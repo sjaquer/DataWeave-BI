@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, Trash2, TriangleAlert } from "lucide-react";
+import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, Trash2, TriangleAlert, Upload } from "lucide-react";
 import { onSnapshot, collection, query, orderBy, Timestamp } from "firebase/firestore";
 
 import type { DailyMetric } from "@/ai/schemas/analyzeMetricsSchema";
@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { db } from "@/lib/firebase";
 import { deleteOldMetrics } from "@/lib/firestore";
+import DataUploader from "@/components/DataUploader";
 
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
@@ -57,11 +58,11 @@ export default function Dashboard() {
   useEffect(() => {
     setIsLoading(true);
     const metricsCollectionRef = collection(db, "daily_metrics");
-    const q = query(metricsCollectionRef, orderBy("createdAt", "desc"));
-
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     const sixMonthsAgoTimestamp = Timestamp.fromDate(sixMonthsAgo);
+
+    const q = query(metricsCollectionRef, orderBy("createdAt", "desc"));
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const dailyData: { [key: string]: DailyMetric } = {};
@@ -69,7 +70,7 @@ export default function Dashboard() {
       querySnapshot.forEach((doc) => {
         const data = doc.data();
         
-        if (data.createdAt >= sixMonthsAgoTimestamp) {
+        if (data.createdAt && data.createdAt.toDate() >= sixMonthsAgo) {
             const dateStr = data.date;
             if (!dailyData[dateStr]) {
               dailyData[dateStr] = {
@@ -146,6 +147,22 @@ export default function Dashboard() {
            Este dashboard se actualiza automáticamente con datos agregados de todas tus tiendas. Solo se muestran datos de los últimos 6 meses.
           </AlertDescription>
         </Alert>
+
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center">
+                    <Upload className="mr-2 h-5 w-5" />
+                    Carga de Datos Históricos (Por Tienda)
+                </CardTitle>
+                <CardDescription>
+                    Usa esta sección para hacer la carga inicial de los últimos 6 meses de cada tienda. Exporta el CSV de pedidos desde Shopify y súbelo aquí.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <DataUploader />
+            </CardContent>
+        </Card>
+
 
       {(isLoading) && (
           <div className="flex justify-center items-center p-8">
@@ -241,3 +258,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+    

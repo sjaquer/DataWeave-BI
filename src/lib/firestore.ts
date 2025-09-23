@@ -43,7 +43,7 @@ function getDailyMetricDocId(date: Date, storeId: string): string {
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
   const year = date.getUTCFullYear();
   // El ID del documento ahora incluye el storeId para garantizar unicidad.
-  return `${storeId}_${day}-${month}-${year}`;
+  return `${storeId}_${year}-${month}-${day}`;
 }
 
 /**
@@ -162,14 +162,13 @@ export async function updateConfirmedOrders(
     const partialOrderName = normalizeOrderName(rawOrderName); 
 
     // Creamos una consulta para buscar documentos cuyo array 'orderNumbers' contenga un string que TERMINE con el número de pedido.
-    // Ej: Buscar 'tienda-1_#1234' sabiendo solo '#1234'.
-    // Firestore no soporta 'ends-with', así que usamos una consulta de rango que es una aproximación.
-    const start = partialOrderName; 
-    const end = partialOrderName + '\uf8ff';
+    // Esto es propenso a errores si dos tiendas tienen el mismo número de pedido.
+    // La estrategia correcta es buscar en una lista de posibles nombres de pedido normalizados.
+    
+    // Asumimos un máximo de 5 tiendas, podrías hacer esto más dinámico si es necesario.
+    const possibleNormalizedNames = ['tienda-1', 'tienda-2', 'tienda-3', 'tienda-4', 'tienda-5'].map(storeId => `${storeId}_${partialOrderName}`);
 
-    const q = query(metricsRef, where('orderNumbers', 'array-contains-any', [
-        `tienda-1_${partialOrderName}`, `tienda-2_${partialOrderName}`, `tienda-3_${partialOrderName}`, `tienda-4_${partialOrderName}`,`tienda-5_${partialOrderName}`
-    ]));
+    const q = query(metricsRef, where('orderNumbers', 'array-contains-any', possibleNormalizedNames));
 
 
     try {
@@ -216,3 +215,48 @@ export async function updateConfirmedOrders(
     };
   }
 }
+
+/**
+ * Procesa un lote de pedidos desde un archivo CSV de Shopify para una tienda específica.
+ */
+export async function processShopifyCsv(orders: Order[], storeId: string) {
+  const batch = writeBatch(db);
+  const ordersByDay: { [key: string]: { orders: Order[], normalizedNames: string[] } } = {};
+
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+  for (const order of orders) {
+    const orderDate = new Date(order.created_at);
+    if (orderDate < sixMonthsAgo) {
+      continue; // Ignora pedidos antiguos
+    }
+
+    const dateStr = `${String(orderDate.getUTCDate()).padStart(2, '0')}-${String(orderDate.getUTCMonth() + 1).padStart(2, '0')}-${orderDate.getUTCFullYear()}`;
+    if (!ordersByDay[dateStr]) {
+      ordersByDay[dateStr] = { orders: [], normalizedNames: [] };
+    }
+    ordersByDay[dateStr].orders.push(order);
+    ordersByDay[dateStr].normalizedNames.push(normalizeOrderName(order.name, storeId));
+  }
+
+  for (const dateStr in ordersByDay) {
+    const dayData = ordersByDay[dateStr];
+    const orderDate = new Date(dateStr.split('-').reverse().join('-'));
+    const dailyMetricId = getDailyMetricDocId(orderDate, storeId);
+    const dailyMetricDocRef = doc(db, 'daily_metrics', dailyMetricId);
+
+    batch.set(dailyMetricDocRef, {
+      date: dateStr,
+      storeId: storeId,
+      createdAt: Timestamp.fromDate(orderDate),
+      totalOrders: dayData.orders.length,
+      confirmedOrders: 0, // Se resetea para evitar duplicados si se re-importa
+      orderNumbers: dayData.normalizedNames,
+    }, { merge: true }); // Usar merge para no sobrescribir confirmados si ya existen
+  }
+
+  await batch.commit();
+}
+
+    

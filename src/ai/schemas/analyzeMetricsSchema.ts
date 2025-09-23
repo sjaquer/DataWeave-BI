@@ -1,3 +1,4 @@
+
 /**
  * @fileOverview Define los esquemas y tipos para el flujo de análisis de métricas.
  * 
@@ -11,15 +12,18 @@
 import {z} from 'genkit';
 
 export const AnalyzeMetricsInputSchema = z.object({
+  storeId: z.string().optional().describe("El identificador único de la tienda (ej: 'tienda-1'). Requerido si se sube archivo de Shopify."),
   shopifyDataUri: z
     .string()
+    .optional()
     .describe(
-      "El reporte de pedidos de Shopify (CSV), como un data URI que debe incluir un tipo MIME y usar codificación Base64. Formato esperado: 'data:<mimetype>;base64,<encoded_data>'."
+      "El reporte de pedidos de Shopify (CSV), como un data URI. Formato: 'data:<mimetype>;base64,<encoded_data>'."
     ),
   sheetsDataUri: z
     .string()
+    .optional()
     .describe(
-      "El reporte de logística de Google Sheets (CSV), como un data URI que debe incluir un tipo MIME y usar codificación Base64. Formato esperado: 'data:<mimetype>;base64,<encoded_data>'."
+      "El reporte de logística de Google Sheets (CSV), como un data URI. Formato: 'data:<mimetype>;base64,<encoded_data>'."
     ),
 });
 export type AnalyzeMetricsInput = z.infer<typeof AnalyzeMetricsInputSchema>;
@@ -40,3 +44,5 @@ export const AnalyzeMetricsOutputSchema = z.object({
   dashboardData: z.array(DailyMetricSchema).describe('Un array de objetos con las métricas diarias procesadas.'),
 });
 export type AnalyzeMetricsOutput = z.infer<typeof AnalyzeMetricsOutputSchema>;
+
+    

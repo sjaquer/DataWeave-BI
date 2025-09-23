@@ -9,7 +9,7 @@ import {
   query,
   where,
   getDocs,
-  Timestamp
+  Timestamp,
 } from 'firebase/firestore';
 
 // Definición local del tipo Order para que coincida con la respuesta de la API de Shopify
@@ -28,31 +28,25 @@ function getDailyMetricDocId(date: Date): string {
 }
 
 /**
- * Procesa una lista de pedidos de Shopify para actualizar las métricas de `totalOrders`.
- * Esta función es la ÚNICA responsable de establecer el recuento total de pedidos
- * y de almacenar los números de pedido para referencia futura.
+ * Procesa una lista de pedidos de Shopify para actualizar las métricas de `totalOrders`
+ * y guardar los números de pedido para referencia futura.
  */
 export async function processShopifyOrders(orders: Order[]) {
-  // Mapa para agrupar los números de pedido por día.
-  const dailyOrderNumbers: { [key: string]: { numbers: string[], date: Date } } = {};
+  const dailyOrderData: { [key: string]: { numbers: string[]; date: Date } } = {};
 
-  // 1. Agrupar los números de pedido (`name`) por su fecha de creación
   for (const order of orders) {
     const orderDate = new Date(order.created_at);
     const dailyMetricId = getDailyMetricDocId(orderDate);
-    if (!dailyOrderNumbers[dailyMetricId]) {
-      dailyOrderNumbers[dailyMetricId] = { numbers: [], date: orderDate };
+
+    if (!dailyOrderData[dailyMetricId]) {
+      dailyOrderData[dailyMetricId] = { numbers: [], date: orderDate };
     }
-    // Guardamos el `name` del pedido (ej: "#1001")
-    dailyOrderNumbers[dailyMetricId].numbers.push(order.name);
+    dailyOrderData[dailyMetricId].numbers.push(order.name);
   }
 
-  // 2. Actualizar Firestore en un batch
   const batch = writeBatch(db);
-  for (const [dateId, data] of Object.entries(dailyOrderNumbers)) {
+  for (const [dateId, data] of Object.entries(dailyOrderData)) {
     const dailyMetricDocRef = doc(db, 'daily_metrics', dateId);
-    
-    // Convertir la fecha a un Timestamp de Firestore para poder ordenar/filtrar por rango
     const firestoreTimestamp = Timestamp.fromDate(data.date);
 
     // Usamos `set` con `merge: true` para crear o actualizar el documento.
@@ -61,9 +55,9 @@ export async function processShopifyOrders(orders: Order[]) {
       dailyMetricDocRef,
       {
         date: dateId,
-        createdAt: firestoreTimestamp, // Guardamos un timestamp real
+        createdAt: firestoreTimestamp,
         totalOrders: data.numbers.length,
-        orderNumbers: data.numbers, // Guardamos la lista de identificadores de pedido
+        orderNumbers: data.numbers,
       },
       { merge: true }
     );
@@ -71,7 +65,7 @@ export async function processShopifyOrders(orders: Order[]) {
 
   try {
     await batch.commit();
-    console.log(`[Firestore] Métricas de 'totalOrders' actualizadas para ${Object.keys(dailyOrderNumbers).length} días.`);
+    console.log(`[Firestore] Métricas de 'totalOrders' actualizadas para ${Object.keys(dailyOrderData).length} días.`);
   } catch (error) {
     console.error(`Error al procesar el lote de pedidos de Shopify en Firestore:`, error);
     throw error;
@@ -79,7 +73,8 @@ export async function processShopifyOrders(orders: Order[]) {
 }
 
 /**
- * Actualiza los pedidos como confirmados, encontrando su fecha de creación original.
+ * Actualiza los pedidos como confirmados, encontrando su fecha de creación original
+ * a través de la lista de `orderNumbers`.
  */
 export async function updateConfirmedOrders(
   confirmedOrderNumbers: { PEDIDO: string }[]
@@ -97,15 +92,13 @@ export async function updateConfirmedOrders(
   }
   
   const confirmationsByDate: { [key: string]: number } = {};
-
   const metricsRef = collection(db, 'daily_metrics');
   
-  // Optimización: crear fecha límite de hace 90 días
+  // Optimización: Partimos la búsqueda en los últimos 90 días (más probable) y el resto.
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
   const ninetyDaysAgoTimestamp = Timestamp.fromDate(ninetyDaysAgo);
 
-  // 1. Buscar primero en los pedidos de los últimos 90 días (más probable)
   const recentQuery = query(metricsRef, where('createdAt', '>=', ninetyDaysAgoTimestamp), where('orderNumbers', 'array-contains-any', validOrderNames));
   const oldQuery = query(metricsRef, where('createdAt', '<', ninetyDaysAgoTimestamp), where('orderNumbers', 'array-contains-any', validOrderNames));
   
@@ -121,7 +114,7 @@ export async function updateConfirmedOrders(
           const dateId = data.date;
           confirmationsByDate[dateId] = (confirmationsByDate[dateId] || 0) + 1;
           found = true;
-          break; 
+          break; // Optimización: si ya lo encontré, paso al siguiente pedido.
         }
       }
       if (!found) {
@@ -146,6 +139,7 @@ export async function updateConfirmedOrders(
             confirmedOrders: currentConfirmed + increment,
           });
         } else {
+          // Esto no debería ocurrir si la sincronización de Shopify se ejecuta primero, pero es una salvaguarda.
           transaction.set(dailyMetricDocRef, {
             date: dateId,
             confirmedOrders: increment,
@@ -167,6 +161,42 @@ export async function updateConfirmedOrders(
     return {
       status: 'error',
       message: `Error interno al actualizar los pedidos en Firestore: ${errorMessage}`,
+    };
+  }
+}
+
+/**
+ * Resetea el contador `confirmedOrders` a 0 para todos los documentos en `daily_metrics`.
+ */
+export async function resetConfirmedOrders(): Promise<{ status: string; message: string }> {
+  const metricsRef = collection(db, 'daily_metrics');
+  const batch = writeBatch(db);
+  let docsUpdated = 0;
+
+  try {
+    const querySnapshot = await getDocs(metricsRef);
+    if (querySnapshot.empty) {
+      return { status: 'success', message: 'No hay métricas para resetear.' };
+    }
+
+    querySnapshot.forEach((doc) => {
+      batch.update(doc.ref, { confirmedOrders: 0 });
+      docsUpdated++;
+    });
+
+    await batch.commit();
+
+    console.log(`[Firestore] Se resetearon los 'confirmedOrders' para ${docsUpdated} documentos.`);
+    return {
+      status: 'success',
+      message: `Se reinició el contador de pedidos confirmados para ${docsUpdated} días.`,
+    };
+  } catch (error) {
+    console.error('Error al resetear los pedidos confirmados:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido.';
+    return {
+      status: 'error',
+      message: `Error al resetear los contadores: ${errorMessage}`,
     };
   }
 }

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, RefreshCw } from "lucide-react";
-import { collection, getDocs, onSnapshot, orderBy, query } from "firebase/firestore";
+import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, RefreshCw, Trash2 } from "lucide-react";
+import { onSnapshot, collection, query } from "firebase/firestore";
 
 import { fetchAndProcessShopifyOrders } from "@/ai/flows/fetchShopifyOrdersFlow";
+import { resetConfirmedOrders } from "@/lib/firestore";
 import type { DailyMetric } from "@/ai/schemas/analyzeMetricsSchema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -18,15 +19,13 @@ import { db } from "@/lib/firebase";
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [metrics, setMetrics] = useState<DailyMetric[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
     setIsLoading(true);
     const metricsCollectionRef = collection(db, "daily_metrics");
-    // Ordenar por fecha en formato DD-MM-YYYY de forma descendente.
-    // Necesitamos convertir el string a algo comparable, pero Firestore no lo soporta.
-    // Así que ordenamos en el cliente.
     const q = query(metricsCollectionRef);
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -42,7 +41,7 @@ export default function Dashboard() {
         });
       });
 
-      // Ordenar en el cliente
+      // Ordenar en el cliente por fecha descendente
       fetchedMetrics.sort((a, b) => {
         const [dayA, monthA, yearA] = a.date.split('-').map(Number);
         const [dayB, monthB, yearB] = b.date.split('-').map(Number);
@@ -63,7 +62,6 @@ export default function Dashboard() {
       setIsLoading(false);
     });
 
-    // Cleanup subscription on unmount
     return () => unsubscribe();
   }, [toast]);
 
@@ -92,6 +90,27 @@ export default function Dashboard() {
       setIsSyncing(false);
     }
   }
+
+  const handleResetConfirmed = async () => {
+    setIsResetting(true);
+    try {
+      const result = await resetConfirmedOrders();
+       toast({
+        title: result.status === 'success' ? "Reseteo Exitoso" : "Error al Resetear",
+        description: result.message,
+        variant: result.status === 'success' ? 'default' : 'destructive',
+      });
+    } catch (error) {
+       const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
+       toast({
+        variant: "destructive",
+        title: "Error al Resetear",
+        description: errorMessage,
+      });
+    } finally {
+        setIsResetting(false);
+    }
+  }
   
   const totalOrders = metrics.reduce((acc, item) => acc + item.totalOrders, 0) ?? 0;
   const totalConfirmedOrders = metrics.reduce((acc, item) => acc + item.confirmedOrders, 0) ?? 0;
@@ -101,18 +120,24 @@ export default function Dashboard() {
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard de Tasa de Convertibilidad</h2>
-         <Button onClick={handleSyncShopify} disabled={isSyncing || isLoading}>
-            {isSyncing ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Actualizar Datos
-        </Button>
+        <h2 className="text-3xl font-bold tracking-tight">Dashboard de Tasa de Confirmación</h2>
+         <div className="flex gap-2">
+            <Button onClick={handleSyncShopify} disabled={isSyncing || isLoading || isResetting}>
+                {isSyncing ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                Actualizar Datos de Shopify
+            </Button>
+            <Button onClick={handleResetConfirmed} disabled={isResetting || isLoading} variant="destructive">
+                {isResetting ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                Resetear Confirmados
+            </Button>
+         </div>
       </div>
 
        <Alert>
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Datos en Tiempo Real</AlertTitle>
+          <AlertTitle>Datos de la Operación</AlertTitle>
           <AlertDescription>
-            El dashboard se actualiza automáticamente con los datos de Shopify y Google Sheets. Usa el botón "Actualizar Datos" para forzar una sincronización con Shopify.
+           Sincroniza con Shopify para obtener todos los pedidos. El webhook de Google Sheets actualiza las confirmaciones en tiempo real. Usa "Resetear Confirmados" para poner a cero el contador de confirmaciones y volver a probar el webhook.
           </AlertDescription>
         </Alert>
 
@@ -120,7 +145,7 @@ export default function Dashboard() {
           <div className="flex justify-center items-center p-8">
               <Loader className="h-8 w-8 animate-spin text-primary" />
               <p className="ml-4 text-muted-foreground">
-                {isSyncing ? 'Sincronizando pedidos de Shopify...' : 'Cargando métricas desde la base de datos...'}
+                Cargando métricas desde la base de datos...
               </p>
           </div>
       )}
@@ -135,7 +160,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalOrders.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">Total de pedidos recibidos</p>
+                <p className="text-xs text-muted-foreground">Total de pedidos recibidos de Shopify</p>
               </CardContent>
             </Card>
             <Card>
@@ -164,7 +189,7 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle>Análisis Detallado por Día</CardTitle>
               <CardDescription>
-                Métricas de conversión diarias basadas en los datos de Shopify y Google Sheets.
+                Métricas de confirmación diarias. La tasa se calcula como (Pedidos Confirmados / Pedidos Totales) para un día específico.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -172,8 +197,8 @@ export default function Dashboard() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Fecha</TableHead>
-                    <TableHead className="text-right">Pedidos Totales</TableHead>
-                    <TableHead className="text-right">Pedidos Confirmados</TableHead>
+                    <TableHead className="text-right">Pedidos Totales (Shopify)</TableHead>
+                    <TableHead className="text-right">Pedidos Confirmados (Sheets)</TableHead>
                     <TableHead className="w-[200px]">Tasa de Confirmación</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -197,7 +222,7 @@ export default function Dashboard() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={4} className="h-24 text-center">
-                        No se encontraron datos de métricas. Sincroniza los datos para empezar.
+                        No se encontraron datos de métricas. Sincroniza los datos de Shopify para empezar.
                       </TableCell>
                     </TableRow>
                   )}

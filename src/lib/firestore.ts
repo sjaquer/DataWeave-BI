@@ -10,9 +10,10 @@ import {
   where,
   getDocs,
   Timestamp,
+  increment
 } from 'firebase/firestore';
 
-interface Order {
+export interface Order {
   id: number;
   created_at: string;
   name: string; 
@@ -26,43 +27,39 @@ function getDailyMetricDocId(date: Date): string {
 }
 
 /**
- * Procesa pedidos de Shopify para guardar el total de pedidos y sus números de referencia por día.
+ * Procesa un único pedido nuevo de Shopify para actualizar las métricas diarias.
  */
-export async function processShopifyOrders(orders: Order[]) {
-  const dailyOrderData: { [key: string]: { numbers: string[]; date: Date } } = {};
-
-  for (const order of orders) {
-    const orderDate = new Date(order.created_at);
-    const dailyMetricId = getDailyMetricDocId(orderDate);
-
-    if (!dailyOrderData[dailyMetricId]) {
-      dailyOrderData[dailyMetricId] = { numbers: [], date: orderDate };
-    }
-    dailyOrderData[dailyMetricId].numbers.push(order.name);
-  }
-
-  const batch = writeBatch(db);
-  for (const [dateId, data] of Object.entries(dailyOrderData)) {
-    const dailyMetricDocRef = doc(db, 'daily_metrics', dateId);
-    const firestoreTimestamp = Timestamp.fromDate(data.date);
-
-    batch.set(
-      dailyMetricDocRef,
-      {
-        date: dateId,
-        createdAt: firestoreTimestamp,
-        totalOrders: data.numbers.length,
-        orderNumbers: data.numbers,
-      },
-      { merge: true } // Se usa merge para no sobreescribir 'confirmedOrders'
-    );
-  }
+export async function processNewShopifyOrder(order: Order) {
+  const orderDate = new Date(order.created_at);
+  const dailyMetricId = getDailyMetricDocId(orderDate);
+  const dailyMetricDocRef = doc(db, 'daily_metrics', dailyMetricId);
+  const firestoreTimestamp = Timestamp.fromDate(orderDate);
 
   try {
-    await batch.commit();
-    console.log(`[Firestore] Métricas de 'totalOrders' actualizadas para ${Object.keys(dailyOrderData).length} días.`);
+    await runTransaction(db, async (transaction) => {
+      const metricDoc = await transaction.get(dailyMetricDocRef);
+      if (!metricDoc.exists()) {
+        transaction.set(dailyMetricDocRef, {
+          date: dailyMetricId,
+          createdAt: firestoreTimestamp,
+          totalOrders: 1,
+          confirmedOrders: 0,
+          orderNumbers: [order.name],
+        });
+      } else {
+        const data = metricDoc.data();
+        const existingNumbers = data.orderNumbers || [];
+        if (!existingNumbers.includes(order.name)) {
+            transaction.update(dailyMetricDocRef, {
+                totalOrders: increment(1),
+                orderNumbers: [...existingNumbers, order.name],
+            });
+        }
+      }
+    });
+    console.log(`[Firestore] Métrica de 'totalOrders' actualizada para el día ${dailyMetricId} para el pedido ${order.name}.`);
   } catch (error) {
-    console.error(`Error al procesar el lote de pedidos de Shopify en Firestore:`, error);
+    console.error(`Error al procesar el nuevo pedido de Shopify en Firestore:`, error);
     throw error;
   }
 }
@@ -72,15 +69,19 @@ export async function processShopifyOrders(orders: Order[]) {
  * Acepta formatos como 'N-1234' o '#1234' y los convierte a '#1234'.
  */
 function normalizeOrderName(name: string): string {
-  let normalized = name.trim();
+  let normalized = name.trim().toUpperCase();
   
+  // Maneja formatos 'N-1234', '#B1234', etc.
   if (normalized.startsWith('N-')) {
     normalized = '#' + normalized.substring(2);
-  }
-  
-  // Asegurarse de que siempre empiece con '#' si es un pedido válido.
-  if (!normalized.startsWith('#') && /^\d+$/.test(normalized)) {
-      normalized = '#' + normalized;
+  } else if (!normalized.startsWith('#') && /^[A-Z]?-?\d+$/.test(normalized)) {
+    // Si tiene un prefijo opcional y luego números
+    const match = normalized.match(/(\d+)$/);
+    if (match) {
+        normalized = '#' + match[1];
+    }
+  } else if (!normalized.startsWith('#')) {
+     normalized = '#' + normalized;
   }
   
   return normalized;
@@ -105,10 +106,10 @@ export async function updateConfirmedOrders(
   const confirmationsByDate: { [key: string]: number } = {};
   const metricsRef = collection(db, 'daily_metrics');
   
-  // Dividir la búsqueda en lotes de 30 para cumplir con la limitación de 'array-contains-any' de Firestore
   const chunkSize = 30;
   for (let i = 0; i < validOrderNames.length; i += chunkSize) {
       const chunk = validOrderNames.slice(i, i + chunkSize);
+      
       const recentQuery = query(metricsRef, where('orderNumbers', 'array-contains-any', chunk));
       
       try {
@@ -131,7 +132,6 @@ export async function updateConfirmedOrders(
         }
       } catch (error) {
         console.error('Error durante la búsqueda de un lote de pedidos:', error);
-        // Continuar con el siguiente lote si uno falla
       }
   }
 
@@ -141,8 +141,8 @@ export async function updateConfirmedOrders(
 
   try {
     await runTransaction(db, async (transaction) => {
-      for (const [dateId, increment] of Object.entries(confirmationsByDate)) {
-        if (increment === 0) continue;
+      for (const [dateId, incrementValue] of Object.entries(confirmationsByDate)) {
+        if (incrementValue === 0) continue;
 
         const dailyMetricDocRef = doc(db, 'daily_metrics', dateId);
         const metricDoc = await transaction.get(dailyMetricDocRef);
@@ -150,7 +150,7 @@ export async function updateConfirmedOrders(
         if (metricDoc.exists()) {
           const currentConfirmed = metricDoc.data().confirmedOrders || 0;
           transaction.update(dailyMetricDocRef, {
-            confirmedOrders: currentConfirmed + increment,
+            confirmedOrders: currentConfirmed + incrementValue,
           });
         }
       }
@@ -168,41 +168,6 @@ export async function updateConfirmedOrders(
     return {
       status: 'error',
       message: `Error interno al actualizar los pedidos en Firestore: ${errorMessage}`,
-    };
-  }
-}
-
-/**
- * Resetea el contador `confirmedOrders` a 0 para todos los documentos en `daily_metrics`.
- */
-export async function resetConfirmedOrders(): Promise<{ status: string; message: string }> {
-  const metricsRef = collection(db, 'daily_metrics');
-  const batch = writeBatch(db);
-  let docsUpdated = 0;
-
-  try {
-    const querySnapshot = await getDocs(metricsRef);
-    if (querySnapshot.empty) {
-      return { status: 'success', message: 'No hay métricas para resetear.' };
-    }
-
-    querySnapshot.forEach((doc) => {
-      batch.update(doc.ref, { confirmedOrders: 0 });
-      docsUpdated++;
-    });
-
-    await batch.commit();
-
-    return {
-      status: 'success',
-      message: `Se reinició el contador de pedidos confirmados para ${docsUpdated} días.`,
-    };
-  } catch (error) {
-    console.error('Error al resetear los pedidos confirmados:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Error desconocido.';
-    return {
-      status: 'error',
-      message: `Error al resetear los contadores: ${errorMessage}`,
     };
   }
 }

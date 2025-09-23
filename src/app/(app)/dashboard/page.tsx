@@ -1,13 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, RefreshCw, Trash2 } from "lucide-react";
+import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle } from "lucide-react";
 import { onSnapshot, collection, query } from "firebase/firestore";
 
-import { fetchAndProcessShopifyOrders } from "@/ai/flows/fetchShopifyOrdersFlow";
-import { resetConfirmedOrders } from "@/lib/firestore";
 import type { DailyMetric } from "@/ai/schemas/analyzeMetricsSchema";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
@@ -18,8 +15,6 @@ import { db } from "@/lib/firebase";
 
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
   const [metrics, setMetrics] = useState<DailyMetric[]>([]);
   const { toast } = useToast();
 
@@ -65,52 +60,6 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [toast]);
 
-
-  const handleSyncShopify = async () => {
-    setIsSyncing(true);
-    try {
-      const result = await fetchAndProcessShopifyOrders();
-      if (result.status === 'success') {
-        toast({
-          title: "Sincronización Exitosa",
-          description: result.message,
-        });
-      } else {
-        throw new Error(result.message);
-      }
-    } catch (error) {
-       const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido durante la sincronización.";
-       toast({
-        variant: "destructive",
-        title: "Error de Sincronización",
-        description: errorMessage,
-      });
-      console.error("Error syncing Shopify orders:", error);
-    } finally {
-      setIsSyncing(false);
-    }
-  }
-
-  const handleResetConfirmed = async () => {
-    setIsResetting(true);
-    try {
-      const result = await resetConfirmedOrders();
-       toast({
-        title: result.status === 'success' ? "Reseteo Exitoso" : "Error al Resetear",
-        description: result.message,
-        variant: result.status === 'success' ? 'default' : 'destructive',
-      });
-    } catch (error) {
-       const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
-       toast({
-        variant: "destructive",
-        title: "Error al Resetear",
-        description: errorMessage,
-      });
-    } finally {
-        setIsResetting(false);
-    }
-  }
   
   const totalOrders = metrics.reduce((acc, item) => acc + item.totalOrders, 0) ?? 0;
   const totalConfirmedOrders = metrics.reduce((acc, item) => acc + item.confirmedOrders, 0) ?? 0;
@@ -121,23 +70,13 @@ export default function Dashboard() {
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard de Tasa de Confirmación</h2>
-         <div className="flex gap-2">
-            <Button onClick={handleSyncShopify} disabled={isSyncing || isLoading || isResetting}>
-                {isSyncing ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                Actualizar Datos de Shopify
-            </Button>
-            <Button onClick={handleResetConfirmed} disabled={isResetting || isLoading} variant="destructive">
-                {isResetting ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                Resetear Confirmados
-            </Button>
-         </div>
       </div>
 
        <Alert>
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Datos de la Operación</AlertTitle>
+          <AlertTitle>Dashboard en Tiempo Real</AlertTitle>
           <AlertDescription>
-           Sincroniza con Shopify para obtener todos los pedidos. El webhook de Google Sheets actualiza las confirmaciones en tiempo real. Usa "Resetear Confirmados" para poner a cero el contador de confirmaciones y volver a probar el webhook.
+           Este dashboard se actualiza automáticamente. Los nuevos pedidos de Shopify y las confirmaciones de Google Sheets se reflejarán aquí en tiempo real.
           </AlertDescription>
         </Alert>
 
@@ -222,7 +161,7 @@ export default function Dashboard() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={4} className="h-24 text-center">
-                        No se encontraron datos de métricas. Sincroniza los datos de Shopify para empezar.
+                        No se encontraron datos de métricas. Esperando nuevos pedidos...
                       </TableCell>
                     </TableRow>
                   )}

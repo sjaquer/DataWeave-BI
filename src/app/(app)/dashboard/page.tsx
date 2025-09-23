@@ -152,20 +152,36 @@ export default function Dashboard() {
           </AlertDescription>
         </Alert>
 
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center">
-                    <RefreshCw className="mr-2 h-5 w-5" />
-                    Sincronización Manual con API de Shopify
-                </CardTitle>
-                <CardDescription>
-                    Usa este botón para hacer una carga única del historial de los últimos 6 meses de una tienda específica, directamente desde la API de Shopify.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <SyncButton />
-            </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center">
+                        <RefreshCw className="mr-2 h-5 w-5" />
+                        Sincronización con API de Shopify
+                    </CardTitle>
+                    <CardDescription>
+                        Usa este botón para hacer una carga única del historial de los últimos 6 meses de una tienda específica, directamente desde la API de Shopify.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <SyncButton />
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center">
+                        <Upload className="mr-2 h-5 w-5" />
+                        Carga Manual de Historial con CSV
+                    </CardTitle>
+                    <CardDescription>
+                        Sube un archivo CSV de pedidos exportado desde Shopify para hacer una carga masiva del historial de una tienda.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <DataUploader />
+                </CardContent>
+            </Card>
+        </div>
 
 
       {(isLoading) && (

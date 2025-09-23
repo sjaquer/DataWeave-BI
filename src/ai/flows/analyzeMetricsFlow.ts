@@ -30,12 +30,11 @@ function parseCsv(dataUri: string): any[] {
 
 // Función para normalizar el número de pedido extrayendo solo los dígitos
 function normalizeOrderNumber(orderId: string): string {
-    if (!orderId) return '';
-    // Extrae todos los dígitos del string.
-    const numericPart = orderId.match(/\d+/g);
-    return numericPart ? numericPart.join('') : '';
+  if (!orderId) return '';
+  // Extrae todos los dígitos del string.
+  const numericPart = orderId.match(/\d+/g);
+  return numericPart ? numericPart.join('') : '';
 }
-
 
 export async function analyzeMetrics(
   input: AnalyzeMetricsInput
@@ -60,10 +59,8 @@ const analyzeMetricsFlow = ai.defineFlow(
       const confirmedOrderNumbers = new Set(
         logisticsRecords.map((record) => normalizeOrderNumber(record['PEDIDO']))
       );
-      
       // Eliminar valores vacíos si los hubiera
       confirmedOrderNumbers.delete('');
-
 
       // 2. Procesar archivo de Shopify
       for (const record of shopifyRecords) {
@@ -71,12 +68,14 @@ const analyzeMetricsFlow = ai.defineFlow(
         const createdAt = record['Created at'];
 
         if (!createdAt || !orderNumberWithPrefix) continue;
-        
+
         const orderNumber = normalizeOrderNumber(orderNumberWithPrefix);
         if (!orderNumber) continue;
 
+        // Extraer SOLAMENTE la fecha (YYYY-MM-DD), ignorando la hora y la zona horaria.
         const date = createdAt.split('T')[0];
 
+        // Inicializar el objeto para el día si no existe
         if (!dailyData[date]) {
           dailyData[date] = {
             date,
@@ -85,6 +84,7 @@ const analyzeMetricsFlow = ai.defineFlow(
             confirmationRate: 0,
           };
         }
+        
         // Incrementar el total de pedidos para el día
         dailyData[date].totalOrders++;
 
@@ -104,7 +104,7 @@ const analyzeMetricsFlow = ai.defineFlow(
         return data;
       });
 
-      // Ordenar los datos por fecha para la visualización
+      // Ordenar los datos por fecha para la visualización (más recientes primero)
       dashboardData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
 

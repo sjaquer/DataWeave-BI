@@ -17,15 +17,22 @@ async function verifyShopifyWebhook(request: Request): Promise<boolean> {
     console.warn('Faltan encabezados o clave secreta para la verificación del webhook de Shopify.');
     return false;
   }
-
-  const body = await request.clone().text(); // Clonamos para poder leer el cuerpo varias veces
+  
+  // Es crucial obtener el cuerpo como texto crudo (raw body), por eso usamos text()
+  const body = await request.clone().text();
   
   const genHash = crypto
     .createHmac('sha256', secret)
     .update(body, 'utf8')
     .digest('base64');
 
-  return genHash === hmac;
+  // Comparación segura para evitar ataques de tiempo
+  try {
+    return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(genHash));
+  } catch (error) {
+    console.warn('Error durante la comparación de HMACs:', error);
+    return false;
+  }
 }
 
 
@@ -35,15 +42,15 @@ async function verifyShopifyWebhook(request: Request): Promise<boolean> {
 export async function POST(request: Request) {
   try {
     // 1. Verificar la autenticidad del webhook
-    // const isValid = await verifyShopifyWebhook(request);
-    // if (!isValid) {
-    //   console.warn('[Webhook Shopify] Verificación de HMAC fallida. Petición no autorizada.');
-    //   return NextResponse.json({ status: 'error', message: 'No autorizado.' }, { status: 401 });
-    // }
+    const isValid = await verifyShopifyWebhook(request.clone()); // Clonamos para poder leer el cuerpo varias veces
+    if (!isValid) {
+      console.warn('[Webhook Shopify] Verificación de HMAC fallida. Petición no autorizada.');
+      return NextResponse.json({ status: 'error', message: 'No autorizado.' }, { status: 401 });
+    }
 
-    // 2. Procesar los datos del pedido
+    // 2. Procesar los datos del pedido. Ahora que es válido, leemos el JSON del cuerpo original.
     const orderData = await request.json();
-    console.log(`[Webhook Shopify] Pedido recibido: ${orderData.name} (ID: ${orderData.id})`);
+    console.log(`[Webhook Shopify] Pedido recibido y verificado: ${orderData.name} (ID: ${orderData.id})`);
 
     await processNewShopifyOrder(orderData);
     

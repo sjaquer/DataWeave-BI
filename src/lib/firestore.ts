@@ -4,12 +4,19 @@ import { format } from 'date-fns';
 
 /**
  * Formatea una fecha de varios formatos posibles y la devuelve como DD-MM-YYYY.
+ * Esta versión es más robusta para el entorno de servidor.
  */
-function formatDate(dateString: string): string | null {
+function formatDate(dateString: string | Date): string | null {
     if (!dateString) return null;
     try {
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) return null;
+        // Si ya es un objeto Date, usarlo directamente.
+        // Si es un string, crear una nueva instancia de Date.
+        const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
+        if (isNaN(date.getTime())) {
+          console.error("La fecha proporcionada no es válida:", dateString);
+          return null;
+        };
+        // format de date-fns es seguro de usar para formatear
         return format(date, 'dd-MM-yyyy');
     } catch (error) {
         console.error("Error al formatear fecha:", dateString, error);
@@ -137,5 +144,3 @@ export async function updateConfirmedOrders(confirmedOrderNumbers: string[]) {
         }
     }
 }
-
-    

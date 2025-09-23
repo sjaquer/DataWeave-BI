@@ -5,12 +5,7 @@ import { Loader, UploadCloud, TrendingUp, CheckCircle, Percent } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { analyzeMetrics } from "@/ai/flows/analyzeMetricsFlow";
 import type { DailyMetric } from "@/ai/schemas/analyzeMetricsSchema";
@@ -200,32 +195,13 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Rendimiento Diario</CardTitle>
-              <CardDescription>Comparación de pedidos totales vs. confirmados por día.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer config={{}} className="h-[350px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dashboardData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip content={<ChartTooltipContent />} />
-                    <Legend />
-                    <Bar dataKey="totalOrders" fill="var(--color-chart-2)" name="Pedidos Totales" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="confirmedOrders" fill="var(--color-chart-1)" name="Pedidos Confirmados" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartContainer>
-            </CardContent>
-          </Card>
           
           <Card>
             <CardHeader>
               <CardTitle>Análisis Detallado por Día</CardTitle>
+              <CardDescription>
+                Métricas de conversión diarias ordenadas por fecha.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -234,16 +210,23 @@ export default function Dashboard() {
                     <TableHead>Fecha</TableHead>
                     <TableHead className="text-right">Pedidos Totales</TableHead>
                     <TableHead className="text-right">Pedidos Confirmados</TableHead>
-                    <TableHead className="text-right">Tasa de Confirmación</TableHead>
+                    <TableHead className="w-[200px]">Tasa de Confirmación</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {dashboardData.slice(0, visibleItems).map((metric) => (
                     <TableRow key={metric.date}>
-                      <TableCell>{metric.date}</TableCell>
+                      <TableCell className="font-medium">{metric.date}</TableCell>
                       <TableCell className="text-right">{metric.totalOrders}</TableCell>
                       <TableCell className="text-right">{metric.confirmedOrders}</TableCell>
-                      <TableCell className="text-right font-medium">{metric.confirmationRate.toFixed(2)}%</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Progress value={metric.confirmationRate} className="h-2" />
+                          <span className="text-right font-medium text-sm w-16">
+                            {metric.confirmationRate.toFixed(2)}%
+                          </span>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

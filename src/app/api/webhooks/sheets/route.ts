@@ -20,22 +20,26 @@ export async function POST(request: Request) {
       if (recordCount > 0) {
         console.log('[Webhook Google Sheets] Muestra de datos:', JSON.stringify(body.logisticsData[0]));
         
-        // Extraer solo los números de pedido de la columna "PEDIDO"
-        const orderNumbers = body.logisticsData
+        // Extraer número de pedido y fecha para la nueva lógica
+        const confirmedOrderData = body.logisticsData
           .map((record: any) => {
             const orderValue = record['PEDIDO'];
             if (orderValue === null || orderValue === undefined) {
               return null;
             }
-            // ¡CORRECCIÓN! Convertir explícitamente a string antes de usar .match()
             const orderString = String(orderValue);
-            return orderString.match(/\d+/g)?.join('');
+            const orderNumber = orderString.match(/\d+/g)?.join('');
+            
+            // La fecha puede estar en la columna 'FECHA' o similar, ajústala si es necesario
+            const dateValue = record['FECHA'] || record['fecha'] || new Date(); 
+
+            return orderNumber ? { orderNumber, date: dateValue } : null;
           })
           .filter(Boolean); // Filtra nulos, undefined o vacíos
 
-        if (orderNumbers.length > 0) {
-           await updateConfirmedOrders(orderNumbers);
-           console.log(`[Webhook Google Sheets] ${orderNumbers.length} pedidos confirmados procesados y actualizados en Firestore.`);
+        if (confirmedOrderData.length > 0) {
+           await updateConfirmedOrders(confirmedOrderData);
+           console.log(`[Webhook Google Sheets] ${confirmedOrderData.length} pedidos confirmados procesados y actualizados en Firestore.`);
         }
       }
       

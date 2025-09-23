@@ -15,6 +15,7 @@ import {
   type AnalyzeMetricsOutput,
 } from '@/ai/schemas/analyzeMetricsSchema';
 import {processShopifyCsv, updateConfirmedOrders} from '@/lib/firestore';
+import type { Order } from '@/lib/firestore';
 
 // Función que será llamada desde la UI
 export async function analyzeMetrics(input: AnalyzeMetricsInput): Promise<AnalyzeMetricsOutput> {
@@ -41,10 +42,17 @@ const analyzeMetricsFlow = ai.defineFlow(
         });
         
         // Mapear los nombres de columna del CSV a la interfaz Order
-        const orders = records.map((r: any) => ({
+        const orders: Order[] = records.map((r: any) => ({
             id: r.id,
             name: r.Name,
-            created_at: r['Created at']
+            created_at: r['Created at'],
+            shipping_address: {
+                province: r['Shipping Province Name']
+            },
+            line_items: [{ // Esto es una simplificación. Un pedido real puede tener muchos.
+                title: r['Lineitem name'],
+                quantity: parseInt(r['Lineitem quantity'], 10)
+            }]
         }));
 
         await processShopifyCsv(orders, input.storeId);
@@ -74,9 +82,7 @@ const analyzeMetricsFlow = ai.defineFlow(
     return {
       status: 'success',
       message: `Shopify: ${shopifyMessage}\nSheets: ${sheetsMessage}`,
-      dashboardData: [], // Ya no devolvemos datos al dashboard, se leen en tiempo real.
+      dashboardData: [], 
     };
   }
 );
-
-    

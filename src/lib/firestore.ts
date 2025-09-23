@@ -68,6 +68,25 @@ export async function processShopifyOrders(orders: Order[]) {
 }
 
 /**
+ * Normaliza el número de pedido a un formato estándar que empieza con '#'.
+ * Acepta formatos como 'N-1234' o '#1234' y los convierte a '#1234'.
+ */
+function normalizeOrderName(name: string): string {
+  let normalized = name.trim();
+  
+  if (normalized.startsWith('N-')) {
+    normalized = '#' + normalized.substring(2);
+  }
+  
+  // Asegurarse de que siempre empiece con '#' si es un pedido válido.
+  if (!normalized.startsWith('#') && /^\d+$/.test(normalized)) {
+      normalized = '#' + normalized;
+  }
+  
+  return normalized;
+}
+
+/**
  * Actualiza los pedidos como confirmados, encontrando su fecha de creación original
  * a través de la lista de `orderNumbers` para incrementar el contador del día correcto.
  */
@@ -76,41 +95,51 @@ export async function updateConfirmedOrders(
 ): Promise<{ status: string; message: string }> {
 
   const validOrderNames = confirmedOrders
-    .map(item => String(item.PEDIDO || '').trim())
+    .map(item => normalizeOrderName(String(item.PEDIDO || '')))
     .filter(name => name.startsWith('#'));
 
   if (validOrderNames.length === 0) {
-    return { status: 'success', message: 'No se encontraron números de pedido válidos (deben empezar con #).' };
+    return { status: 'success', message: 'No se encontraron números de pedido válidos para procesar.' };
   }
   
   const confirmationsByDate: { [key: string]: number } = {};
   const metricsRef = collection(db, 'daily_metrics');
   
-  const recentQuery = query(metricsRef, where('orderNumbers', 'array-contains-any', validOrderNames));
-  
-  try {
-    const querySnapshot = await getDocs(recentQuery);
-
-    for (const orderName of validOrderNames) {
-      let found = false;
-      for (const doc of querySnapshot.docs) {
-        const data = doc.data();
-        if (data.orderNumbers && data.orderNumbers.includes(orderName)) {
-          const dateId = data.date;
-          confirmationsByDate[dateId] = (confirmationsByDate[dateId] || 0) + 1;
-          found = true;
-          break; 
+  // Dividir la búsqueda en lotes de 30 para cumplir con la limitación de 'array-contains-any' de Firestore
+  const chunkSize = 30;
+  for (let i = 0; i < validOrderNames.length; i += chunkSize) {
+      const chunk = validOrderNames.slice(i, i + chunkSize);
+      const recentQuery = query(metricsRef, where('orderNumbers', 'array-contains-any', chunk));
+      
+      try {
+        const querySnapshot = await getDocs(recentQuery);
+    
+        for (const orderName of chunk) {
+          let found = false;
+          for (const doc of querySnapshot.docs) {
+            const data = doc.data();
+            if (data.orderNumbers && data.orderNumbers.includes(orderName)) {
+              const dateId = data.date;
+              confirmationsByDate[dateId] = (confirmationsByDate[dateId] || 0) + 1;
+              found = true;
+              break; 
+            }
+          }
+          if (!found) {
+            console.warn(`[Firestore] No se encontró el pedido ${orderName} en 'daily_metrics'. No se pudo asignar fecha de confirmación.`);
+          }
         }
+      } catch (error) {
+        console.error('Error durante la búsqueda de un lote de pedidos:', error);
+        // Continuar con el siguiente lote si uno falla
       }
-      if (!found) {
-        console.warn(`[Firestore] No se encontró el pedido ${orderName} en 'daily_metrics'. No se pudo asignar fecha de confirmación.`);
-      }
-    }
+  }
 
-    if (Object.keys(confirmationsByDate).length === 0) {
-        return { status: 'success', message: 'Los pedidos confirmados no coincidieron con ningún pedido existente en la base de datos.' };
-    }
+  if (Object.keys(confirmationsByDate).length === 0) {
+      return { status: 'success', message: 'Los pedidos confirmados no coincidieron con ningún pedido existente en la base de datos.' };
+  }
 
+  try {
     await runTransaction(db, async (transaction) => {
       for (const [dateId, increment] of Object.entries(confirmationsByDate)) {
         if (increment === 0) continue;

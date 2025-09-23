@@ -9,7 +9,7 @@ import {
   setDoc,
 } from 'firebase/firestore';
 
-// Definición local del tipo Order para desacoplarlo de la ruta eliminada
+// Definición local del tipo Order para que coincida con la respuesta de la API
 interface Order {
   id: number;
   created_at: string;

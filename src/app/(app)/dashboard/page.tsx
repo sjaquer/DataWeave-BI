@@ -1,82 +1,72 @@
 "use client";
 
-import { useState } from "react";
-import { useForm, FormProvider } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, FileUp, BarChart, Download } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, RefreshCw } from "lucide-react";
+import { collection, getDocs, onSnapshot, orderBy, query } from "firebase/firestore";
 
-import { analyzeMetrics } from "@/ai/flows/analyzeMetricsFlow";
 import { fetchAndProcessShopifyOrders } from "@/ai/flows/fetchShopifyOrdersFlow";
-import type { DailyMetric, AnalyzeMetricsOutput } from "@/ai/schemas/analyzeMetricsSchema";
+import type { DailyMetric } from "@/ai/schemas/analyzeMetricsSchema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { db } from "@/lib/firebase";
 
-const formSchema = z.object({
-  shopifyFile: z
-    .any()
-    .refine((files) => files?.length === 1, "El reporte de Shopify es requerido."),
-  sheetsFile: z
-    .any()
-    .refine((files) => files?.length === 1, "El reporte de logística es requerido."),
-});
-
-const fileToDataUri = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-};
 
 export default function Dashboard() {
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<AnalyzeMetricsOutput | null>(null);
+  const [metrics, setMetrics] = useState<DailyMetric[]>([]);
   const { toast } = useToast();
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-  });
+  useEffect(() => {
+    setIsLoading(true);
+    const metricsCollectionRef = collection(db, "daily_metrics");
+    // Ordenar por fecha en formato DD-MM-YYYY de forma descendente.
+    // Necesitamos convertir el string a algo comparable, pero Firestore no lo soporta.
+    // Así que ordenamos en el cliente.
+    const q = query(metricsCollectionRef);
 
-  const onAnalyzeSubmit = async (values: z.infer<typeof formSchema>) => {
-    setIsAnalyzing(true);
-    setAnalysisResult(null);
-
-    try {
-      const shopifyDataUri = await fileToDataUri(values.shopifyFile[0]);
-      const sheetsDataUri = await fileToDataUri(values.sheetsFile[0]);
-
-      const result = await analyzeMetrics({
-        shopifyDataUri,
-        sheetsDataUri,
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const fetchedMetrics: DailyMetric[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        const rate = (data.totalOrders > 0) ? (data.confirmedOrders / data.totalOrders) * 100 : 0;
+        fetchedMetrics.push({
+          date: data.date,
+          totalOrders: data.totalOrders || 0,
+          confirmedOrders: data.confirmedOrders || 0,
+          confirmationRate: parseFloat(rate.toFixed(2)),
+        });
       });
 
-      if (result.status === 'error') {
-        throw new Error(result.message);
-      }
-      
-      setAnalysisResult(result);
+      // Ordenar en el cliente
+      fetchedMetrics.sort((a, b) => {
+        const [dayA, monthA, yearA] = a.date.split('-').map(Number);
+        const [dayB, monthB, yearB] = b.date.split('-').map(Number);
+        const dateA = new Date(yearA, monthA - 1, dayA);
+        const dateB = new Date(yearB, monthB - 1, dayB);
+        return dateB.getTime() - dateA.getTime();
+      });
 
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
+      setMetrics(fetchedMetrics);
+      setIsLoading(false);
+    }, (error) => {
+      console.error("Error fetching metrics from Firestore:", error);
       toast({
         variant: "destructive",
-        title: "Error en el Análisis",
-        description: errorMessage,
+        title: "Error de Conexión",
+        description: "No se pudieron cargar las métricas desde la base de datos.",
       });
-      console.error("Error processing files:", error);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
+      setIsLoading(false);
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, [toast]);
+
 
   const handleSyncShopify = async () => {
     setIsSyncing(true);
@@ -87,7 +77,6 @@ export default function Dashboard() {
           title: "Sincronización Exitosa",
           description: result.message,
         });
-        // Aquí podrías recargar los datos del dashboard si fuera necesario
       } else {
         throw new Error(result.message);
       }
@@ -104,8 +93,8 @@ export default function Dashboard() {
     }
   }
   
-  const totalOrders = analysisResult?.dashboardData.reduce((acc, item) => acc + item.totalOrders, 0) ?? 0;
-  const totalConfirmedOrders = analysisResult?.dashboardData.reduce((acc, item) => acc + item.confirmedOrders, 0) ?? 0;
+  const totalOrders = metrics.reduce((acc, item) => acc + item.totalOrders, 0) ?? 0;
+  const totalConfirmedOrders = metrics.reduce((acc, item) => acc + item.confirmedOrders, 0) ?? 0;
   const overallConfirmationRate = totalOrders > 0 ? (totalConfirmedOrders / totalOrders) * 100 : 0;
 
 
@@ -113,86 +102,30 @@ export default function Dashboard() {
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard de Tasa de Convertibilidad</h2>
+         <Button onClick={handleSyncShopify} disabled={isSyncing || isLoading}>
+            {isSyncing ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            Actualizar Datos
+        </Button>
       </div>
 
        <Alert>
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Análisis Bajo Demanda y Sincronización</AlertTitle>
+          <AlertTitle>Datos en Tiempo Real</AlertTitle>
           <AlertDescription>
-            Usa el botón para sincronizar los pedidos de Shopify. Luego, sube los reportes CSV para un análisis completo.
+            El dashboard se actualiza automáticamente con los datos de Shopify y Google Sheets. Usa el botón "Actualizar Datos" para forzar una sincronización con Shopify.
           </AlertDescription>
         </Alert>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-1">
-           <CardHeader>
-            <CardTitle>Sincronización de Datos</CardTitle>
-            <CardDescription>Obtén los últimos pedidos directamente desde Shopify.</CardDescription>
-          </CardHeader>
-          <CardContent>
-              <Button onClick={handleSyncShopify} disabled={isSyncing} className="w-full">
-                {isSyncing ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                Sincronizar Pedidos de Shopify
-              </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Cargar Archivos para Análisis</CardTitle>
-            <CardDescription>Selecciona los reportes en formato CSV para comenzar el análisis.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <FormProvider {...form}>
-              <form onSubmit={form.handleSubmit(onAnalyzeSubmit)} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="shopifyFile"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Reporte de Pedidos de Shopify (.csv)</FormLabel>
-                        <FormControl>
-                          <Input type="file" accept=".csv" {...form.register("shopifyFile")} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="sheetsFile"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Reporte de Logística (.csv)</FormLabel>
-                        <FormControl>
-                          <Input type="file" accept=".csv" {...form.register("sheetsFile")} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <Button type="submit" disabled={isAnalyzing} className="w-full md:w-auto">
-                  {isAnalyzing ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <BarChart className="mr-2 h-4 w-4" />}
-                  Analizar Datos
-                </Button>
-              </form>
-            </FormProvider>
-          </CardContent>
-        </Card>
-      </div>
-
-      {(isAnalyzing || isSyncing) && (
+      {(isLoading) && (
           <div className="flex justify-center items-center p-8">
               <Loader className="h-8 w-8 animate-spin text-primary" />
               <p className="ml-4 text-muted-foreground">
-                {isSyncing ? 'Sincronizando pedidos de Shopify...' : 'Procesando archivos y analizando métricas...'}
+                {isSyncing ? 'Sincronizando pedidos de Shopify...' : 'Cargando métricas desde la base de datos...'}
               </p>
           </div>
       )}
 
-      {analysisResult && analysisResult.status === 'success' && (
+      {!isLoading && (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
             <Card>
@@ -202,7 +135,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalOrders.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">Total de pedidos recibidos en el reporte</p>
+                <p className="text-xs text-muted-foreground">Total de pedidos recibidos</p>
               </CardContent>
             </Card>
             <Card>
@@ -231,7 +164,7 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle>Análisis Detallado por Día</CardTitle>
               <CardDescription>
-                Métricas de conversión diarias basadas en los archivos cargados.
+                Métricas de conversión diarias basadas en los datos de Shopify y Google Sheets.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -245,8 +178,8 @@ export default function Dashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {analysisResult.dashboardData.length > 0 ? (
-                    analysisResult.dashboardData.map((metric) => (
+                  {metrics.length > 0 ? (
+                    metrics.map((metric) => (
                       <TableRow key={metric.date}>
                         <TableCell className="font-medium">{metric.date}</TableCell>
                         <TableCell className="text-right">{metric.totalOrders}</TableCell>
@@ -264,7 +197,7 @@ export default function Dashboard() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={4} className="h-24 text-center">
-                        No se encontraron datos de métricas para mostrar.
+                        No se encontraron datos de métricas. Sincroniza los datos para empezar.
                       </TableCell>
                     </TableRow>
                   )}

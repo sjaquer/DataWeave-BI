@@ -35,11 +35,12 @@ const fetchAndProcessShopifyOrdersFlow = ai.defineFlow(
     outputSchema: FetchShopifyOrdersOutputSchema,
   },
   async () => {
-    const storeName = process.env.SHOPIFY_STORE_NAME;
-    const accessToken = process.env.SHOPIFY_API_ACCESS_TOKEN;
+    // Corregido: Usar las variables de entorno con prefijo NEXT_PUBLIC_
+    const storeName = process.env.NEXT_PUBLIC_SHOPIFY_STORE_NAME;
+    const accessToken = process.env.NEXT_PUBLIC_SHOPIFY_API_ACCESS_TOKEN;
 
     if (!storeName || !accessToken) {
-      console.error("Credenciales de Shopify no configuradas en .env");
+      console.error("Credenciales de Shopify no configuradas en .env con el prefijo NEXT_PUBLIC_");
       return {
         status: 'error',
         message: 'Las credenciales de Shopify (SHOPIFY_STORE_NAME, SHOPIFY_API_ACCESS_TOKEN) no están configuradas.',

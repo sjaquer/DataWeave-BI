@@ -9,13 +9,13 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
 } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { analyzeMetrics } from "@/ai/flows/analyzeMetricsFlow";
 import type { DailyMetric } from "@/ai/schemas/analyzeMetricsSchema";
+
+const ITEMS_PER_PAGE = 50;
 
 export default function Dashboard() {
   const [shopifyFile, setShopifyFile] = useState<File | null>(null);
@@ -23,6 +23,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [dashboardData, setDashboardData] = useState<DailyMetric[]>([]);
   const { toast } = useToast();
+  const [visibleItems, setVisibleItems] = useState(ITEMS_PER_PAGE);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, fileType: 'shopify' | 'sheets') => {
     if (e.target.files && e.target.files.length > 0) {
@@ -54,6 +55,7 @@ export default function Dashboard() {
 
     setIsLoading(true);
     setDashboardData([]);
+    setVisibleItems(ITEMS_PER_PAGE); // Reset pagination on new analysis
     try {
       const shopifyDataUri = await toBase64(shopifyFile);
       const sheetsDataUri = await toBase64(sheetsFile);
@@ -84,6 +86,10 @@ export default function Dashboard() {
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  const handleShowMore = () => {
+    setVisibleItems((prev) => prev + ITEMS_PER_PAGE);
   };
 
   const totalOrders = dashboardData.reduce((acc, item) => acc + item.totalOrders, 0);
@@ -169,7 +175,7 @@ export default function Dashboard() {
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{totalOrders}</div>
+                <div className="text-2xl font-bold">{totalOrders.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground">Total de pedidos recibidos</p>
               </CardContent>
             </Card>
@@ -179,7 +185,7 @@ export default function Dashboard() {
                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{totalConfirmedOrders}</div>
+                <div className="text-2xl font-bold">{totalConfirmedOrders.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground">Total de pedidos confirmados</p>
               </CardContent>
             </Card>
@@ -232,7 +238,7 @@ export default function Dashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {dashboardData.map((metric) => (
+                  {dashboardData.slice(0, visibleItems).map((metric) => (
                     <TableRow key={metric.date}>
                       <TableCell>{metric.date}</TableCell>
                       <TableCell className="text-right">{metric.totalOrders}</TableCell>
@@ -242,6 +248,13 @@ export default function Dashboard() {
                   ))}
                 </TableBody>
               </Table>
+              {visibleItems < dashboardData.length && (
+                <div className="flex justify-center mt-4">
+                  <Button onClick={handleShowMore}>
+                    Ver más
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

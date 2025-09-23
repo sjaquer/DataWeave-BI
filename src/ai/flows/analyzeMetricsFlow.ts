@@ -73,9 +73,22 @@ const analyzeMetricsFlow = ai.defineFlow(
         if (!orderNumber) continue;
 
         // Extraer la fecha y formatearla como DD-MM-YYYY
-        const datePart = createdAt.split('T')[0]; // "YYYY-MM-DD"
-        const [year, month, day] = datePart.split('-');
-        const formattedDate = `${day}-${month}-${year}`;
+        // El formato de entrada puede ser "YYYY-MM-DDTHH:mm:ss..." o "DD HH:mm:ss -MM-YYYY"
+        let formattedDate: string;
+        if (createdAt.includes('T')) {
+          // Formato "YYYY-MM-DDTHH:mm:ss..."
+          const datePart = createdAt.split('T')[0]; // "YYYY-MM-DD"
+          const [year, month, day] = datePart.split('-');
+          formattedDate = `${day}-${month}-${year}`;
+        } else {
+          // Formato "22 06:45:14 -09-2025"
+          const parts = createdAt.split(' ');
+          const day = parts[0];
+          const monthYear = parts[2].split('-'); // ["", "09", "2025"]
+          const month = monthYear[1];
+          const year = monthYear[2];
+          formattedDate = `${day}-${month}-${year}`;
+        }
 
 
         // Inicializar el objeto para el día si no existe

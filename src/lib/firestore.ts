@@ -6,10 +6,10 @@ import {
   doc,
   getDoc,
   runTransaction,
-  setDoc,
+  writeBatch,
 } from 'firebase/firestore';
 
-// Definición local del tipo Order para que coincida con la respuesta de la API
+// Definición local del tipo Order para que coincida con la respuesta de la API de Shopify
 interface Order {
   id: number;
   created_at: string;
@@ -23,8 +23,7 @@ interface Order {
   } | null;
 }
 
-
-// Helper para obtener el ID de documento de métrica diaria
+// Helper para obtener el ID de documento de métrica diaria en formato DD-MM-YYYY
 function getDailyMetricDocId(date: Date): string {
   const day = String(date.getUTCDate()).padStart(2, '0');
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
@@ -34,7 +33,7 @@ function getDailyMetricDocId(date: Date): string {
 
 /**
  * Procesa un nuevo pedido de Shopify.
- * Crea el documento del pedido y actualiza/crea las métricas diarias.
+ * Esta función es la ÚNICA responsable de incrementar `totalOrders`.
  */
 export async function processNewShopifyOrder(order: Order) {
   const orderDate = new Date(order.created_at);
@@ -46,54 +45,72 @@ export async function processNewShopifyOrder(order: Order) {
     await runTransaction(db, async (transaction) => {
       const orderDoc = await transaction.get(orderDocRef);
       const dailyMetricDoc = await transaction.get(dailyMetricDocRef);
+      
+      const orderPayload = {
+        id: order.id,
+        orderNumber: order.name,
+        createdAt: order.created_at,
+        totalPrice: order.total_price,
+        customer: order.customer ? {
+          id: order.customer.id,
+          firstName: order.customer.first_name,
+          lastName: order.customer.last_name,
+          email: order.customer.email,
+        } : null,
+      };
 
-      // Si el pedido no existe, lo creamos y actualizamos las métricas
       if (!orderDoc.exists()) {
+        // --- El pedido NO existe ---
+        // Lo creamos y establecemos 'confirmed' en false por defecto.
         transaction.set(orderDocRef, {
-          id: order.id,
-          orderNumber: order.name,
-          createdAt: order.created_at,
-          totalPrice: order.total_price,
-          customer: order.customer ? {
-            id: order.customer.id,
-            firstName: order.customer.first_name,
-            lastName: order.customer.last_name,
-            email: order.customer.email,
-          } : null,
-          confirmed: false, // Por defecto, no está confirmado
+          ...orderPayload,
+          confirmed: false, 
         });
 
+        // Actualizamos las métricas diarias
         if (dailyMetricDoc.exists()) {
-          // Si existe el doc de métricas, incrementa el total de pedidos
+          const currentTotal = dailyMetricDoc.data().totalOrders || 0;
           transaction.update(dailyMetricDocRef, {
-            totalOrders: dailyMetricDoc.data().totalOrders + 1,
+            totalOrders: currentTotal + 1,
           });
         } else {
-          // Si no existe, crea el documento de métricas
           transaction.set(dailyMetricDocRef, {
             date: dailyMetricId,
             totalOrders: 1,
             confirmedOrders: 0,
-            confirmationRate: 0,
           });
         }
       } else {
-        // Si el pedido ya existe (creado por webhook de sheets), solo lo actualizamos
-        // No incrementamos 'totalOrders' porque ya lo hizo 'updateConfirmedOrders'
-        transaction.update(orderDocRef, {
-          id: order.id,
-          orderNumber: order.name,
-          totalPrice: order.total_price,
-           customer: order.customer ? {
-            id: order.customer.id,
-            firstName: order.customer.first_name,
-            lastName: order.customer.last_name,
-            email: order.customer.email,
-          } : null,
-        });
+        // --- El pedido SÍ existe ---
+        // Esto significa que probablemente fue creado por el webhook de Sheets.
+        // Lo actualizamos con la información completa de Shopify.
+        // No tocamos el campo 'confirmed' ya que Sheets es la fuente de verdad para eso.
+        transaction.update(orderDocRef, orderPayload);
+
+        // MUY IMPORTANTE: Nos aseguramos de que totalOrders se incremente
+        // si el pedido fue creado por Sheets (que ya no lo hace).
+        if (dailyMetricDoc.exists()) {
+            // Solo incrementamos si el pedido que existía no había sido contado.
+            // Una forma de inferirlo es si fue creado por sheets, el campo `createdAt` estaría ausente.
+            const existingData = orderDoc.data();
+            if (!existingData.createdAt) {
+                 const currentTotal = dailyMetricDoc.data().totalOrders || 0;
+                 transaction.update(dailyMetricDocRef, {
+                    totalOrders: currentTotal + 1,
+                 });
+            }
+        } else {
+            // Si el documento de métricas no existe, lo creamos.
+             transaction.set(dailyMetricDocRef, {
+                date: dailyMetricId,
+                totalOrders: 1,
+                // El pedido existente podría estar confirmado, así que leemos su estado.
+                confirmedOrders: orderDoc.data().confirmed ? 1 : 0,
+            });
+        }
       }
     });
-    console.log(`[Firestore] Pedido ${order.name} procesado exitosamente.`);
+    console.log(`[Firestore] Pedido ${order.name} procesado exitosamente por Shopify Flow.`);
   } catch (error) {
     console.error(`Error procesando el pedido ${order.name} en Firestore:`, error);
   }
@@ -101,90 +118,89 @@ export async function processNewShopifyOrder(order: Order) {
 
 /**
  * Actualiza una lista de pedidos como confirmados.
+ * Esta función es la ÚNICA responsable de incrementar `confirmedOrders`.
  */
 export async function updateConfirmedOrders(
-  confirmedOrderNumbers: string[]
+  confirmedOrderNumbers: { [key: string]: string }[]
 ): Promise<{ status: string; message: string }> {
+
   if (!confirmedOrderNumbers || confirmedOrderNumbers.length === 0) {
     return { status: 'success', message: 'No hay pedidos para confirmar.' };
   }
 
-  const ordersCollection = collection(db, 'orders');
+  const batch = writeBatch(db);
+  const metricsToUpdate: { [key: string]: number } = {};
 
   try {
-    let processedCount = 0;
-    await runTransaction(db, async (transaction) => {
-      for (const orderNumber of confirmedOrderNumbers) {
-        // Asumimos que `orderNumber` viene sin '#', pero la lógica debería ser robusta
-        const cleanOrderNumber = `#${orderNumber.replace('#', '')}`;
-        const orderDocRef = doc(ordersCollection, cleanOrderNumber);
-        
-        const orderDoc = await transaction.get(orderDocRef);
-        const orderData = orderDoc.data();
-        
-        const now = new Date();
-        const dailyMetricId = getDailyMetricDocId(now);
-        const dailyMetricDocRef = doc(db, 'daily_metrics', dailyMetricId);
-        const dailyMetricDoc = await transaction.get(dailyMetricDocRef);
-        
-        if (!orderDoc.exists()) {
-          // Si el pedido no existe, lo crea
-          transaction.set(orderDocRef, {
-            id: cleanOrderNumber, // Usamos el número de pedido como ID temporal
-            orderNumber: cleanOrderNumber,
-            createdAt: now.toISOString(),
-            confirmed: true,
-            source: 'sheets', // Marcamos que fue creado desde sheets
-          });
+    for (const item of confirmedOrderNumbers) {
+      const orderId = String(item.PEDIDO).replace('#', '').trim();
+      if (!orderId) continue;
+      
+      const orderDocRef = doc(db, 'orders', orderId);
+      const orderDoc = await getDoc(orderDocRef);
 
-          // Actualiza las métricas
-           if (dailyMetricDoc.exists()) {
-            const currentConfirmed = dailyMetricDoc.data().confirmedOrders || 0;
-            const currentTotal = dailyMetricDoc.data().totalOrders || 0;
-            transaction.update(dailyMetricDocRef, {
-                totalOrders: currentTotal + 1,
-                confirmedOrders: currentConfirmed + 1,
-            });
-          } else {
-            transaction.set(dailyMetricDocRef, {
-                date: dailyMetricId,
-                totalOrders: 1,
-                confirmedOrders: 1,
-                confirmationRate: 100
-            });
-          }
-        } else if (!orderData?.confirmed) {
-            // Si el pedido existe y no está confirmado, lo confirma
-            transaction.update(orderDocRef, { confirmed: true });
+      const confirmationDate = new Date();
+      const dailyMetricId = getDailyMetricDocId(confirmationDate);
+      
+      if (!orderDoc.exists()) {
+        // El pedido no existe, lo creamos como confirmado, pero SIN afectar las métricas.
+        // Shopify flow se encargará de `totalOrders`.
+        batch.set(orderDocRef, {
+          id: orderId,
+          orderNumber: `#${orderId}`,
+          confirmed: true,
+          source: 'sheets', // Marcamos que fue creado desde sheets
+        });
 
-            if (dailyMetricDoc.exists()) {
-                const currentConfirmed = dailyMetricDoc.data().confirmedOrders || 0;
-                 transaction.update(dailyMetricDocRef, {
-                    confirmedOrders: currentConfirmed + 1,
-                });
-            } else {
-                 transaction.set(dailyMetricDocRef, {
-                    date: dailyMetricId,
-                    totalOrders: 1, // Asumimos que si hay confirmados debe haber totales
-                    confirmedOrders: 1,
-                    confirmationRate: 0 // Se calculará en el cliente
-                });
-            }
-        }
-        processedCount++;
+        // Preparamos la actualización de la métrica de confirmación
+        metricsToUpdate[dailyMetricId] = (metricsToUpdate[dailyMetricId] || 0) + 1;
+
+      } else if (!orderDoc.data().confirmed) {
+        // El pedido existe y no estaba confirmado, lo actualizamos.
+        batch.update(orderDocRef, { confirmed: true });
+
+        // Preparamos la actualización de la métrica de confirmación
+        metricsToUpdate[dailyMetricId] = (metricsToUpdate[dailyMetricId] || 0) + 1;
       }
-    });
+    }
 
-    console.log(`[Firestore] ${processedCount} pedidos confirmados procesados.`);
+    // Aplicamos las actualizaciones de métricas en un bucle separado
+    for (const [dateId, increment] of Object.entries(metricsToUpdate)) {
+        if (increment === 0) continue;
+
+        const dailyMetricDocRef = doc(db, 'daily_metrics', dateId);
+        const metricDoc = await getDoc(dailyMetricDocRef);
+
+        if (metricDoc.exists()) {
+            const currentConfirmed = metricDoc.data().confirmedOrders || 0;
+            batch.update(dailyMetricDocRef, {
+                confirmedOrders: currentConfirmed + increment,
+            });
+        } else {
+            // Si no existe, lo creamos. totalOrders será 0 y se llenará con el flow de shopify
+             batch.set(dailyMetricDocRef, {
+                date: dateId,
+                totalOrders: 0,
+                confirmedOrders: increment,
+            });
+        }
+    }
+    
+    await batch.commit();
+
+    const processedCount = confirmedOrderNumbers.length;
+    console.log(`[Firestore] ${processedCount} pedidos de Sheets procesados para confirmación.`);
     return {
       status: 'success',
       message: `${processedCount} pedidos confirmados fueron procesados.`,
     };
+
   } catch (error) {
     console.error('Error al actualizar los pedidos confirmados:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido.';
     return {
       status: 'error',
-      message: 'Error interno al actualizar los pedidos en Firestore.',
+      message: `Error interno al actualizar los pedidos en Firestore: ${errorMessage}`,
     };
   }
 }

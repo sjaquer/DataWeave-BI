@@ -188,7 +188,7 @@ export default function Dashboard() {
                           <div className="flex items-center gap-2">
                             <Progress value={metric.confirmationRate} className="h-2" />
                             <span className="text-right font-medium text-sm w-16">
-                              {metric.confirmationRate.toFixed(2)}%
+                               {isNaN(metric.confirmationRate) ? '0.00%' : `${metric.confirmationRate.toFixed(2)}%`}
                             </span>
                           </div>
                         </TableCell>

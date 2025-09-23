@@ -19,10 +19,19 @@ export async function POST(request: Request) {
       
       if (recordCount > 0) {
         console.log('[Webhook Google Sheets] Muestra de datos:', JSON.stringify(body.logisticsData[0]));
+        
         // Extraer solo los números de pedido de la columna "PEDIDO"
         const orderNumbers = body.logisticsData
-          .map((record: any) => record['PEDIDO']?.match(/\d+/g)?.join(''))
-          .filter(Boolean); // Filtra nulos o vacíos
+          .map((record: any) => {
+            const orderValue = record['PEDIDO'];
+            if (orderValue === null || orderValue === undefined) {
+              return null;
+            }
+            // ¡CORRECCIÓN! Convertir explícitamente a string antes de usar .match()
+            const orderString = String(orderValue);
+            return orderString.match(/\d+/g)?.join('');
+          })
+          .filter(Boolean); // Filtra nulos, undefined o vacíos
 
         if (orderNumbers.length > 0) {
            await updateConfirmedOrders(orderNumbers);

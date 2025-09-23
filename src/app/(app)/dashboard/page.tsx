@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Loader, UploadCloud, TrendingUp, CheckCircle, Percent } from "lucide-react";
+import { useState, useMemo } from "react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import { Loader, UploadCloud, TrendingUp, CheckCircle, Percent, Calendar as CalendarIcon, Filter } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,6 +12,11 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { analyzeMetrics } from "@/ai/flows/analyzeMetricsFlow";
 import type { DailyMetric } from "@/ai/schemas/analyzeMetricsSchema";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+
 
 const ITEMS_PER_PAGE = 50;
 
@@ -19,6 +27,11 @@ export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState<DailyMetric[]>([]);
   const { toast } = useToast();
   const [visibleItems, setVisibleItems] = useState(ITEMS_PER_PAGE);
+
+  // State for filters
+  const [sortOrder, setSortOrder] = useState("date-desc");
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, fileType: 'shopify' | 'sheets') => {
     if (e.target.files && e.target.files.length > 0) {
@@ -51,6 +64,8 @@ export default function Dashboard() {
     setIsLoading(true);
     setDashboardData([]);
     setVisibleItems(ITEMS_PER_PAGE); // Reset pagination on new analysis
+    setSelectedDate(undefined); // Reset date filter
+    setSortOrder("date-desc"); // Reset sort order
     try {
       const shopifyDataUri = await toBase64(shopifyFile);
       const sheetsDataUri = await toBase64(sheetsFile);
@@ -86,6 +101,39 @@ export default function Dashboard() {
   const handleShowMore = () => {
     setVisibleItems((prev) => prev + ITEMS_PER_PAGE);
   };
+  
+  const filteredAndSortedData = useMemo(() => {
+    let filtered = [...dashboardData];
+
+    // Filter by date
+    if (selectedDate) {
+      const formattedDate = format(selectedDate, "dd-MM-yyyy");
+      filtered = filtered.filter(item => item.date === formattedDate);
+    }
+
+    // Sort data
+    switch (sortOrder) {
+      case 'rate-desc':
+        filtered.sort((a, b) => b.confirmationRate - a.confirmationRate);
+        break;
+      case 'rate-asc':
+        filtered.sort((a, b) => a.confirmationRate - b.confirmationRate);
+        break;
+      case 'total-desc':
+        filtered.sort((a, b) => b.totalOrders - a.totalOrders);
+        break;
+      case 'confirmed-desc':
+        filtered.sort((a, b) => b.confirmedOrders - a.confirmedOrders);
+        break;
+      case 'date-desc':
+      default:
+        // Already sorted by date descending from backend
+        break;
+    }
+    
+    return filtered;
+  }, [dashboardData, sortOrder, selectedDate]);
+
 
   const totalOrders = dashboardData.reduce((acc, item) => acc + item.totalOrders, 0);
   const totalConfirmedOrders = dashboardData.reduce((acc, item) => acc + item.confirmedOrders, 0);
@@ -198,10 +246,53 @@ export default function Dashboard() {
           
           <Card>
             <CardHeader>
-              <CardTitle>Análisis Detallado por Día</CardTitle>
-              <CardDescription>
-                Métricas de conversión diarias ordenadas por fecha.
-              </CardDescription>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <CardTitle>Análisis Detallado por Día</CardTitle>
+                    <CardDescription>
+                      Métricas de conversión diarias. Usa los filtros para explorar los datos.
+                    </CardDescription>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full sm:w-[240px] justify-start text-left font-normal",
+                              !selectedDate && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {selectedDate ? format(selectedDate, "PPP", { locale: es }) : <span>Filtrar por fecha...</span>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={selectedDate}
+                            onSelect={setSelectedDate}
+                            initialFocus
+                            locale={es}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <Select value={sortOrder} onValueChange={setSortOrder}>
+                        <SelectTrigger className="w-full sm:w-[220px]">
+                          <Filter className="mr-2 h-4 w-4" />
+                          <SelectValue placeholder="Ordenar por..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="date-desc">Más Recientes</SelectItem>
+                          <SelectItem value="rate-desc">Mayor Tasa de Confirmación</SelectItem>
+                          <SelectItem value="rate-asc">Menor Tasa de Confirmación</SelectItem>
+                          <SelectItem value="total-desc">Más Pedidos Totales</SelectItem>
+                          <SelectItem value="confirmed-desc">Más Pedidos Confirmados</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {selectedDate && <Button variant="ghost" onClick={() => setSelectedDate(undefined)}>Limpiar</Button>}
+                  </div>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -214,7 +305,7 @@ export default function Dashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {dashboardData.slice(0, visibleItems).map((metric) => (
+                  {filteredAndSortedData.slice(0, visibleItems).map((metric) => (
                     <TableRow key={metric.date}>
                       <TableCell className="font-medium">{metric.date}</TableCell>
                       <TableCell className="text-right">{metric.totalOrders}</TableCell>
@@ -229,9 +320,16 @@ export default function Dashboard() {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {filteredAndSortedData.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="h-24 text-center">
+                        No se encontraron resultados para los filtros aplicados.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
-              {visibleItems < dashboardData.length && (
+              {visibleItems < filteredAndSortedData.length && (
                 <div className="flex justify-center mt-4">
                   <Button onClick={handleShowMore}>
                     Ver más

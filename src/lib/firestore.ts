@@ -9,6 +9,7 @@ import {
   query,
   where,
   getDocs,
+  Timestamp
 } from 'firebase/firestore';
 
 // Definición local del tipo Order para que coincida con la respuesta de la API de Shopify
@@ -33,31 +34,36 @@ function getDailyMetricDocId(date: Date): string {
  */
 export async function processShopifyOrders(orders: Order[]) {
   // Mapa para agrupar los números de pedido por día.
-  const dailyOrderNumbers: { [key: string]: string[] } = {};
+  const dailyOrderNumbers: { [key: string]: { numbers: string[], date: Date } } = {};
 
   // 1. Agrupar los números de pedido (`name`) por su fecha de creación
   for (const order of orders) {
     const orderDate = new Date(order.created_at);
     const dailyMetricId = getDailyMetricDocId(orderDate);
     if (!dailyOrderNumbers[dailyMetricId]) {
-      dailyOrderNumbers[dailyMetricId] = [];
+      dailyOrderNumbers[dailyMetricId] = { numbers: [], date: orderDate };
     }
     // Guardamos el `name` del pedido (ej: "#1001")
-    dailyOrderNumbers[dailyMetricId].push(order.name);
+    dailyOrderNumbers[dailyMetricId].numbers.push(order.name);
   }
 
   // 2. Actualizar Firestore en un batch
   const batch = writeBatch(db);
-  for (const [dateId, orderNumbers] of Object.entries(dailyOrderNumbers)) {
+  for (const [dateId, data] of Object.entries(dailyOrderNumbers)) {
     const dailyMetricDocRef = doc(db, 'daily_metrics', dateId);
+    
+    // Convertir la fecha a un Timestamp de Firestore para poder ordenar/filtrar por rango
+    const firestoreTimestamp = Timestamp.fromDate(data.date);
+
     // Usamos `set` con `merge: true` para crear o actualizar el documento.
     // Esto establece `totalOrders` y la lista de `orderNumbers` sin afectar a `confirmedOrders`.
     batch.set(
       dailyMetricDocRef,
       {
         date: dateId,
-        totalOrders: orderNumbers.length,
-        orderNumbers: orderNumbers, // Guardamos la lista de identificadores de pedido
+        createdAt: firestoreTimestamp, // Guardamos un timestamp real
+        totalOrders: data.numbers.length,
+        orderNumbers: data.numbers, // Guardamos la lista de identificadores de pedido
       },
       { merge: true }
     );
@@ -82,7 +88,6 @@ export async function updateConfirmedOrders(
     return { status: 'success', message: 'No hay pedidos para confirmar.' };
   }
 
-  // Filtra y limpia los números de pedido recibidos de la hoja de cálculo
   const validOrderNames = confirmedOrderNumbers
     .map(item => String(item.PEDIDO || '').trim())
     .filter(name => name.startsWith('#'));
@@ -91,28 +96,34 @@ export async function updateConfirmedOrders(
     return { status: 'success', message: 'No se encontraron números de pedido válidos para procesar (deben empezar con #).' };
   }
   
-  // Mapa para contar cuántos pedidos se confirmaron por fecha original.
   const confirmationsByDate: { [key: string]: number } = {};
 
-  // Busca en la colección 'daily_metrics' los documentos que contienen los números de pedido
   const metricsRef = collection(db, 'daily_metrics');
-  const q = query(metricsRef, where('orderNumbers', 'array-contains-any', validOrderNames));
+  
+  // Optimización: crear fecha límite de hace 90 días
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const ninetyDaysAgoTimestamp = Timestamp.fromDate(ninetyDaysAgo);
+
+  // 1. Buscar primero en los pedidos de los últimos 90 días (más probable)
+  const recentQuery = query(metricsRef, where('createdAt', '>=', ninetyDaysAgoTimestamp), where('orderNumbers', 'array-contains-any', validOrderNames));
+  const oldQuery = query(metricsRef, where('createdAt', '<', ninetyDaysAgoTimestamp), where('orderNumbers', 'array-contains-any', validOrderNames));
   
   try {
-    const querySnapshot = await getDocs(q);
+    const [recentSnapshot, oldSnapshot] = await Promise.all([getDocs(recentQuery), getDocs(oldQuery)]);
+    const allSnapshots = [...recentSnapshot.docs, ...oldSnapshot.docs];
 
-    // Itera sobre los pedidos confirmados válidos
     for (const orderName of validOrderNames) {
       let found = false;
-      // Busca en los resultados de la consulta el día al que pertenece este pedido
-      querySnapshot.forEach((doc) => {
+      for (const doc of allSnapshots) {
         const data = doc.data();
         if (data.orderNumbers && data.orderNumbers.includes(orderName)) {
-          const dateId = data.date; // Esta es la fecha de creación original
+          const dateId = data.date;
           confirmationsByDate[dateId] = (confirmationsByDate[dateId] || 0) + 1;
           found = true;
+          break; 
         }
-      });
+      }
       if (!found) {
         console.warn(`[Firestore] No se encontró el pedido ${orderName} en 'daily_metrics'. No se pudo asignar fecha de confirmación.`);
       }
@@ -122,7 +133,6 @@ export async function updateConfirmedOrders(
         return { status: 'success', message: 'Los pedidos confirmados no coincidieron con ningún pedido existente en la base de datos.' };
     }
 
-    // Usamos una transacción para actualizar los contadores de forma segura
     await runTransaction(db, async (transaction) => {
       for (const [dateId, increment] of Object.entries(confirmationsByDate)) {
         if (increment === 0) continue;
@@ -136,10 +146,8 @@ export async function updateConfirmedOrders(
             confirmedOrders: currentConfirmed + increment,
           });
         } else {
-          // Este caso es improbable si la lógica de Shopify se ejecuta primero, pero es un buen respaldo.
           transaction.set(dailyMetricDocRef, {
             date: dateId,
-            totalOrders: 0,
             confirmedOrders: increment,
           }, { merge: true });
         }

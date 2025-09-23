@@ -46,26 +46,43 @@ const fetchAndProcessShopifyOrdersFlow = ai.defineFlow(
       };
     }
     
-    // Solicitamos el máximo de pedidos permitidos por página (250)
-    const shopifyApiUrl = `https://${storeName}/admin/api/2024-04/orders.json?status=any&limit=250`;
+    let allOrders: Order[] = [];
+    let pageUrl = `https://${storeName}/admin/api/2024-04/orders.json?status=any&limit=250`;
 
     try {
-      const response = await fetch(shopifyApiUrl, {
-        method: 'GET',
-        headers: {
-          'X-Shopify-Access-Token': accessToken,
-          'Content-Type': 'application/json',
-        },
-      });
+      while (pageUrl) {
+        const response = await fetch(pageUrl, {
+          method: 'GET',
+          headers: {
+            'X-Shopify-Access-Token': accessToken,
+            'Content-Type': 'application/json',
+          },
+        });
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        throw new Error(`Error al obtener pedidos de Shopify: ${response.status} ${response.statusText} - ${errorBody}`);
+        if (!response.ok) {
+          const errorBody = await response.text();
+          throw new Error(`Error al obtener pedidos de Shopify: ${response.status} ${response.statusText} - ${errorBody}`);
+        }
+
+        const { orders } = await response.json() as { orders: Order[] };
+        allOrders = allOrders.concat(orders);
+
+        // Lógica de paginación
+        const linkHeader = response.headers.get('Link');
+        pageUrl = ''; // Reset
+        if (linkHeader) {
+          const links = linkHeader.split(',');
+          const nextLink = links.find(link => link.includes('rel="next"'));
+          if (nextLink) {
+            const match = nextLink.match(/<(.*?)>/);
+            if (match) {
+              pageUrl = match[1];
+            }
+          }
+        }
       }
 
-      const { orders } = await response.json() as { orders: Order[] };
-
-      if (!orders || orders.length === 0) {
+      if (allOrders.length === 0) {
         return {
           status: 'success',
           message: 'No se encontraron pedidos nuevos para procesar.',
@@ -73,13 +90,13 @@ const fetchAndProcessShopifyOrdersFlow = ai.defineFlow(
         };
       }
       
-      console.log(`[Shopify Flow] Se encontraron ${orders.length} pedidos. Procesando...`);
-      await processShopifyOrders(orders);
+      console.log(`[Shopify Flow] Se encontraron ${allOrders.length} pedidos en total. Procesando...`);
+      await processShopifyOrders(allOrders);
 
       return {
         status: 'success',
-        message: `Se procesaron exitosamente las métricas para ${orders.length} pedidos.`,
-        ordersProcessed: orders.length,
+        message: `Se procesaron exitosamente las métricas para ${allOrders.length} pedidos.`,
+        ordersProcessed: allOrders.length,
       };
 
     } catch (error) {

@@ -1,125 +1,198 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
-import { Loader, TrendingUp, CheckCircle, Percent, Calendar as CalendarIcon, Filter, AlertCircle } from "lucide-react";
-import { onSnapshot, collection, query, orderBy, getDocs } from "firebase/firestore";
+import { useState } from "react";
+import { useForm, FormProvider } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, FileUp, BarChart, Download } from "lucide-react";
 
-import { db } from "@/lib/firebase"; // Import db from firebase config
-import type { DailyMetric } from "@/ai/schemas/analyzeMetricsSchema";
+import { analyzeMetrics } from "@/ai/flows/analyzeMetricsFlow";
+import { fetchAndProcessShopifyOrders } from "@/ai/flows/fetchShopifyOrdersFlow";
+import type { DailyMetric, AnalyzeMetricsOutput } from "@/ai/schemas/analyzeMetricsSchema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
+const formSchema = z.object({
+  shopifyFile: z
+    .any()
+    .refine((files) => files?.length === 1, "El reporte de Shopify es requerido."),
+  sheetsFile: z
+    .any()
+    .refine((files) => files?.length === 1, "El reporte de logística es requerido."),
+});
 
-const ITEMS_PER_PAGE = 50;
+const fileToDataUri = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
 
 export default function Dashboard() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [dashboardData, setDashboardData] = useState<DailyMetric[]>([]);
-  const [visibleItems, setVisibleItems] = useState(ITEMS_PER_PAGE);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<AnalyzeMetricsOutput | null>(null);
+  const { toast } = useToast();
 
-  const [sortOrder, setSortOrder] = useState("date-desc");
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+  });
 
-  useEffect(() => {
-    const dailyMetricsCollection = collection(db, "daily_metrics");
-    const q = query(dailyMetricsCollection, orderBy("date", "desc"));
+  const onAnalyzeSubmit = async (values: z.infer<typeof formSchema>) => {
+    setIsAnalyzing(true);
+    setAnalysisResult(null);
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const data: DailyMetric[] = [];
-      querySnapshot.forEach((doc) => {
-        const docData = doc.data();
-        const confirmationRate = docData.totalOrders > 0
-          ? parseFloat(((docData.confirmedOrders / docData.totalOrders) * 100).toFixed(2))
-          : 0;
+    try {
+      const shopifyDataUri = await fileToDataUri(values.shopifyFile[0]);
+      const sheetsDataUri = await fileToDataUri(values.sheetsFile[0]);
 
-        data.push({
-          date: doc.id, // El ID del documento es la fecha 'DD-MM-YYYY'
-          totalOrders: docData.totalOrders,
-          confirmedOrders: docData.confirmedOrders,
-          confirmationRate: confirmationRate
-        });
+      const result = await analyzeMetrics({
+        shopifyDataUri,
+        sheetsDataUri,
       });
-      setDashboardData(data);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("Error al obtener datos de Firestore:", error);
-      setIsLoading(false);
-    });
 
-    // Limpiar el listener cuando el componente se desmonte
-    return () => unsubscribe();
-  }, []);
+      if (result.status === 'error') {
+        throw new Error(result.message);
+      }
+      
+      setAnalysisResult(result);
 
-  const handleShowMore = () => {
-    setVisibleItems((prev) => prev + ITEMS_PER_PAGE);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
+      toast({
+        variant: "destructive",
+        title: "Error en el Análisis",
+        description: errorMessage,
+      });
+      console.error("Error processing files:", error);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
+
+  const handleSyncShopify = async () => {
+    setIsSyncing(true);
+    try {
+      const result = await fetchAndProcessShopifyOrders();
+      if (result.status === 'success') {
+        toast({
+          title: "Sincronización Exitosa",
+          description: result.message,
+        });
+        // Aquí podrías recargar los datos del dashboard si fuera necesario
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+       const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido durante la sincronización.";
+       toast({
+        variant: "destructive",
+        title: "Error de Sincronización",
+        description: errorMessage,
+      });
+      console.error("Error syncing Shopify orders:", error);
+    } finally {
+      setIsSyncing(false);
+    }
+  }
   
-  const filteredAndSortedData = useMemo(() => {
-    let filtered = [...dashboardData];
-
-    if (selectedDate) {
-      const formattedDate = format(selectedDate, "dd-MM-yyyy");
-      filtered = filtered.filter(item => item.date === formattedDate);
-    }
-
-    switch (sortOrder) {
-      case 'rate-desc':
-        filtered.sort((a, b) => b.confirmationRate - a.confirmationRate);
-        break;
-      case 'rate-asc':
-        filtered.sort((a, b) => a.confirmationRate - b.confirmationRate);
-        break;
-      case 'total-desc':
-        filtered.sort((a, b) => b.totalOrders - a.totalOrders);
-        break;
-      case 'confirmed-desc':
-        filtered.sort((a, b) => b.confirmedOrders - a.confirmedOrders);
-        break;
-      case 'date-desc':
-      default:
-        // Los datos ya vienen ordenados por fecha descendente desde Firestore
-        break;
-    }
-    
-    return filtered;
-  }, [dashboardData, sortOrder, selectedDate]);
-
-
-  const totalOrders = useMemo(() => dashboardData.reduce((acc, item) => acc + item.totalOrders, 0), [dashboardData]);
-  const totalConfirmedOrders = useMemo(() => dashboardData.reduce((acc, item) => acc + item.confirmedOrders, 0), [dashboardData]);
+  const totalOrders = analysisResult?.dashboardData.reduce((acc, item) => acc + item.totalOrders, 0) ?? 0;
+  const totalConfirmedOrders = analysisResult?.dashboardData.reduce((acc, item) => acc + item.confirmedOrders, 0) ?? 0;
   const overallConfirmationRate = totalOrders > 0 ? (totalConfirmedOrders / totalOrders) * 100 : 0;
+
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard de Tasa de Convertibilidad (En Tiempo Real)</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Dashboard de Tasa de Convertibilidad</h2>
       </div>
 
        <Alert>
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Datos en Tiempo Real</AlertTitle>
+          <AlertTitle>Análisis Bajo Demanda y Sincronización</AlertTitle>
           <AlertDescription>
-            Este dashboard se actualiza automáticamente. Los datos de pedidos de Shopify y confirmaciones de logística llegan a través de webhooks.
+            Usa el botón para sincronizar los pedidos de Shopify. Luego, sube los reportes CSV para un análisis completo.
           </AlertDescription>
         </Alert>
-      
-      {isLoading && (
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-1">
+           <CardHeader>
+            <CardTitle>Sincronización de Datos</CardTitle>
+            <CardDescription>Obtén los últimos pedidos directamente desde Shopify.</CardDescription>
+          </CardHeader>
+          <CardContent>
+              <Button onClick={handleSyncShopify} disabled={isSyncing} className="w-full">
+                {isSyncing ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                Sincronizar Pedidos de Shopify
+              </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Cargar Archivos para Análisis</CardTitle>
+            <CardDescription>Selecciona los reportes en formato CSV para comenzar el análisis.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FormProvider {...form}>
+              <form onSubmit={form.handleSubmit(onAnalyzeSubmit)} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="shopifyFile"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Reporte de Pedidos de Shopify (.csv)</FormLabel>
+                        <FormControl>
+                          <Input type="file" accept=".csv" {...form.register("shopifyFile")} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="sheetsFile"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Reporte de Logística (.csv)</FormLabel>
+                        <FormControl>
+                          <Input type="file" accept=".csv" {...form.register("sheetsFile")} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <Button type="submit" disabled={isAnalyzing} className="w-full md:w-auto">
+                  {isAnalyzing ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <BarChart className="mr-2 h-4 w-4" />}
+                  Analizar Datos
+                </Button>
+              </form>
+            </FormProvider>
+          </CardContent>
+        </Card>
+      </div>
+
+      {(isAnalyzing || isSyncing) && (
           <div className="flex justify-center items-center p-8">
               <Loader className="h-8 w-8 animate-spin text-primary" />
-              <p className="ml-4 text-muted-foreground">Cargando datos en tiempo real...</p>
+              <p className="ml-4 text-muted-foreground">
+                {isSyncing ? 'Sincronizando pedidos de Shopify...' : 'Procesando archivos y analizando métricas...'}
+              </p>
           </div>
       )}
 
-      {!isLoading && dashboardData.length > 0 && (
+      {analysisResult && analysisResult.status === 'success' && (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
             <Card>
@@ -129,7 +202,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalOrders.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">Total de pedidos recibidos</p>
+                <p className="text-xs text-muted-foreground">Total de pedidos recibidos en el reporte</p>
               </CardContent>
             </Card>
             <Card>
@@ -139,7 +212,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalConfirmedOrders.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">Total de pedidos confirmados</p>
+                <p className="text-xs text-muted-foreground">Total de pedidos confirmados en logística</p>
               </CardContent>
             </Card>
             <Card>
@@ -156,53 +229,10 @@ export default function Dashboard() {
           
           <Card>
             <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div>
-                    <CardTitle>Análisis Detallado por Día</CardTitle>
-                    <CardDescription>
-                      Métricas de conversión diarias. Usa los filtros para explorar los datos.
-                    </CardDescription>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full sm:w-[240px] justify-start text-left font-normal",
-                              !selectedDate && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {selectedDate ? format(selectedDate, "PPP", { locale: es }) : <span>Filtrar por fecha...</span>}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={selectedDate}
-                            onSelect={setSelectedDate}
-                            initialFocus
-                            locale={es}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      <Select value={sortOrder} onValueChange={setSortOrder}>
-                        <SelectTrigger className="w-full sm:w-[220px]">
-                          <Filter className="mr-2 h-4 w-4" />
-                          <SelectValue placeholder="Ordenar por..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="date-desc">Más Recientes</SelectItem>
-                          <SelectItem value="rate-desc">Mayor Tasa de Confirmación</SelectItem>
-                          <SelectItem value="rate-asc">Menor Tasa de Confirmación</SelectItem>
-                          <SelectItem value="total-desc">Más Pedidos Totales</SelectItem>
-                          <SelectItem value="confirmed-desc">Más Pedidos Confirmados</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {selectedDate && <Button variant="ghost" onClick={() => setSelectedDate(undefined)}>Limpiar</Button>}
-                  </div>
-              </div>
+              <CardTitle>Análisis Detallado por Día</CardTitle>
+              <CardDescription>
+                Métricas de conversión diarias basadas en los archivos cargados.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -215,37 +245,31 @@ export default function Dashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAndSortedData.slice(0, visibleItems).map((metric) => (
-                    <TableRow key={metric.date}>
-                      <TableCell className="font-medium">{metric.date}</TableCell>
-                      <TableCell className="text-right">{metric.totalOrders}</TableCell>
-                      <TableCell className="text-right">{metric.confirmedOrders}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Progress value={metric.confirmationRate} className="h-2" />
-                          <span className="text-right font-medium text-sm w-16">
-                            {metric.confirmationRate.toFixed(2)}%
-                          </span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredAndSortedData.length === 0 && (
+                  {analysisResult.dashboardData.length > 0 ? (
+                    analysisResult.dashboardData.map((metric) => (
+                      <TableRow key={metric.date}>
+                        <TableCell className="font-medium">{metric.date}</TableCell>
+                        <TableCell className="text-right">{metric.totalOrders}</TableCell>
+                        <TableCell className="text-right">{metric.confirmedOrders}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Progress value={metric.confirmationRate} className="h-2" />
+                            <span className="text-right font-medium text-sm w-16">
+                              {metric.confirmationRate.toFixed(2)}%
+                            </span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
                     <TableRow>
                       <TableCell colSpan={4} className="h-24 text-center">
-                        No se encontraron resultados para los filtros aplicados.
+                        No se encontraron datos de métricas para mostrar.
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
-              {visibleItems < filteredAndSortedData.length && (
-                <div className="flex justify-center mt-4">
-                  <Button onClick={handleShowMore}>
-                    Ver más
-                  </Button>
-                </div>
-              )}
             </CardContent>
           </Card>
         </div>
@@ -253,5 +277,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-    

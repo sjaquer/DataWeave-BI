@@ -7,20 +7,13 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { processNewShopifyOrder } from '@/lib/firestore';
+import { processShopifyOrders } from '@/lib/firestore';
 
 // Definición local del tipo Order para que coincida con la respuesta de la API
 interface Order {
   id: number;
   created_at: string;
   name: string;
-  total_price: string;
-  customer: {
-    id: number;
-    email: string;
-    first_name: string;
-    last_name: string;
-  } | null;
 }
 
 const FetchShopifyOrdersOutputSchema = z.object({
@@ -80,13 +73,12 @@ const fetchAndProcessShopifyOrdersFlow = ai.defineFlow(
       }
       
       console.log(`[Shopify Flow] Se encontraron ${orders.length} pedidos. Procesando...`);
-      for (const order of orders) {
-        await processNewShopifyOrder(order);
-      }
+      // Llamamos a la nueva función que procesa el lote completo
+      await processShopifyOrders(orders);
 
       return {
         status: 'success',
-        message: `Se procesaron exitosamente ${orders.length} pedidos.`,
+        message: `Se procesaron exitosamente las métricas para ${orders.length} pedidos.`,
         ordersProcessed: orders.length,
       };
 

@@ -73,7 +73,6 @@ const analyzeMetricsFlow = ai.defineFlow(
         if (!orderNumber) continue;
 
         // Extraer la fecha y formatearla como DD-MM-YYYY
-        // El formato de entrada puede ser "YYYY-MM-DDTHH:mm:ss..." o "DD HH:mm:ss -MM-YYYY"
         let formattedDate: string;
         if (createdAt.includes('T')) {
           // Formato "YYYY-MM-DDTHH:mm:ss..."

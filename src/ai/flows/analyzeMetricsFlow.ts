@@ -36,6 +36,78 @@ function normalizeOrderNumber(orderId: string): string {
   return numericPart ? numericPart.join('') : '';
 }
 
+/**
+ * Parsea una fecha de varios formatos posibles y la devuelve como DD-MM-YYYY.
+ * Formatos soportados:
+ * - YYYY-MM-DDTHH:mm:ss...
+ * - DD/MM/YYYY HH:mm...
+ * - DD/MM/YYYY
+ * - MM/DD/YYYY ...
+ * - YYYY-MM-DD ...
+ * - DD HH:MM:SS -MM-YYYY
+ */
+function formatDate(dateString: string): string | null {
+  if (!dateString) return null;
+
+  // Caso 1: DD HH:MM:SS -MM-YYYY
+  const specialFormatMatch = dateString.match(/^(\d{2})\s\d{2}:\d{2}:\d{2}\s-(\d{2})-(\d{4})$/);
+  if (specialFormatMatch) {
+    const day = specialFormatMatch[1];
+    const month = specialFormatMatch[2];
+    const year = specialFormatMatch[3];
+    return `${day}-${month}-${year}`;
+  }
+
+  // Tomar solo la parte de la fecha antes del espacio o 'T'
+  const datePart = dateString.split(/[\sT]/)[0];
+  const separators = datePart.match(/[\/\-]/g);
+  
+  if (!separators) { // Si no hay separadores, podría ser un formato no esperado
+    return null;
+  }
+  
+  const separator = separators[0];
+  const parts = datePart.split(separator).map(p => parseInt(p, 10));
+
+  let day, month, year;
+
+  if (parts.length === 3) {
+    const [p1, p2, p3] = parts;
+
+    // Asumir YYYY-MM-DD
+    if (p1 > 1000) {
+      year = p1;
+      month = p2;
+      day = p3;
+    } 
+    // Asumir DD-MM-YYYY o MM-DD-YYYY (priorizamos DD-MM si es ambiguo)
+    else if (p3 > 1000) {
+      year = p3;
+      day = p1;
+      month = p2;
+    }
+    // Si no es claro, no se puede procesar con seguridad
+    else {
+      return null;
+    }
+    
+    if (day > 31 || month > 12) { // Intenta cambiar a formato MM/DD/YYYY si el día es > 12
+        if (p1 <= 12 && p2 <=31) {
+            day = p2;
+            month = p1;
+        } else {
+             return null;
+        }
+    }
+
+    const finalDay = String(day).padStart(2, '0');
+    const finalMonth = String(month).padStart(2, '0');
+    return `${finalDay}-${finalMonth}-${year}`;
+  }
+
+  return null;
+}
+
 export async function analyzeMetrics(
   input: AnalyzeMetricsInput
 ): Promise<AnalyzeMetricsOutput> {
@@ -53,14 +125,13 @@ const analyzeMetricsFlow = ai.defineFlow(
       const shopifyRecords = parseCsv(input.shopifyDataUri);
       const logisticsRecords = parseCsv(input.sheetsDataUri);
 
-      const dailyData: Record<string, DailyMetric> = {};
-
       // 1. Crear un Set con todos los números de pedidos confirmados para una búsqueda rápida.
       const confirmedOrderNumbers = new Set(
         logisticsRecords.map((record) => normalizeOrderNumber(record['PEDIDO']))
       );
-      // Eliminar valores vacíos si los hubiera
-      confirmedOrderNumbers.delete('');
+      confirmedOrderNumbers.delete(''); // Eliminar valores vacíos si los hubiera
+
+      const dailyData: Record<string, DailyMetric> = {};
 
       // 2. Procesar archivo de Shopify
       for (const record of shopifyRecords) {
@@ -68,27 +139,12 @@ const analyzeMetricsFlow = ai.defineFlow(
         const createdAt = record['Created at'];
 
         if (!createdAt || !orderNumberWithPrefix) continue;
+        
+        const formattedDate = formatDate(createdAt);
+        if (!formattedDate) continue;
 
         const orderNumber = normalizeOrderNumber(orderNumberWithPrefix);
         if (!orderNumber) continue;
-
-        // Extraer la fecha y formatearla como DD-MM-YYYY
-        let formattedDate: string;
-        if (createdAt.includes('T')) {
-          // Formato "YYYY-MM-DDTHH:mm:ss..."
-          const datePart = createdAt.split('T')[0]; // "YYYY-MM-DD"
-          const [year, month, day] = datePart.split('-');
-          formattedDate = `${day}-${month}-${year}`;
-        } else {
-          // Formato "22 06:45:14 -09-2025"
-          const parts = createdAt.split(' ');
-          const day = parts[0];
-          const monthYear = parts[2].split('-'); // ["", "09", "2025"]
-          const month = monthYear[1];
-          const year = monthYear[2];
-          formattedDate = `${day}-${month}-${year}`;
-        }
-
 
         // Inicializar el objeto para el día si no existe
         if (!dailyData[formattedDate]) {
@@ -120,7 +176,6 @@ const analyzeMetricsFlow = ai.defineFlow(
       });
 
       // Ordenar los datos por fecha para la visualización (más recientes primero)
-      // Se convierte la fecha DD-MM-YYYY a un objeto Date para ordenar correctamente
       dashboardData.sort((a, b) => {
         const [dayA, monthA, yearA] = a.date.split('-').map(Number);
         const [dayB, monthB, yearB] = b.date.split('-').map(Number);
@@ -128,7 +183,6 @@ const analyzeMetricsFlow = ai.defineFlow(
         const dateB = new Date(yearB, monthB - 1, dayB);
         return dateB.getTime() - dateA.getTime();
       });
-
 
       return {
         status: 'success',

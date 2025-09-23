@@ -54,10 +54,13 @@ const analyzeMetricsFlow = ai.defineFlow(
 
       // 2. Procesar archivo de Shopify
       for (const record of shopifyRecords) {
-        const orderNumber = record['Name'];
+        const orderNumberWithPrefix = record['Name'];
         const createdAt = record['Created at'];
 
-        if (!createdAt || !orderNumber) continue;
+        if (!createdAt || !orderNumberWithPrefix) continue;
+        
+        // Eliminar el prefijo '#' para la comparación
+        const orderNumber = orderNumberWithPrefix.replace('#', '');
 
         const date = createdAt.split('T')[0];
 

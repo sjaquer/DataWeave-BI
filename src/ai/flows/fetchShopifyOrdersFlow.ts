@@ -35,7 +35,6 @@ const fetchAndProcessShopifyOrdersFlow = ai.defineFlow(
     outputSchema: FetchShopifyOrdersOutputSchema,
   },
   async () => {
-    // Corregido: Usar las variables de entorno con prefijo NEXT_PUBLIC_
     const storeName = process.env.NEXT_PUBLIC_SHOPIFY_STORE_NAME;
     const accessToken = process.env.NEXT_PUBLIC_SHOPIFY_API_ACCESS_TOKEN;
 
@@ -43,11 +42,12 @@ const fetchAndProcessShopifyOrdersFlow = ai.defineFlow(
       console.error("Credenciales de Shopify no configuradas en .env con el prefijo NEXT_PUBLIC_");
       return {
         status: 'error',
-        message: 'Las credenciales de Shopify (SHOPIFY_STORE_NAME, SHOPIFY_API_ACCESS_TOKEN) no están configuradas.',
+        message: 'Las credenciales de Shopify (NEXT_PUBLIC_SHOPIFY_STORE_NAME, NEXT_PUBLIC_SHOPIFY_API_ACCESS_TOKEN) no están configuradas.',
       };
     }
-
-    const shopifyApiUrl = `https://${storeName}/admin/api/2024-04/orders.json?status=any`;
+    
+    // Solicitamos el máximo de pedidos permitidos por página (250)
+    const shopifyApiUrl = `https://${storeName}/admin/api/2024-04/orders.json?status=any&limit=250`;
 
     try {
       const response = await fetch(shopifyApiUrl, {
@@ -74,7 +74,6 @@ const fetchAndProcessShopifyOrdersFlow = ai.defineFlow(
       }
       
       console.log(`[Shopify Flow] Se encontraron ${orders.length} pedidos. Procesando...`);
-      // Llamamos a la nueva función que procesa el lote completo
       await processShopifyOrders(orders);
 
       return {

@@ -1,8 +1,9 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
 import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, Trash2, TriangleAlert } from "lucide-react";
-import { onSnapshot, collection, query, orderBy } from "firebase/firestore";
+import { onSnapshot, collection, query, orderBy, Timestamp } from "firebase/firestore";
 
 import type { DailyMetric } from "@/ai/schemas/analyzeMetricsSchema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -56,20 +57,28 @@ export default function Dashboard() {
   useEffect(() => {
     setIsLoading(true);
     const metricsCollectionRef = collection(db, "daily_metrics");
-    // Ordenar por fecha de creación en Firestore para obtener los más recientes.
+    // Corregido: Solo ordenar por fecha de creación. El filtro de 6 meses se aplica en el cliente.
     const q = query(metricsCollectionRef, orderBy("createdAt", "desc"));
+
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const sixMonthsAgoTimestamp = Timestamp.fromDate(sixMonthsAgo);
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const fetchedMetrics: DailyMetric[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        const rate = (data.totalOrders > 0) ? (data.confirmedOrders / data.totalOrders) * 100 : 0;
-        fetchedMetrics.push({
-          date: data.date,
-          totalOrders: data.totalOrders || 0,
-          confirmedOrders: data.confirmedOrders || 0,
-          confirmationRate: parseFloat(rate.toFixed(2)),
-        });
+        
+        // Aplicar el filtro de los últimos 6 meses en el cliente.
+        if (data.createdAt >= sixMonthsAgoTimestamp) {
+            const rate = (data.totalOrders > 0) ? (data.confirmedOrders / data.totalOrders) * 100 : 0;
+            fetchedMetrics.push({
+              date: data.date,
+              totalOrders: data.totalOrders || 0,
+              confirmedOrders: data.confirmedOrders || 0,
+              confirmationRate: parseFloat(rate.toFixed(2)),
+            });
+        }
       });
 
       setMetrics(fetchedMetrics);

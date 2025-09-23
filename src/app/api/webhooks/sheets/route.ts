@@ -1,6 +1,10 @@
 // /src/app/api/webhooks/sheets/route.ts
 import { NextResponse } from 'next/server';
 
+// Esta línea es crucial para Vercel.
+// Fuerza a que la función se ejecute dinámicamente en cada petición, evitando el cacheo.
+export const dynamic = 'force-dynamic';
+
 /**
  * Endpoint para recibir actualizaciones de datos desde Google Sheets.
  * El Google Apps Script enviará una petición POST a esta ruta con los datos

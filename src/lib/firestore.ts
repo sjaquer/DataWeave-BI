@@ -235,25 +235,20 @@ export async function analyzeAndStoreMetrics(
         const orderDateStr = r['Created at'] || '';
         const orderDate = orderDateStr ? new Date(orderDateStr) : null;
         if (!orderDate || isNaN(orderDate.getTime()) || orderDate < sixMonthsAgo) {
-          continue; // Ignorar registros sin fecha válida, con fecha inválida o muy antiguos
+          continue; 
         }
 
         const orderId = r.Id || null;
         const orderName = r.Name || '';
         if (!orderId || !orderName) {
-            continue; // Ignorar registros sin un ID o Nombre de pedido
+            continue; 
         }
 
         const orderDocId = getShopifyOrderDocId(orderName, storeId);
         const orderDocRef = doc(db, 'shopify_orders', orderDocId);
-
-        const billingName = r['Billing Name'] || '';
-        const nameParts = billingName ? billingName.split(' ') : [];
-        const firstName = nameParts.length > 0 ? nameParts.shift() : '';
-        const lastName = nameParts.length > 0 ? nameParts.join(' ') : '';
         
         const products = r['Lineitem name'] ? [{ 
-            title: r['Lineitem name'], 
+            title: r['Lineitem name'] || 'N/A', 
             quantity: parseInt(r['Lineitem quantity'] || '0', 10),
             price: parseFloat(r['Lineitem price'] || '0')
         }] : [];
@@ -265,7 +260,7 @@ export async function analyzeAndStoreMetrics(
           orderName: orderName,
           createdAt: Timestamp.fromDate(orderDate),
           totalPrice: parseFloat(r.Total || '0'),
-          customerName: `${firstName} ${lastName}`.trim(),
+          customerName: r['Billing Name'] || 'N/A',
           province: r['Shipping Province Name'] || 'N/A',
           city: r['Shipping City'] || 'N/A',
           zip: r['Shipping Zip'] || 'N/A',

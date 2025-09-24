@@ -1,10 +1,9 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { onSnapshot, collection } from "firebase/firestore";
-import { Loader, CheckCircle, XCircle, Percent, CalendarDays, Upload, MapPin, Package, UserCheck, Banknote } from "lucide-react";
+import { Loader, CheckCircle, XCircle, Percent, CalendarDays, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -13,187 +12,120 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase";
 import { findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
+import { getMetrics } from "@/ai/flows/getMetricsFlow";
+import type { DailyMetric, ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics } from "@/ai/schemas/getMetricsSchema";
 
-// --- Tipos de Datos del Dashboard ---
-interface DailyMetric {
-  date: string;
-  totalOrders: number;
-  confirmed: number;
-  unconfirmed: number;
-  confirmationRate: number;
-}
-
-interface ProvinceMetric {
-  name: string;
-  totalOrders: number;
-  confirmedOrders: number;
-  confirmationRate: number;
-  totalSpent: number;
-}
-
-interface ProductMetric {
-  name: string;
-  totalOrders: number;
-}
-
-interface PersonnelMetric {
-  name: string;
-  confirmedOrders: number;
-}
-
-interface OrderData {
-  isConfirmed: boolean;
-  createdAt: { toDate: () => Date };
-  province?: string;
-  totalPrice?: number;
-  products?: { title: string }[];
-  confirmedBy?: string;
-}
-
+const CACHE_KEY = 'dashboardMetricsCache';
+const CACHE_EXPIRATION_MS = 15 * 60 * 1000; // 15 minutos
 
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   
   // --- Estados de Métricas Agregadas ---
-  const [globalConfirmed, setGlobalConfirmed] = useState(0);
-  const [globalUnconfirmed, setGlobalUnconfirmed] = useState(0);
+  const [miscMetrics, setMiscMetrics] = useState<MiscMetrics | null>(null);
   const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
   const [provinceMetrics, setProvinceMetrics] = useState<ProvinceMetric[]>([]);
   const [productMetrics, setProductMetrics] = useState<ProductMetric[]>([]);
   const [personnelMetrics, setPersonnelMetrics] = useState<PersonnelMetric[]>([]);
   
-  // --- Estado de Caché para Normalización ---
-  const [provinceCorrectionsCache, setProvinceCorrectionsCache] = useState<Record<string, string>>({});
-
   const { toast } = useToast();
 
-  useEffect(() => {
-    setIsLoading(true);
-    const ordersCollectionRef = collection(db, "shopify_orders");
-
-    const unsubscribe = onSnapshot(ordersCollectionRef, async (querySnapshot) => {
-      if (querySnapshot.empty) {
-        setIsLoading(false);
-        setDailyMetrics([]);
-        setProvinceMetrics([]);
-        setProductMetrics([]);
-        setPersonnelMetrics([]);
-        setGlobalConfirmed(0);
-        setGlobalUnconfirmed(0);
-        return;
-      }
-      
-      const orders: OrderData[] = querySnapshot.docs.map(doc => doc.data() as OrderData);
-
+  const processAndSetMetrics = useCallback((data: any) => {
       // --- Normalización Local de Provincias ---
-      const uniqueProvinces = [...new Set(orders.map(order => order.province || 'Desconocida').filter(p => p !== 'Desconocida'))];
-      const newCorrections: Record<string, string> = {};
+      const provinceCorrectionsCache: Record<string, string> = {};
+      const uniqueProvinces = [...new Set(data.provinceMetrics.map((p: ProvinceMetric) => p.name).filter((p: string) => p !== 'Desconocida'))];
       
-      uniqueProvinces.forEach(provinceName => {
+      uniqueProvinces.forEach((provinceName: string) => {
         if (!provinceCorrectionsCache[provinceName]) {
           const bestMatch = findBestProvinceMatch(provinceName, provinceList);
-          newCorrections[provinceName] = bestMatch || provinceName;
-        }
-      });
-
-      // Actualiza la caché si hay nuevas correcciones
-      if (Object.keys(newCorrections).length > 0) {
-        setProvinceCorrectionsCache(prev => ({ ...prev, ...newCorrections }));
-      }
-      
-      const finalProvinceCorrections = { ...provinceCorrectionsCache, ...newCorrections };
-
-      // --- Agregación de Datos ---
-      let totalConfirmed = 0;
-      let totalUnconfirmed = 0;
-      const dailyData: { [key: string]: { confirmed: number; unconfirmed: number } } = {};
-      const provinceData: { [key: string]: { totalOrders: number; confirmedOrders: number; totalSpent: number; } } = {};
-      const productData: { [key: string]: number } = {};
-      const personnelData: { [key: string]: number } = {};
-
-      orders.forEach((order) => {
-        const isOrderConfirmed = order.isConfirmed === true;
-        isOrderConfirmed ? totalConfirmed++ : totalUnconfirmed++;
-        
-        // Daily Metrics
-        if (order.createdAt && typeof order.createdAt.toDate === 'function') {
-          const orderDate = order.createdAt.toDate();
-          const dateStr = `${String(orderDate.getDate()).padStart(2, '0')}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${orderDate.getFullYear()}`;
-          if (!dailyData[dateStr]) dailyData[dateStr] = { confirmed: 0, unconfirmed: 0 };
-          isOrderConfirmed ? dailyData[dateStr].confirmed++ : dailyData[dateStr].unconfirmed++;
-        }
-
-        // Province Metrics
-        const rawProvince = order.province || 'Desconocida';
-        const correctedProvince = finalProvinceCorrections[rawProvince] || rawProvince;
-        if (!provinceData[correctedProvince]) provinceData[correctedProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
-        provinceData[correctedProvince].totalOrders++;
-        provinceData[correctedProvince].totalSpent += order.totalPrice || 0;
-        if (isOrderConfirmed) provinceData[correctedProvince].confirmedOrders++;
-        
-        // Product Metrics (sin normalización de IA)
-        if (order.products && Array.isArray(order.products)) {
-            order.products.forEach((product: { title: string }) => {
-                const rawProduct = product.title || 'Producto Desconocido';
-                 const cleanedProduct = rawProduct.replace(/^[0-9]+\s*x\s+/i, '').trim();
-                productData[cleanedProduct] = (productData[cleanedProduct] || 0) + 1;
-            });
-        }
-        
-        // Personnel Metrics
-        if (isOrderConfirmed && order.confirmedBy) {
-            const person = order.confirmedBy || 'No especificado';
-            personnelData[person] = (personnelData[person] || 0) + 1;
+          provinceCorrectionsCache[provinceName] = bestMatch || provinceName;
         }
       });
       
-      // --- Preparación de Datos para el UI ---
-      const aggregatedDailyMetrics: DailyMetric[] = Object.entries(dailyData).map(([date, data]) => {
-          const dailyTotal = data.confirmed + data.unconfirmed;
-          return { date, totalOrders: dailyTotal, confirmed: data.confirmed, unconfirmed: data.unconfirmed, confirmationRate: dailyTotal > 0 ? (data.confirmed / dailyTotal) * 100 : 0 };
-      }).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
+      // Aplicar correcciones a las métricas de provincia
+      const correctedProvinceMetrics = data.provinceMetrics.map((metric: ProvinceMetric) => ({
+          ...metric,
+          name: provinceCorrectionsCache[metric.name] || metric.name,
+      }));
 
-      const aggregatedProvinceMetrics: ProvinceMetric[] = Object.entries(provinceData).map(([name, data]) => ({
-        name, ...data, confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0
-      })).sort((a, b) => b.totalOrders - a.totalOrders);
+      const aggregatedProvinceMetrics: ProvinceMetric[] = Object.values(
+        correctedProvinceMetrics.reduce((acc: Record<string, ProvinceMetric>, metric: ProvinceMetric) => {
+            if (!acc[metric.name]) {
+                acc[metric.name] = { ...metric, totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
+            }
+            acc[metric.name].totalOrders += metric.totalOrders;
+            acc[metric.name].confirmedOrders += metric.confirmedOrders;
+            acc[metric.name].totalSpent += metric.totalSpent;
+            acc[metric.name].confirmationRate = acc[metric.name].totalOrders > 0 ? (acc[metric.name].confirmedOrders / acc[metric.name].totalOrders) * 100 : 0;
+            return acc;
+        }, {})
+      ).sort((a: ProvinceMetric, b: ProvinceMetric) => b.totalOrders - a.totalOrders);
 
-      const aggregatedProductMetrics: ProductMetric[] = Object.entries(productData).map(([name, totalOrders]) => ({
-          name, totalOrders
-      })).sort((a, b) => b.totalOrders - a.totalOrders);
 
-      const aggregatedPersonnelMetrics: PersonnelMetric[] = Object.entries(personnelData).map(([name, confirmedOrders]) => ({
-          name, confirmedOrders
-      })).sort((a, b) => b.confirmedOrders - a.confirmedOrders);
-
-      // --- Actualización de Estados del UI ---
-      setGlobalConfirmed(totalConfirmed);
-      setGlobalUnconfirmed(totalUnconfirmed);
-      setDailyMetrics(aggregatedDailyMetrics);
+      setMiscMetrics(data.miscMetrics);
+      setDailyMetrics(data.dailyMetrics);
       setProvinceMetrics(aggregatedProvinceMetrics);
-      setProductMetrics(aggregatedProductMetrics);
-      setPersonnelMetrics(aggregatedPersonnelMetrics);
+      setProductMetrics(data.productMetrics);
+      setPersonnelMetrics(data.personnelMetrics);
       setIsLoading(false);
+  }, []);
 
-    }, (error) => {
-      console.error("Error al obtener las métricas desde Firestore:", error);
+
+  const fetchMetrics = useCallback(async (forceRefresh = false) => {
+    setIsLoading(true);
+    
+    // 1. Intentar cargar desde localStorage si no se fuerza la actualización
+    if (!forceRefresh) {
+      try {
+        const cachedData = localStorage.getItem(CACHE_KEY);
+        if (cachedData) {
+          const { data, timestamp } = JSON.parse(cachedData);
+          if (Date.now() - timestamp < CACHE_EXPIRATION_MS) {
+            toast({ title: "Métricas cargadas desde la caché", description: "Mostrando datos guardados localmente." });
+            processAndSetMetrics(data);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("Error al leer la caché:", e);
+        localStorage.removeItem(CACHE_KEY); // Limpiar caché corrupta
+      }
+    }
+
+    // 2. Si no hay caché o se fuerza, obtener de la fuente de datos
+    try {
+      toast({ title: "Actualizando métricas...", description: "Obteniendo los datos más recientes desde la base de datos." });
+      const metricsData = await getMetrics();
+      
+      // 3. Guardar en localStorage
+      try {
+        const cachePayload = { data: metricsData, timestamp: Date.now() };
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
+      } catch (e) {
+         console.error("Error al guardar en la caché:", e);
+         toast({ variant: "destructive", title: "Error de Caché", description: "No se pudieron guardar las métricas localmente." });
+      }
+
+      processAndSetMetrics(metricsData);
+
+    } catch (error) {
+      console.error("Error al obtener las métricas:", error);
       toast({
         variant: "destructive",
         title: "Error de Conexión",
-        description: "No se pudieron cargar las métricas. Revisa tu conexión y las reglas de Firestore.",
+        description: "No se pudieron cargar las métricas. Revisa tu conexión y el estado del servidor.",
       });
       setIsLoading(false);
-    });
+    }
+  }, [toast, processAndSetMetrics]);
 
-    return () => unsubscribe();
-  }, [toast]); // Dependencias originales
 
-  const globalTotal = globalConfirmed + globalUnconfirmed;
-  const globalRate = globalTotal > 0 ? (globalConfirmed / globalTotal) * 100 : 0;
-  const totalSpentAllProvinces = provinceMetrics.reduce((acc, curr) => acc + curr.totalSpent, 0);
-  const averageSpentPerOrder = globalTotal > 0 ? totalSpentAllProvinces / globalTotal : 0;
+  useEffect(() => {
+    fetchMetrics();
+  }, [fetchMetrics]);
+
 
   if (isLoading) {
     return (
@@ -208,16 +140,27 @@ export default function Dashboard() {
     );
   }
 
+  const globalTotal = (miscMetrics?.globalConfirmed ?? 0) + (miscMetrics?.globalUnconfirmed ?? 0);
+  const globalRate = globalTotal > 0 ? ((miscMetrics?.globalConfirmed ?? 0) / globalTotal) * 100 : 0;
+  const totalSpentAllProvinces = provinceMetrics.reduce((acc, curr) => acc + curr.totalSpent, 0);
+  const averageSpentPerOrder = globalTotal > 0 ? totalSpentAllProvinces / globalTotal : 0;
+
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard de Inteligencia de Negocio</h2>
-         <Link href="/dashboard/upload-data" passHref>
-          <Button variant="outline">
-            <Upload className="mr-2 h-4 w-4" />
-            Carga Manual
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => fetchMetrics(true)}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Actualizar Datos
           </Button>
-        </Link>
+          <Link href="/dashboard/upload-data" passHref>
+            <Button variant="outline" size="sm">
+              <Upload className="mr-2 h-4 w-4" />
+              Carga Manual
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -227,7 +170,7 @@ export default function Dashboard() {
               <CheckCircle className="h-5 w-5 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">{globalConfirmed.toLocaleString()}</div>
+              <div className="text-4xl font-bold">{(miscMetrics?.globalConfirmed ?? 0).toLocaleString()}</div>
               <p className="text-xs text-muted-foreground">Total de pedidos marcados como confirmados.</p>
             </CardContent>
           </Card>
@@ -237,7 +180,7 @@ export default function Dashboard() {
               <XCircle className="h-5 w-5 text-red-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">{globalUnconfirmed.toLocaleString()}</div>
+              <div className="text-4xl font-bold">{(miscMetrics?.globalUnconfirmed ?? 0).toLocaleString()}</div>
               <p className="text-xs text-muted-foreground">Total de pedidos pendientes o sin confirmar.</p>
             </CardContent>
           </Card>

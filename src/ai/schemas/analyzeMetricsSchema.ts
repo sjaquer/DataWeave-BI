@@ -10,10 +10,11 @@ import {z} from 'genkit';
 
 export const AnalyzeMetricsInputSchema = z.object({
   storeId: z.string().min(1, "El ID de la tienda es requerido."),
-  shopifyDataUri: z
-    .string()
+  shopifyDataUris: z
+    .array(z.string())
+    .min(1, "Se requiere al menos un archivo de Shopify.")
     .describe(
-      "El reporte de pedidos de Shopify (CSV), como un data URI. Formato: 'data:<mimetype>;base64,<encoded_data>'."
+      "Un array de reportes de pedidos de Shopify (CSV), como data URIs. Formato: 'data:<mimetype>;base64,<encoded_data>'."
     ),
   // Se elimina la opción de subir archivo de Sheets manualmente.
 });

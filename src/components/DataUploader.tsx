@@ -16,7 +16,7 @@ import { AlertCircle } from "lucide-react";
 
 const formSchema = z.object({
   storeId: z.string().min(1, "El ID de la tienda es requerido."),
-  shopifyFile: z.any().refine(files => files?.length > 0, "El archivo de Shopify es requerido."),
+  shopifyFiles: z.any().refine(files => files?.length > 0, "Se requiere al menos un archivo de Shopify."),
 });
 
 const fileToDataUri = (file: File): Promise<string> => {
@@ -42,23 +42,25 @@ export default function DataUploader() {
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsProcessing(true);
     toast({
-      title: "Procesando Archivo de Shopify",
+      title: "Procesando Archivos de Shopify",
       description: "Esto puede tardar unos momentos...",
     });
 
     try {
-      let shopifyDataUri: string | undefined;
-      if (values.shopifyFile && values.shopifyFile.length > 0) {
-        shopifyDataUri = await fileToDataUri(values.shopifyFile[0]);
+      let shopifyDataUris: string[] = [];
+      if (values.shopifyFiles && values.shopifyFiles.length > 0) {
+        shopifyDataUris = await Promise.all(
+          Array.from(values.shopifyFiles as FileList).map(file => fileToDataUri(file))
+        );
       }
 
-      if (!shopifyDataUri) {
-        throw new Error("No se ha seleccionado un archivo de Shopify.");
+      if (shopifyDataUris.length === 0) {
+        throw new Error("No se han seleccionado archivos de Shopify válidos.");
       }
 
       const result = await analyzeMetrics({
         storeId: values.storeId,
-        shopifyDataUri,
+        shopifyDataUris,
       });
 
       if (result.status === "success") {
@@ -78,6 +80,9 @@ export default function DataUploader() {
     } finally {
       setIsProcessing(false);
       form.reset();
+      // Reset the file input manually
+      const fileInput = document.getElementById('shopifyFiles-input') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
     }
   };
 
@@ -115,18 +120,20 @@ export default function DataUploader() {
             />
              <FormField
                 control={form.control}
-                name="shopifyFile"
+                name="shopifyFiles"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Archivo CSV de Shopify</FormLabel>
+                    <FormLabel>Archivos CSV de Shopify</FormLabel>
                     <FormControl>
                         <Input
+                        id="shopifyFiles-input"
                         type="file"
                         accept=".csv"
+                        multiple
                         onChange={(e) => field.onChange(e.target.files)}
                         />
                     </FormControl>
-                    <FormDescription>Reporte de pedidos exportado.</FormDescription>
+                    <FormDescription>Puedes seleccionar múltiples reportes de pedidos exportados.</FormDescription>
                     <FormMessage />
                     </FormItem>
                 )}
@@ -142,7 +149,7 @@ export default function DataUploader() {
           ) : (
             <>
               <Upload className="mr-2 h-4 w-4" />
-              Procesar Archivo
+              Procesar Archivos
             </>
           )}
         </Button>

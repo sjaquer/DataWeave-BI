@@ -32,14 +32,44 @@ export interface ConfirmedOrderInfo {
   COURIER?: string;
 }
 
+export interface Order {
+    id: number | string;
+    name: string;
+    created_at: string;
+    total_price: string;
+    customer?: {
+        first_name: string;
+        last_name: string;
+    };
+    shipping_address?: {
+        province: string;
+        city: string;
+        zip: string;
+        country: string;
+    };
+    line_items: {
+        title: string;
+        quantity: number;
+        price: string;
+    }[];
+}
 
+
+// --- Funciones de Normalización y Creación de ID ---
+
+/**
+ * Extrae solo los dígitos de un número de pedido (ej: "#1001" -> "1001").
+ */
 function normalizeOrderNumber(name: string): string {
     if (!name) return '';
     const digits = String(name).match(/\d+/g);
     return digits ? digits.join('') : name;
 }
 
-
+/**
+ * Crea un ID de documento único y consistente para cada pedido.
+ * Formato: "idDeTienda-numeroDePedidoNormalizado" (ej: "tienda-1-1001")
+ */
 function getShopifyOrderDocId(orderName: string, storeId: string): string {
     const normalizedNumber = normalizeOrderNumber(orderName);
     const normalizedStoreId = storeId.toLowerCase().replace(/\s+/g, '-');
@@ -47,9 +77,15 @@ function getShopifyOrderDocId(orderName: string, storeId: string): string {
 }
 
 
-export async function processNewShopifyOrder(order: any, storeId: string) {
+// --- Lógica de Webhooks (Shopify y Google Sheets) ---
+
+/**
+ * Procesa un nuevo pedido que llega en tiempo real desde un webhook de Shopify.
+ */
+export async function processNewShopifyOrder(order: Order, storeId: string) {
   const orderDate = new Date(order.created_at);
 
+  // Ignorar pedidos con más de 6 meses de antigüedad
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
   if (orderDate < sixMonthsAgo) {
@@ -76,6 +112,7 @@ export async function processNewShopifyOrder(order: any, storeId: string) {
           quantity: item.quantity || 0,
           price: parseFloat(item.price || '0')
       })) || [],
+      // Campos de confirmación que se llenarán después
       isConfirmed: false,
       confirmedAt: null,
       confirmedBy: null,
@@ -83,9 +120,8 @@ export async function processNewShopifyOrder(order: any, storeId: string) {
   };
 
   try {
-    const batch = writeBatch(db);
-    batch.set(orderDocRef, orderData, { merge: true });
-    await batch.commit();
+    // Usamos merge: true para crear o actualizar el pedido sin sobrescribir los datos de confirmación si ya existen.
+    await doc(db, 'shopify_orders', orderDocId).set(orderData, { merge: true });
     console.log(`[Firestore] Pedido ${order.name} de ${storeId} guardado/actualizado en 'shopify_orders'.`);
   } catch (error) {
     console.error(`Error al procesar el nuevo pedido de Shopify en Firestore:`, error);
@@ -93,47 +129,9 @@ export async function processNewShopifyOrder(order: any, storeId: string) {
   }
 }
 
-
-export async function deleteOldMetrics(): Promise<{ status: string; message: string; deletedCount: number }> {
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    const firestoreTimestampLimit = Timestamp.fromDate(sixMonthsAgo);
-    let deletedCount = 0;
-
-    try {
-        const ordersRef = collection(db, 'shopify_orders');
-        const qOrders = query(ordersRef, where('createdAt', '<', firestoreTimestampLimit));
-        const ordersSnapshot = await getDocs(qOrders);
-        
-        if (ordersSnapshot.empty) {
-             return { status: 'success', message: 'No se encontraron registros antiguos para eliminar.', deletedCount: 0 };
-        }
-
-        const batch = writeBatch(db);
-        ordersSnapshot.forEach(doc => {
-            batch.delete(doc.ref);
-            deletedCount++;
-        });
-        await batch.commit();
-        
-        return { 
-            status: 'success', 
-            message: `Se eliminaron ${deletedCount} registros de pedidos con más de 6 meses de antigüedad.`,
-            deletedCount 
-        };
-    } catch (error) {
-        console.error('Error al eliminar métricas antiguas:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Error desconocido.';
-        return { 
-            status: 'error', 
-            message: `Error interno al eliminar datos: ${errorMessage}`,
-            deletedCount: 0
-        };
-    }
-}
-
-
-
+/**
+ * Actualiza los pedidos en Firestore que han sido confirmados en Google Sheets.
+ */
 export async function updateConfirmedOrders(
   confirmedOrders: ConfirmedOrderInfo[]
 ): Promise<{ status: string; message: string }> {
@@ -170,6 +168,7 @@ export async function updateConfirmedOrders(
       const docSnap = await getDoc(orderDocRef);
       
       if (docSnap.exists()) {
+          // Solo actualizamos si el pedido NO estaba confirmado previamente
           if (!docSnap.data().isConfirmed) {
               batch.update(orderDocRef, {
                   isConfirmed: true,
@@ -206,6 +205,11 @@ export async function updateConfirmedOrders(
 }
 
 
+// --- Lógica de Carga Masiva (CSV) y Limpieza ---
+
+/**
+ * CEREBRO DE LA CARGA CSV: Procesa archivos CSV, los transforma y los guarda en Firestore.
+ */
 export async function analyzeAndStoreMetrics(
   input: AnalyzeAndStoreMetricsInput
 ): Promise<AnalyzeAndStoreMetricsOutput> {
@@ -232,28 +236,32 @@ export async function analyzeAndStoreMetrics(
       });
       
       for (const r of records) {
+        // --- 1. Validación y Filtrado ---
         const orderDateStr = r['Created at'] || '';
         const orderDate = orderDateStr ? new Date(orderDateStr) : null;
         if (!orderDate || isNaN(orderDate.getTime()) || orderDate < sixMonthsAgo) {
-          continue; 
+          continue; // Ignorar si la fecha es inválida o es de hace más de 6 meses
         }
 
         const orderId = r.Id || null;
         const orderName = r.Name || '';
         if (!orderId || !orderName) {
-            continue; 
+            continue; // Ignorar si no tiene un ID o Nombre de pedido
         }
 
+        // --- 2. Creación del Documento y Mapeo ---
         const orderDocId = getShopifyOrderDocId(orderName, storeId);
         const orderDocRef = doc(db, 'shopify_orders', orderDocId);
         
+        // El CSV exportado de Shopify puede tener una sola línea de producto por fila.
+        // Aquí lo estandarizamos a un array de productos.
         const products = r['Lineitem name'] ? [{ 
             title: r['Lineitem name'] || 'N/A', 
             quantity: parseInt(r['Lineitem quantity'] || '0', 10),
             price: parseFloat(r['Lineitem price'] || '0')
         }] : [];
 
-
+        // --- 3. Construcción del Objeto Limpio para Firestore ---
         const orderData = {
           storeId: storeId,
           orderId: orderId,
@@ -266,12 +274,18 @@ export async function analyzeAndStoreMetrics(
           zip: r['Shipping Zip'] || 'N/A',
           country: r['Shipping Country'] || 'N/A',
           products: products,
+          // Se usa `merge: true` para no sobrescribir la info de confirmación
         };
+
+        // --- 4. Añadir al Lote ---
+        // `merge: true` es crucial: si el pedido ya existe, solo actualiza los campos
+        // de este objeto, pero NO borra `isConfirmed`, `confirmedAt`, etc. si ya existen.
         batch.set(orderDocRef, orderData, { merge: true });
         totalProcessedOrders++;
       }
     }
     
+    // --- 5. Guardar Todo en la Base de Datos ---
     await batch.commit();
 
     return {
@@ -284,4 +298,45 @@ export async function analyzeAndStoreMetrics(
     console.error(errorMessage, e);
     return { status: 'error', message: errorMessage };
   }
+}
+
+/**
+ * Elimina todos los registros de pedidos con más de 6 meses de antigüedad.
+ */
+export async function deleteOldMetrics(): Promise<{ status: string; message: string; deletedCount: number }> {
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const firestoreTimestampLimit = Timestamp.fromDate(sixMonthsAgo);
+    let deletedCount = 0;
+
+    try {
+        const ordersRef = collection(db, 'shopify_orders');
+        const qOrders = query(ordersRef, where('createdAt', '<', firestoreTimestampLimit));
+        const ordersSnapshot = await getDocs(qOrders);
+        
+        if (ordersSnapshot.empty) {
+             return { status: 'success', message: 'No se encontraron registros antiguos para eliminar.', deletedCount: 0 };
+        }
+
+        const batch = writeBatch(db);
+        ordersSnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+            deletedCount++;
+        });
+        await batch.commit();
+        
+        return { 
+            status: 'success', 
+            message: `Se eliminaron ${deletedCount} registros de pedidos con más de 6 meses de antigüedad.`,
+            deletedCount 
+        };
+    } catch (error) {
+        console.error('Error al eliminar métricas antiguas:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Error desconocido.';
+        return { 
+            status: 'error', 
+            message: `Error interno al eliminar datos: ${errorMessage}`,
+            deletedCount: 0
+        };
+    }
 }

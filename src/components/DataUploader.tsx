@@ -9,10 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { analyzeAndStoreMetrics } from "@/lib/firestore";
-import { Loader, Upload } from "lucide-react";
+import { Loader, Upload, AlertCircle } from "lucide-react";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
-import { AlertCircle } from "lucide-react";
 
 const formSchema = z.object({
   storeId: z.string().min(1, "El ID de la tienda es requerido."),
@@ -49,6 +48,7 @@ export default function DataUploader() {
     try {
       let shopifyDataUris: string[] = [];
       if (values.shopifyFiles && values.shopifyFiles.length > 0) {
+        // Convertimos todos los archivos seleccionados a Data URIs
         shopifyDataUris = await Promise.all(
           Array.from(values.shopifyFiles as FileList).map(file => fileToDataUri(file))
         );
@@ -58,6 +58,7 @@ export default function DataUploader() {
         throw new Error("No se han seleccionado archivos de Shopify válidos.");
       }
 
+      // Llamamos a la función del servidor unificada
       const result = await analyzeAndStoreMetrics({
         storeId: values.storeId,
         shopifyDataUris,
@@ -69,6 +70,7 @@ export default function DataUploader() {
           description: result.message,
         });
       } else {
+        // Si el servidor devuelve un error, lo mostramos
         throw new Error(result.message);
       }
     } catch (error: any) {
@@ -80,6 +82,7 @@ export default function DataUploader() {
     } finally {
       setIsProcessing(false);
       form.reset();
+      // Limpiamos el input de archivos para poder subir los mismos de nuevo si es necesario
       const fileInput = document.getElementById('shopifyFiles-input') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
     }

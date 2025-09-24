@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview Flujo para obtener y consolidar todas las métricas de Firestore.

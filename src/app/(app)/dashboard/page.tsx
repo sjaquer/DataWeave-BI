@@ -317,7 +317,7 @@ export default function Dashboard() {
 
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="col-span-1 md:col-span-2 lg:grid-cols-2">
+          <Card className="col-span-1 md:col-span-2 lg:col-span-2">
               <CardHeader>
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
                   <CardDescription>Top 10 provincias con más pedidos y su tasa de confirmación.</CardDescription>
@@ -352,7 +352,7 @@ export default function Dashboard() {
               </CardContent>
           </Card>
 
-            <Card className="col-span-1 md:col-span-2 lg:grid-cols-2">
+            <Card className="col-span-1 md:col-span-2 lg:col-span-2">
                 <CardHeader>
                   <CardTitle className="flex items-center"><UserCheck className="mr-2 h-5 w-5" />Rendimiento del Personal</CardTitle>
                   <CardDescription>Pedidos confirmados por cada miembro del equipo.</CardDescription>
@@ -432,5 +432,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-    

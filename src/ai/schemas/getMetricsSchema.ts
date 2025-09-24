@@ -9,6 +9,10 @@ export const DailyMetricSchema = z.object({
   confirmed: z.number(),
   unconfirmed: z.number(),
   confirmationRate: z.number(),
+  byStore: z.record(z.object({
+    confirmed: z.number(),
+    unconfirmed: z.number(),
+  })).optional(),
 });
 export type DailyMetric = z.infer<typeof DailyMetricSchema>;
 
@@ -61,5 +65,3 @@ export const GetMetricsOutputSchema = z.object({
 });
 
 export type GetMetricsOutput = z.infer<typeof GetMetricsOutputSchema>;
-
-    

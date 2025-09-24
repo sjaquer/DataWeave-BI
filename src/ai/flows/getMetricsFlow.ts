@@ -44,7 +44,7 @@ const getMetricsFlow = ai.defineFlow(
     // --- Agregación de Datos ---
     let totalConfirmed = 0;
     let totalUnconfirmed = 0;
-    const dailyData: { [key: string]: { confirmed: number; unconfirmed: number } } = {};
+    const dailyData: { [key: string]: { confirmed: number; unconfirmed: number, byStore: { [store: string]: { confirmed: number, unconfirmed: number } } } } = {};
     const provinceData: { [key: string]: { totalOrders: number; confirmedOrders: number; totalSpent: number; } } = {};
     const productData: { [key: string]: number } = {};
     const personnelData: { [key: string]: number } = {};
@@ -53,14 +53,29 @@ const getMetricsFlow = ai.defineFlow(
 
     orders.forEach((order) => {
       const isOrderConfirmed = order.isConfirmed === true;
+      const storeName = order.storeId || 'Desconocida';
+      
       isOrderConfirmed ? totalConfirmed++ : totalUnconfirmed++;
       
       // Daily Metrics
       if (order.createdAt && typeof order.createdAt.toDate === 'function') {
         const orderDate = order.createdAt.toDate();
         const dateStr = `${String(orderDate.getDate()).padStart(2, '0')}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${orderDate.getFullYear()}`;
-        if (!dailyData[dateStr]) dailyData[dateStr] = { confirmed: 0, unconfirmed: 0 };
-        isOrderConfirmed ? dailyData[dateStr].confirmed++ : dailyData[dateStr].unconfirmed++;
+        
+        if (!dailyData[dateStr]) {
+            dailyData[dateStr] = { confirmed: 0, unconfirmed: 0, byStore: {} };
+        }
+        if (!dailyData[dateStr].byStore[storeName]) {
+            dailyData[dateStr].byStore[storeName] = { confirmed: 0, unconfirmed: 0 };
+        }
+
+        if (isOrderConfirmed) {
+            dailyData[dateStr].confirmed++;
+            dailyData[dateStr].byStore[storeName].confirmed++;
+        } else {
+            dailyData[dateStr].unconfirmed++;
+            dailyData[dateStr].byStore[storeName].unconfirmed++;
+        }
       }
 
       // Province Metrics
@@ -86,7 +101,6 @@ const getMetricsFlow = ai.defineFlow(
       }
 
       // Store Metrics
-      const storeName = order.storeId || 'Desconocida';
       if (!storeData[storeName]) {
           storeData[storeName] = { totalOrders: 0, confirmedOrders: 0 };
       }
@@ -99,7 +113,14 @@ const getMetricsFlow = ai.defineFlow(
     // --- Preparación de Datos para el UI ---
     const aggregatedDailyMetrics: any[] = Object.entries(dailyData).map(([date, data]) => {
         const dailyTotal = data.confirmed + data.unconfirmed;
-        return { date, totalOrders: dailyTotal, confirmed: data.confirmed, unconfirmed: data.unconfirmed, confirmationRate: dailyTotal > 0 ? (data.confirmed / dailyTotal) * 100 : 0 };
+        return { 
+          date, 
+          totalOrders: dailyTotal, 
+          confirmed: data.confirmed, 
+          unconfirmed: data.unconfirmed, 
+          confirmationRate: dailyTotal > 0 ? (data.confirmed / dailyTotal) * 100 : 0,
+          byStore: data.byStore 
+        };
     }).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
 
     const aggregatedProvinceMetrics: any[] = Object.entries(provinceData).map(([name, data]) => ({
@@ -141,8 +162,3 @@ const getMetricsFlow = ai.defineFlow(
 export async function getMetrics(): Promise<GetMetricsOutput> {
     return getMetricsFlow();
 }
-
-
-    
-
-    

@@ -8,6 +8,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -151,6 +152,63 @@ export default function Dashboard() {
   const totalSpentAllProvinces = provinceMetrics.reduce((acc, curr) => acc + curr.totalSpent, 0);
   const averageSpentPerOrder = globalTotal > 0 ? totalSpentAllProvinces / globalTotal : 0;
   const otherStores = storeMetrics.filter(s => !MAIN_STORES.includes(s.name.toLowerCase()));
+
+  // Función para renderizar la tabla de métricas diarias
+  const renderDailyMetricsTable = (metrics: DailyMetric[], storeId?: string) => {
+    const dataToRender = storeId
+      ? metrics.map(m => {
+          const storeData = m.byStore?.[storeId] || { confirmed: 0, unconfirmed: 0 };
+          const total = storeData.confirmed + storeData.unconfirmed;
+          return {
+            date: m.date,
+            confirmed: storeData.confirmed,
+            unconfirmed: storeData.unconfirmed,
+            totalOrders: total,
+            confirmationRate: total > 0 ? (storeData.confirmed / total) * 100 : 0,
+          };
+        }).filter(m => m.totalOrders > 0)
+      : metrics;
+
+    return (
+      <Table>
+        <TableHeader className="sticky top-0 bg-card">
+          <TableRow>
+            <TableHead className="w-[120px]">Fecha</TableHead>
+            <TableHead className="text-center">Confirmados</TableHead>
+            <TableHead className="text-center">No Confirmados</TableHead>
+            <TableHead className="text-center">Pedidos Totales</TableHead>
+            <TableHead className="w-[220px] text-right">Tasa de Confirmación</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {dataToRender.length > 0 ? (
+            dataToRender.map((metric) => (
+              <TableRow key={metric.date}>
+                <TableCell className="font-medium">{metric.date}</TableCell>
+                <TableCell className="text-center text-green-500 font-semibold">{metric.confirmed}</TableCell>
+                <TableCell className="text-center text-red-500 font-semibold">{metric.unconfirmed}</TableCell>
+                <TableCell className="text-center">{metric.totalOrders}</TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-3">
+                    <span className="font-medium text-sm w-16">
+                      {metric.confirmationRate.toFixed(2)}%
+                    </span>
+                    <Progress value={metric.confirmationRate} className="h-2 w-[100px]" />
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={5} className="h-24 text-center">
+                No se encontraron datos de pedidos para esta selección.
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    );
+  };
 
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
@@ -348,47 +406,26 @@ export default function Dashboard() {
                       Análisis Detallado por Día
                   </CardTitle>
                   <CardDescription>
-                      Desglose diario de pedidos confirmados vs. no confirmados y su tasa de éxito.
+                      Desglose diario de pedidos por tienda y tasa de éxito.
                   </CardDescription>
               </CardHeader>
-              <CardContent className="overflow-auto max-h-[450px]">
-                <Table>
-                  <TableHeader className="sticky top-0 bg-card">
-                    <TableRow>
-                      <TableHead className="w-[120px]">Fecha</TableHead>
-                      <TableHead className="text-center">Confirmados</TableHead>
-                      <TableHead className="text-center">No Confirmados</TableHead>
-                      <TableHead className="text-center">Pedidos Totales</TableHead>
-                      <TableHead className="w-[220px] text-right">Tasa de Confirmación</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dailyMetrics.length > 0 ? (
-                      dailyMetrics.map((metric) => (
-                        <TableRow key={metric.date}>
-                          <TableCell className="font-medium">{metric.date}</TableCell>
-                          <TableCell className="text-center text-green-500 font-semibold">{metric.confirmed}</TableCell>
-                          <TableCell className="text-center text-red-500 font-semibold">{metric.unconfirmed}</TableCell>
-                          <TableCell className="text-center">{metric.totalOrders}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-3">
-                              <span className="font-medium text-sm w-16">
-                                {metric.confirmationRate.toFixed(2)}%
-                              </span>
-                              <Progress value={metric.confirmationRate} className="h-2 w-[100px]" />
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5} className="h-24 text-center">
-                          No se encontraron datos de pedidos para mostrar.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+              <CardContent className="overflow-auto max-h-[550px] p-2">
+                 <Tabs defaultValue="all" className="w-full">
+                    <TabsList className="grid w-full grid-cols-6">
+                        <TabsTrigger value="all">General</TabsTrigger>
+                        {MAIN_STORES.map(store => (
+                            <TabsTrigger key={store} value={store} className="capitalize">{store}</TabsTrigger>
+                        ))}
+                    </TabsList>
+                    <TabsContent value="all" className="mt-4">
+                        {renderDailyMetricsTable(dailyMetrics)}
+                    </TabsContent>
+                    {MAIN_STORES.map(store => (
+                        <TabsContent key={store} value={store} className="mt-4">
+                            {renderDailyMetricsTable(dailyMetrics, store)}
+                        </TabsContent>
+                    ))}
+                </Tabs>
               </CardContent>
           </Card>
       </div>

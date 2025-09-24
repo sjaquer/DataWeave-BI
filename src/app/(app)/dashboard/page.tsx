@@ -60,6 +60,12 @@ export default function Dashboard() {
     const unsubscribe = onSnapshot(ordersCollectionRef, async (querySnapshot) => {
       if (querySnapshot.empty) {
         setIsLoading(false);
+        setDailyMetrics([]);
+        setProvinceMetrics([]);
+        setProductMetrics([]);
+        setPersonnelMetrics([]);
+        setGlobalConfirmed(0);
+        setGlobalUnconfirmed(0);
         return;
       }
       
@@ -69,8 +75,10 @@ export default function Dashboard() {
       setIsNormalizing(true);
       let provinceCorrections: Record<string, string> = {};
       try {
-        const result = await normalizeProvinces({ provinceNames: uniqueProvinces });
-        provinceCorrections = result.corrections;
+        if (uniqueProvinces.length > 0) {
+            const result = await normalizeProvinces({ provinceNames: uniqueProvinces });
+            provinceCorrections = result.corrections;
+        }
       } catch (aiError) {
         console.warn("AI normalization failed, falling back to raw province names:", aiError);
         uniqueProvinces.forEach(p => provinceCorrections[p] = p);
@@ -235,7 +243,7 @@ export default function Dashboard() {
               <Banknote className="h-5 w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">${averageSpentPerOrder.toFixed(2)}</div>
+              <div className="text-4xl font-bold">S/ {averageSpentPerOrder.toFixed(2)}</div>
                <p className="text-xs text-muted-foreground">Promedio gastado en todos los pedidos.</p>
             </CardContent>
           </Card>
@@ -312,6 +320,31 @@ export default function Dashboard() {
                   </ResponsiveContainer>
               </CardContent>
             </Card>
+            
+            <Card className="col-span-1 md:col-span-2">
+              <CardHeader>
+                  <CardTitle className="flex items-center"><Package className="mr-2 h-5 w-5" />Top 10 Productos</CardTitle>
+                  <CardDescription>Los productos más pedidos en todas las tiendas.</CardDescription>
+              </CardHeader>
+               <CardContent className="overflow-auto max-h-[350px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Producto</TableHead>
+                      <TableHead className="text-right">Total Pedidos</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {productMetrics.slice(0,10).map((product) => (
+                      <TableRow key={product.name}>
+                        <TableCell className="font-medium">{product.name}</TableCell>
+                        <TableCell className="text-right">{product.totalOrders}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
 
            <Card className="col-span-1 md:col-span-2 lg:col-span-4">
               <CardHeader>
@@ -367,3 +400,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+    

@@ -25,6 +25,7 @@ export interface ConfirmedOrderInfo {
   COURIER?: string;
   PROVINCIA?: string; 
   'FECHA DE ATENCIÓN'?: string;
+  PRODUCTO?: string; // Campo para los productos desde Google Sheets
 }
 
 export interface Order {
@@ -185,13 +186,26 @@ export async function updateConfirmedOrders(
     const dateString = item['FECHA DE ATENCIÓN'];
     const confirmedAtTimestamp = dateString ? Timestamp.fromDate(new Date(dateString)) : Timestamp.now();
 
-    const orderData = {
+    const orderData: any = {
         isConfirmed: true,
         confirmedAt: confirmedAtTimestamp,
         confirmedBy: item.ATENDIDO || 'No especificado',
         courier: item.COURIER || 'No especificado',
         province: item.PROVINCIA || 'N/A', 
     };
+
+    // Procesar la cadena de productos si existe
+    if (item.PRODUCTO) {
+        orderData.products = item.PRODUCTO
+            .split('+') // 1. Dividir la cadena por el símbolo '+'
+            .map(name => name.trim()) // 2. Limpiar espacios en blanco
+            .filter(name => name.length > 0) // 3. Filtrar elementos vacíos
+            .map(name => {
+                // 4. Limpiar "1x ", "2x ", etc. del inicio del nombre
+                const cleanedName = name.replace(/^[0-9]+\s*x\s+/i, '').trim();
+                return { title: cleanedName };
+            });
+    }
 
     batch.set(orderDocRef, orderData, { merge: true });
     processedCount++;
@@ -334,5 +348,3 @@ export async function deleteOldMetrics(): Promise<{ status: string; message: str
         };
     }
 }
-
-    

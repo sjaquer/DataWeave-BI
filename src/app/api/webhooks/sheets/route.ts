@@ -5,7 +5,7 @@ import type { ConfirmedOrderInfo } from '@/lib/firestore';
 /**
  * Endpoint para recibir los webhooks desde Google Sheets cuando se confirma un pedido.
  * Acepta un objeto JSON con la clave "orders", que contiene un array de objetos.
- * Ej: { "orders": [ { "PEDIDO": "123", "TIENDA": "tienda-1", ... } ] }
+ * Ej: { "orders": [ { "PEDIDO": "123", "TIENDA": "tienda-1", "PRODUCTO": "Producto A + Producto B", ... } ] }
  * Puede manejar tanto un array con múltiples pedidos (carga masiva) como un array con un solo pedido (actualización en tiempo real).
  */
 export async function POST(req: Request) {

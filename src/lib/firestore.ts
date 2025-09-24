@@ -23,6 +23,8 @@ export interface ConfirmedOrderInfo {
   TIENDA: string;
   ATENDIDO?: string;
   COURIER?: string;
+  // Añadimos opcionalmente otros campos que puedan venir del Sheet
+  'FECHA DE ATENCIÓN'?: string;
 }
 
 export interface Order {
@@ -55,8 +57,9 @@ export interface Order {
  */
 function normalizeOrderNumber(name: string): string {
     if (!name) return '';
-    const digits = String(name).match(/\d+/g);
-    return digits ? digits.join('') : name;
+    // Esta expresión regular es más robusta y captura números incluso si están precedidos por letras como en "N-10971"
+    const match = String(name).match(/[0-9]+(-[0-9]+)*$/);
+    return match ? match[0] : name.replace(/[^0-9a-zA-Z-]/g, '');
 }
 
 /**
@@ -65,7 +68,7 @@ function normalizeOrderNumber(name: string): string {
  */
 function getShopifyOrderDocId(orderName: string, storeId: string): string {
     const normalizedNumber = normalizeOrderNumber(orderName);
-    const normalizedStoreId = storeId.toLowerCase().replace(/\s+/g, '-');
+    const normalizedStoreId = (storeId || 'sin-tienda').toLowerCase().replace(/\s+/g, '-');
     return `${normalizedStoreId}-${normalizedNumber}`;
 }
 
@@ -104,7 +107,7 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
           quantity: item.quantity || 0,
           price: parseFloat(item.price || '0')
       })) || [],
-      // Campos de confirmación que se llenarán después
+      // Aseguramos que isConfirmed se inicie en false por defecto
       isConfirmed: false,
       confirmedAt: null,
       confirmedBy: null,
@@ -122,33 +125,22 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
 }
 
 /**
- * Actualiza los pedidos en Firestore que han sido confirmados en Google Sheets.
+ * **Lógica CORREGIDA**: Crea o actualiza los pedidos en Firestore desde Google Sheets.
  */
 export async function updateConfirmedOrders(
   confirmedOrders: ConfirmedOrderInfo[]
 ): Promise<{ status: string; message: string }> {
 
-  let orders = confirmedOrders;
-
-  // Si el webhook envía un solo objeto en lugar de un array, lo convertimos en array.
-  if (!Array.isArray(orders)) {
-    orders = [orders];
-  }
-
-  if (!orders || orders.length === 0) {
+  if (!Array.isArray(confirmedOrders) || confirmedOrders.length === 0) {
     return { status: 'success', message: 'No se encontraron pedidos válidos para procesar.' };
   }
   
   const batch: WriteBatch = db.batch();
   let processedCount = 0;
-  let notFoundCount = 0;
-  let alreadyConfirmedCount = 0;
 
-  for (const item of orders) {
-    // Las cabeceras del Apps Script coinciden con estas claves.
+  for (const item of confirmedOrders) {
     const rawOrderName = String(item.PEDIDO || '');
     const storeId = item.TIENDA;
-    const courier = item.COURIER;
 
     if (!rawOrderName || !storeId) {
         console.warn(`[Firestore] Item ignorado por falta de PEDIDO o TIENDA:`, item);
@@ -157,45 +149,35 @@ export async function updateConfirmedOrders(
     
     const orderDocId = getShopifyOrderDocId(rawOrderName, storeId);
     const orderDocRef = db.collection('shopify_orders').doc(orderDocId);
+    
+    const dateString = item['FECHA DE ATENCIÓN'];
+    const confirmedAtTimestamp = dateString ? Timestamp.fromDate(new Date(dateString)) : Timestamp.now();
 
-    try {
-      const docSnap = await orderDocRef.get();
-      
-      if (docSnap.exists) {
-          const docData = docSnap.data();
-          // Solo actualizamos si el pedido NO estaba confirmado previamente para no reescribir la fecha original
-          if (docData && !docData.isConfirmed) {
-              batch.update(orderDocRef, {
-                  isConfirmed: true,
-                  confirmedAt: Timestamp.now(),
-                  confirmedBy: item.ATENDIDO || 'No especificado', // Viene de la columna 'ATENDIDO'
-                  courier: courier || 'No especificado' // Viene de la columna 'COURIER'
-              });
-              processedCount++;
-          } else {
-              // Si ya está confirmado, podríamos opcionalmente actualizar otros campos como el courier si es necesario
-              // Por ahora, solo lo contamos.
-              alreadyConfirmedCount++;
-          }
-      } else {
-        notFoundCount++;
-        console.warn(`[Firestore] Pedido ${rawOrderName} de la tienda ${storeId} no fue encontrado.`);
-      }
-    } catch (e) {
-       console.error(`Error al obtener el documento ${orderDocId}:`, e);
-       // Continuamos con el siguiente item del bucle
-       continue;
-    }
+    const orderData = {
+        // Datos del pedido que podrían no existir si el webhook de Shopify no ha llegado
+        orderName: rawOrderName,
+        storeId: storeId,
+        // Datos de confirmación
+        isConfirmed: true,
+        confirmedAt: confirmedAtTimestamp,
+        confirmedBy: item.ATENDIDO || 'No especificado',
+        courier: item.COURIER || 'No especificado'
+    };
+
+    // **LA CLAVE ESTÁ AQUÍ**: Usamos set con merge: true.
+    // Si el doc no existe, lo crea con `orderData`.
+    // Si ya existe, fusiona `orderData` sobre el doc existente, actualizando los campos de confirmación.
+    batch.set(orderDocRef, orderData, { merge: true });
+    processedCount++;
   }
 
   if (processedCount > 0) {
     await batch.commit();
   }
 
-  let message = `${processedCount} pedidos fueron marcados como confirmados.`;
-  if (notFoundCount > 0) message += ` ${notFoundCount} no se encontraron.`;
-  if (alreadyConfirmedCount > 0) message += ` ${alreadyConfirmedCount} ya estaban confirmados.`;
-
+  const message = `${processedCount} pedidos fueron creados o actualizados como confirmados en la base de datos.`;
+  console.log(`[Firestore] ${message}`);
+  
   return {
     status: 'success',
     message,
@@ -206,7 +188,7 @@ export async function updateConfirmedOrders(
 // --- Lógica de Carga Masiva (CSV) y Limpieza ---
 
 /**
- * CEREBRO DE LA CARGA CSV: Procesa archivos CSV, los transforma y los guarda en Firestore.
+ * Procesa archivos CSV de Shopify, los transforma y los guarda en Firestore.
  */
 export async function analyzeAndStoreMetrics(
   input: AnalyzeAndStoreMetricsInput
@@ -238,13 +220,13 @@ export async function analyzeAndStoreMetrics(
         const orderDateStr = r['Created at'] || '';
         const orderDate = orderDateStr ? new Date(orderDateStr) : null;
         if (!orderDate || isNaN(orderDate.getTime()) || orderDate < sixMonthsAgo) {
-          continue; // Ignorar si la fecha es inválida o es de hace más de 6 meses
+          continue;
         }
 
-        const orderId = r.Id || r.id || r['Order ID'] || null;
+        const orderId = r.Id || null;
         const orderName = r.Name || '';
         if (!orderId || !orderName) {
-            continue; // Ignorar si no tiene un ID o Nombre de pedido
+            continue;
         }
 
         // --- 2. Creación del Documento y Mapeo ---
@@ -267,7 +249,6 @@ export async function analyzeAndStoreMetrics(
           productTitle: r['Lineitem name'] || 'N/A',
           productQuantity: parseInt(r['Lineitem quantity'] || '0', 10),
           productPrice: parseFloat(r['Lineitem price'] || '0'),
-          // Se usa `merge: true` para no sobrescribir la info de confirmación
         };
 
         // --- 4. Añadir al Lote ---

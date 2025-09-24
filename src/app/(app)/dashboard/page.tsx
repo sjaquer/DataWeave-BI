@@ -62,7 +62,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     setIsLoading(true);
+    // Escucha la colección 'shopify_orders'
     const ordersCollectionRef = collection(db, "shopify_orders");
+    
+    // Filtra para obtener solo los pedidos de los últimos 6 meses.
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     const sixMonthsAgoTimestamp = Timestamp.fromDate(sixMonthsAgo);
@@ -70,19 +73,29 @@ export default function Dashboard() {
     const q = query(ordersCollectionRef, where("createdAt", ">=", sixMonthsAgoTimestamp));
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      // Objeto para agregar los datos por día.
       const dailyData: { [key: string]: { total: number; confirmed: number } } = {};
 
       querySnapshot.forEach((doc) => {
         const order = doc.data();
-        const orderDate = (order.createdAt as Timestamp).toDate();
-        // Formato DD-MM-YYYY para consistencia
+        
+        // Asegúrate de que el pedido tenga una fecha de creación válida.
+        // Usa `createdAt` para los pedidos de Shopify y `confirmedAt` para los de Sheets que no tengan `createdAt`.
+        const orderTimestamp = order.createdAt || order.confirmedAt;
+        if (!orderTimestamp || !(orderTimestamp instanceof Timestamp)) {
+            return; // Ignora documentos sin una fecha válida
+        }
+        const orderDate = orderTimestamp.toDate();
+        
+        // Formato DD-MM-YYYY para la clave de agregación.
         const dateStr = `${String(orderDate.getUTCDate()).padStart(2, '0')}-${String(orderDate.getUTCMonth() + 1).padStart(2, '0')}-${orderDate.getUTCFullYear()}`;
 
         if (!dailyData[dateStr]) {
           dailyData[dateStr] = { total: 0, confirmed: 0 };
         }
+        
         dailyData[dateStr].total++;
-        // El campo isConfirmed se llena desde el webhook de Sheets.
+        
         if (order.isConfirmed === true) {
           dailyData[dateStr].confirmed++;
         }
@@ -99,11 +112,10 @@ export default function Dashboard() {
       // Ordenar de más reciente a más antiguo
       }).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
 
-
       setMetrics(aggregatedMetrics);
       setIsLoading(false);
     }, (error) => {
-      console.error("Error fetching metrics from Firestore:", error);
+      console.error("Error al obtener las métricas desde Firestore:", error);
       toast({
         variant: "destructive",
         title: "Error de Conexión",
@@ -159,10 +171,10 @@ export default function Dashboard() {
                 <CardHeader>
                     <CardTitle className="flex items-center">
                         <Upload className="mr-2 h-5 w-5" />
-                        Carga Manual de Historial con CSV
+                        Carga Manual de Historial con CSV (Otras Tiendas)
                     </CardTitle>
                     <CardDescription>
-                        Sube un archivo CSV de pedidos exportado desde Shopify para hacer una carga masiva del historial de una tienda.
+                        Usa esta sección para subir archivos CSV de pedidos para tiendas que aún no están conectadas por webhook.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

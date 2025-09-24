@@ -262,6 +262,10 @@ export default function Dashboard() {
                   <CardDescription>Top 10 provincias con más pedidos y su tasa de confirmación.</CardDescription>
               </CardHeader>
               <CardContent className="h-[350px] w-full">
+                <ChartContainer config={{
+                    totalOrders: { label: "Pedidos Totales", color: "hsl(var(--chart-1))" },
+                    confirmationRate: { label: "Tasa de Confirmación", color: "hsl(var(--chart-2))" },
+                }}>
                  <ResponsiveContainer>
                     <BarChart data={provinceMetrics.slice(0, 10)} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -283,6 +287,7 @@ export default function Dashboard() {
                       <Bar yAxisId="right" dataKey="confirmationRate" name="Tasa de Confirmación (%)" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
+                </ChartContainer>
               </CardContent>
             </Card>
 
@@ -292,6 +297,9 @@ export default function Dashboard() {
                   <CardDescription>Número de pedidos confirmados por cada miembro del equipo.</CardDescription>
               </CardHeader>
               <CardContent className="h-[350px] w-full">
+                <ChartContainer config={{
+                    confirmedOrders: { label: "Pedidos Confirmados", color: "hsl(var(--chart-1))" }
+                }}>
                  <ResponsiveContainer>
                     <BarChart data={personnelMetrics.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -302,6 +310,7 @@ export default function Dashboard() {
                       <Bar dataKey="confirmedOrders" name="Pedidos Confirmados" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
+                </ChartContainer>
               </CardContent>
             </Card>
 

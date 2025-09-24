@@ -219,11 +219,11 @@ export async function analyzeAndStoreMetrics(
     return { status: 'error', message: 'No se proporcionó el ID de la tienda.' };
   }
 
-  try {
-    const batch = writeBatch(db);
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const batch = writeBatch(db);
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
+  try {
     for (const dataUri of shopifyDataUris) {
       const csvData = Buffer.from(dataUri.split(',')[1], 'base64').toString('utf-8');
       const records = parse(csvData, {
@@ -234,18 +234,14 @@ export async function analyzeAndStoreMetrics(
       for (const r of records) {
         const orderDateStr = r['Created at'] || '';
         const orderDate = orderDateStr ? new Date(orderDateStr) : null;
-        if (!orderDate || orderDate < sixMonthsAgo) {
-          continue; // Ignorar registros sin fecha válida o muy antiguos
+        if (!orderDate || isNaN(orderDate.getTime()) || orderDate < sixMonthsAgo) {
+          continue; // Ignorar registros sin fecha válida, con fecha inválida o muy antiguos
         }
 
-        const orderId = r.id || r.ID || r['Order ID'] || null;
-        if (!orderId) {
-            continue; // Ignorar registros sin un ID de pedido identificable
-        }
-
+        const orderId = r.Id || null;
         const orderName = r.Name || '';
-        if (!orderName) {
-            continue; // Ignorar registros sin un nombre de pedido
+        if (!orderId || !orderName) {
+            continue; // Ignorar registros sin un ID o Nombre de pedido
         }
 
         const orderDocId = getShopifyOrderDocId(orderName, storeId);
@@ -255,6 +251,13 @@ export async function analyzeAndStoreMetrics(
         const nameParts = billingName ? billingName.split(' ') : [];
         const firstName = nameParts.length > 0 ? nameParts.shift() : '';
         const lastName = nameParts.length > 0 ? nameParts.join(' ') : '';
+        
+        const products = r['Lineitem name'] ? [{ 
+            title: r['Lineitem name'], 
+            quantity: parseInt(r['Lineitem quantity'] || '0', 10),
+            price: parseFloat(r['Lineitem price'] || '0')
+        }] : [];
+
 
         const orderData = {
           storeId: storeId,
@@ -267,11 +270,7 @@ export async function analyzeAndStoreMetrics(
           city: r['Shipping City'] || 'N/A',
           zip: r['Shipping Zip'] || 'N/A',
           country: r['Shipping Country'] || 'N/A',
-          products: [{ 
-              title: r['Lineitem name'] || 'N/A', 
-              quantity: parseInt(r['Lineitem quantity'] || '0', 10),
-              price: parseFloat(r['Lineitem price'] || '0')
-          }],
+          products: products,
         };
         batch.set(orderDocRef, orderData, { merge: true });
         totalProcessedOrders++;

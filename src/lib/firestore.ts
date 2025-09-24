@@ -4,12 +4,7 @@ import { db } from '@/lib/firebase-admin';
 import { parse } from 'csv-parse/sync';
 import {
   Timestamp,
-  writeBatch,
-  getDocs,
-  deleteDoc,
-  query,
-  where,
-  collection,
+  WriteBatch,
 } from 'firebase-admin/firestore';
 
 
@@ -144,7 +139,7 @@ export async function updateConfirmedOrders(
     return { status: 'success', message: 'No se encontraron pedidos válidos para procesar.' };
   }
   
-  const batch = db.batch();
+  const batch: WriteBatch = db.batch();
   let processedCount = 0;
   let notFoundCount = 0;
   let alreadyConfirmedCount = 0;
@@ -226,7 +221,7 @@ export async function analyzeAndStoreMetrics(
     return { status: 'error', message: 'No se proporcionó el ID de la tienda.' };
   }
 
-  const batch = db.batch();
+  const batch: WriteBatch = db.batch();
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
@@ -308,15 +303,15 @@ export async function deleteOldMetrics(): Promise<{ status: string; message: str
     let deletedCount = 0;
 
     try {
-        const ordersRef = collection(db, 'shopify_orders');
-        const qOrders = query(ordersRef, where('createdAt', '<', firestoreTimestampLimit));
-        const ordersSnapshot = await getDocs(qOrders);
+        const ordersRef = db.collection('shopify_orders');
+        const qOrders = ordersRef.where('createdAt', '<', firestoreTimestampLimit);
+        const ordersSnapshot = await qOrders.get();
         
         if (ordersSnapshot.empty) {
              return { status: 'success', message: 'No se encontraron registros antiguos para eliminar.', deletedCount: 0 };
         }
 
-        const batch = db.batch();
+        const batch: WriteBatch = db.batch();
         ordersSnapshot.forEach(doc => {
             batch.delete(doc.ref);
             deletedCount++;

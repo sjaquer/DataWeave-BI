@@ -1,13 +1,6 @@
 import { NextResponse } from 'next/server';
 import { processNewShopifyOrder, processUpdatedShopifyOrder } from '@/lib/firestore';
 import type { Order } from '@/lib/firestore';
-import * as crypto from 'crypto';
-
-function getShopifyWebhookSecret(storeId: string): string | undefined {
-  // Las variables de entorno se nombran SHOPIFY_WEBHOOK_SECRET_BLUMI, SHOPIFY_WEBHOOK_SECRET_CUMBRE, etc.
-  const envVarName = `SHOPIFY_WEBHOOK_SECRET_${storeId.toUpperCase()}`;
-  return process.env[envVarName];
-}
 
 /**
  * Endpoint dinámico para recibir webhooks de múltiples tiendas Shopify.
@@ -20,23 +13,8 @@ export async function POST(req: Request, { params }: { params: { storeId: string
   }
 
   const body = await req.text();
-  const hmacHeader = req.headers.get('x-shopify-hmac-sha256');
   const topic = req.headers.get('x-shopify-topic'); // 'orders/create', 'orders/updated', etc.
   
-  const shopifySecret = getShopifyWebhookSecret(storeId);
-
-  if (!shopifySecret) {
-      console.error(`El secreto del webhook para la tienda '${storeId}' no está configurado.`);
-      return NextResponse.json({ status: 'error', message: `Configuración de servidor incompleta para la tienda: ${storeId}` }, { status: 500 });
-  }
-
-  // Verificar la firma del webhook
-  const hash = crypto.createHmac('sha256', shopifySecret).update(body, 'utf-8').digest('base64');
-
-  if (hash !== hmacHeader) {
-    return NextResponse.json({ status: 'error', message: 'Firma de webhook inválida.' }, { status: 401 });
-  }
-
   try {
     const orderPayload: Order = JSON.parse(body);
 
@@ -65,5 +43,3 @@ export async function POST(req: Request, { params }: { params: { storeId: string
     return NextResponse.json({ status: 'error', message: `Error interno del servidor: ${errorMessage}` }, { status: 500 });
   }
 }
-
-    

@@ -14,13 +14,11 @@ export type NormalizeProductsInput = z.infer<
 >;
 
 // Esquema para la salida del flujo: un mapa de correcciones.
-export const NormalizeProductsOutputSchema = z.object({
-  corrections: z
-    .record(z.string())
-    .describe(
-      'Un objeto que mapea cada título de producto original a su versión estandarizada.'
-    ),
-});
+export const NormalizeProductsOutputSchema = z
+  .record(z.string())
+  .describe(
+    'Un objeto que mapea cada título de producto original a su versión estandarizada.'
+  );
 export type NormalizeProductsOutput = z.infer<
   typeof NormalizeProductsOutputSchema
 >;

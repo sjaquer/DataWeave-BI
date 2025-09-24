@@ -107,16 +107,16 @@ export default function Dashboard() {
           // Llama a las IAs solo si hay datos nuevos que normalizar
           const provincePromise = provincesToNormalize.length > 0
             ? normalizeProvinces({ provinceNames: provincesToNormalize })
-            : Promise.resolve({ corrections: {} });
+            : Promise.resolve({});
             
           const productPromise = productsToNormalize.length > 0
             ? normalizeProducts({ productTitles: productsToNormalize })
-            : Promise.resolve({ corrections: {} });
+            : Promise.resolve({});
           
-          const [provinceResult, productResult] = await Promise.all([provincePromise, productResult]);
+          const [provinceResult, productResult] = await Promise.all([provincePromise, productPromise]);
           
-          newProvinceCorrections = provinceResult.corrections;
-          newProductCorrections = productResult.corrections;
+          newProvinceCorrections = provinceResult;
+          newProductCorrections = productResult;
 
           // Actualiza la caché de forma inmutable
           setProvinceCorrectionsCache(prev => ({ ...prev, ...newProvinceCorrections }));
@@ -225,7 +225,7 @@ export default function Dashboard() {
     });
 
     return () => unsubscribe();
-  }, [toast, provinceCorrectionsCache, productCorrectionsCache]);
+  }, [toast]); // Se eliminan las dependencias de caché para evitar re-renders innecesarios
 
   const globalTotal = globalConfirmed + globalUnconfirmed;
   const globalRate = globalTotal > 0 ? (globalConfirmed / globalTotal) * 100 : 0;

@@ -14,13 +14,11 @@ export type NormalizeProvincesInput = z.infer<
 >;
 
 // Esquema para la salida del flujo: un mapa de correcciones.
-export const NormalizeProvincesOutputSchema = z.object({
-  corrections: z
-    .record(z.string())
-    .describe(
-      'Un objeto que mapea cada nombre de provincia original a su versión estandarizada.'
-    ),
-});
+export const NormalizeProvincesOutputSchema = z
+  .record(z.string())
+  .describe(
+    'Un objeto que mapea cada nombre de provincia original a su versión estandarizada.'
+  );
 export type NormalizeProvincesOutput = z.infer<
   typeof NormalizeProvincesOutputSchema
 >;

@@ -35,9 +35,9 @@ Considera la siguiente lista de títulos de productos:
 - {{{this}}}
 {{/each}}
 
-Devuelve un único objeto JSON con un campo 'corrections' que mapea cada título original a su versión corregida.
+Devuelve un único objeto JSON que mapee cada título original a su versión corregida.
 Si un título ya es claro y está bien formateado, simplemente mejóralo o repítelo. Si no puedes identificar un producto, devuélvelo sin cambios.
-Ejemplo de salida: {"corrections": {"1x LLAVE PARA GATO...": "Llave para Gato", "LINTERNA MULTIFUNCIONAL": "Linterna Multifuncional"}}`,
+Ejemplo de salida: {"1x LLAVE PARA GATO...": "Llave para Gato", "LINTERNA MULTIFUNCIONAL": "Linterna Multifuncional"}`,
 });
 
 const normalizeProductsFlow = ai.defineFlow(
@@ -48,7 +48,7 @@ const normalizeProductsFlow = ai.defineFlow(
   },
   async (input: NormalizeProductsInput) => {
     if (!input.productTitles || input.productTitles.length === 0) {
-      return {corrections: {}};
+      return {};
     }
 
     const {output} = await normalizeProductsPrompt(input);

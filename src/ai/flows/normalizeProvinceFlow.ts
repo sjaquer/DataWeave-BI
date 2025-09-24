@@ -37,9 +37,9 @@ Considera la siguiente lista de nombres de provincias:
 - {{{this}}}
 {{/each}}
 
-Devuelve un único objeto JSON con un campo 'corrections' que mapea cada nombre de provincia original a su versión corregida y estandarizada.
+Devuelve un único objeto JSON que mapee cada nombre de provincia original a su versión corregida y estandarizada.
 Si un nombre ya es correcto, simplemente repítelo. Si no puedes identificar una provincia, devuélvela sin cambios.
-Ejemplo de salida: {"corrections": {"LIMA": "Lima", "Arequipa": "Arequipa", "Santa": "Santa"}}`,
+Ejemplo de salida: {"LIMA": "Lima", "Arequipa": "Arequipa", "Santa": "Santa"}`,
 });
 
 
@@ -53,7 +53,7 @@ const normalizeProvincesFlow = ai.defineFlow(
   async (input: NormalizeProvincesInput) => {
 
     if (!input.provinceNames || input.provinceNames.length === 0) {
-        return { corrections: {} };
+        return {};
     }
     
     // Ejecuta el prompt de normalización.

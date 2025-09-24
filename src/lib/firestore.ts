@@ -10,7 +10,6 @@ import {
   query,
   where,
   collection,
-  doc,
 } from 'firebase-admin/firestore';
 
 
@@ -136,6 +135,7 @@ export async function updateConfirmedOrders(
 
   let orders = confirmedOrders;
 
+  // Si el webhook envía un solo objeto en lugar de un array, lo convertimos en array.
   if (!Array.isArray(orders)) {
     orders = [orders];
   }
@@ -150,6 +150,7 @@ export async function updateConfirmedOrders(
   let alreadyConfirmedCount = 0;
 
   for (const item of orders) {
+    // Las cabeceras del Apps Script coinciden con estas claves.
     const rawOrderName = String(item.PEDIDO || '');
     const storeId = item.TIENDA;
     const courier = item.COURIER;
@@ -167,16 +168,18 @@ export async function updateConfirmedOrders(
       
       if (docSnap.exists) {
           const docData = docSnap.data();
-          // Solo actualizamos si el pedido NO estaba confirmado previamente
+          // Solo actualizamos si el pedido NO estaba confirmado previamente para no reescribir la fecha original
           if (docData && !docData.isConfirmed) {
               batch.update(orderDocRef, {
                   isConfirmed: true,
                   confirmedAt: Timestamp.now(),
-                  confirmedBy: item.ATENDIDO || 'No especificado',
-                  courier: courier || 'No especificado'
+                  confirmedBy: item.ATENDIDO || 'No especificado', // Viene de la columna 'ATENDIDO'
+                  courier: courier || 'No especificado' // Viene de la columna 'COURIER'
               });
               processedCount++;
           } else {
+              // Si ya está confirmado, podríamos opcionalmente actualizar otros campos como el courier si es necesario
+              // Por ahora, solo lo contamos.
               alreadyConfirmedCount++;
           }
       } else {
@@ -185,6 +188,7 @@ export async function updateConfirmedOrders(
       }
     } catch (e) {
        console.error(`Error al obtener el documento ${orderDocId}:`, e);
+       // Continuamos con el siguiente item del bucle
        continue;
     }
   }
@@ -259,7 +263,7 @@ export async function analyzeAndStoreMetrics(
           orderName: orderName,
           createdAt: Timestamp.fromDate(orderDate),
           totalPrice: parseFloat(r.Total || '0'),
-          customerName: r['Billing Name'] || 'N/A',
+          customerName: (r['Billing Name'] || '').trim(),
           province: r['Shipping Province Name'] || 'N/A',
           city: r['Shipping City'] || 'N/A',
           zip: r['Shipping Zip'] || 'N/A',

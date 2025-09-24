@@ -4,23 +4,24 @@ import type { ConfirmedOrderInfo } from '@/lib/firestore';
 
 /**
  * Endpoint para recibir los webhooks desde Google Sheets cuando se confirma un pedido.
- * Acepta un objeto único o un array de objetos con `PEDIDO`, `TIENDA`, `ATENDIDO` y `COURIER`.
+ * Acepta un objeto JSON con la clave "orders", que contiene un array de objetos.
+ * Ej: { "orders": [ { "PEDIDO": "123", "TIENDA": "tienda-1", ... } ] }
  */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    // Hacemos el endpoint más flexible. Si recibimos un solo objeto, lo convertimos en un array.
-    const confirmedOrders: ConfirmedOrderInfo[] = Array.isArray(body) ? body : [body];
+    // El webhook ahora espera un objeto contenedor con una clave "orders"
+    const confirmedOrders: ConfirmedOrderInfo[] = body.orders;
 
-    if (confirmedOrders.length === 0) {
-      return NextResponse.json({ status: 'error', message: 'El payload está vacío o no es válido.' }, { status: 400 });
+    if (!Array.isArray(confirmedOrders) || confirmedOrders.length === 0) {
+      return NextResponse.json({ status: 'error', message: 'El payload está vacío o no contiene un array "orders" válido.' }, { status: 400 });
     }
 
     // Validar que los campos mínimos existan en el primer objeto como muestra
     const sample = confirmedOrders[0];
     if (typeof sample.PEDIDO === 'undefined' || typeof sample.TIENDA === 'undefined') {
-      return NextResponse.json({ status: 'error', message: 'El payload debe contener al menos los campos PEDIDO y TIENDA.' }, { status: 400 });
+      return NextResponse.json({ status: 'error', message: 'Los objetos de pedido deben contener al menos los campos PEDIDO y TIENDA.' }, { status: 400 });
     }
 
     const result = await updateConfirmedOrders(confirmedOrders);

@@ -116,11 +116,14 @@ export default function Dashboard() {
       setIsLoading(false);
     }, (error) => {
       console.error("Error al obtener las métricas desde Firestore:", error);
-      toast({
-        variant: "destructive",
-        title: "Error de Conexión",
-        description: "No se pudieron cargar las métricas desde la base de datos.",
-      });
+      // Solo mostramos el toast si el error no es por falta de permisos (que suele pasar si no hay datos)
+      if (error.code !== 'permission-denied' && error.code !== 'unauthenticated') {
+        toast({
+          variant: "destructive",
+          title: "Error de Conexión",
+          description: "No se pudieron cargar las métricas desde la base de datos.",
+        });
+      }
       setIsLoading(false);
     });
 

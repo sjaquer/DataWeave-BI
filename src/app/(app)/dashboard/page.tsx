@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { onSnapshot, collection } from "firebase/firestore";
-import { Loader, CheckCircle, XCircle, Percent, CalendarDays, Upload, MapPin, Package, UserCheck, Banknote, TrendingUp, ShoppingCart, ArrowRight } from "lucide-react";
+import { Loader, CheckCircle, XCircle, Percent, CalendarDays, Upload, MapPin, Package, UserCheck, Banknote, TrendingUp, ArrowRight, RefreshCw } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,8 +14,9 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import { normalizeProvinces } from "@/ai/flows/normalizeProvinceFlow";
+import { normalizeProducts } from "@/ai/flows/normalizeProductsFlow";
 
-
+// --- Tipos de Datos del Dashboard ---
 interface DailyMetric {
   date: string;
   totalOrders: number;
@@ -25,33 +26,49 @@ interface DailyMetric {
 }
 
 interface ProvinceMetric {
-    name: string;
-    totalOrders: number;
-    confirmedOrders: number;
-    confirmationRate: number;
-    totalSpent: number;
+  name: string;
+  totalOrders: number;
+  confirmedOrders: number;
+  confirmationRate: number;
+  totalSpent: number;
 }
 
 interface ProductMetric {
-    name: string;
-    totalOrders: number;
+  name: string;
+  totalOrders: number;
 }
 
 interface PersonnelMetric {
-    name: string;
-    confirmedOrders: number;
+  name: string;
+  confirmedOrders: number;
+}
+
+interface OrderData {
+  isConfirmed: boolean;
+  createdAt: { toDate: () => Date };
+  province?: string;
+  totalPrice?: number;
+  products?: { title: string }[];
+  confirmedBy?: string;
 }
 
 
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isNormalizing, setIsNormalizing] = useState(false);
+  
+  // --- Estados de Métricas Agregadas ---
   const [globalConfirmed, setGlobalConfirmed] = useState(0);
   const [globalUnconfirmed, setGlobalUnconfirmed] = useState(0);
   const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
   const [provinceMetrics, setProvinceMetrics] = useState<ProvinceMetric[]>([]);
   const [productMetrics, setProductMetrics] = useState<ProductMetric[]>([]);
   const [personnelMetrics, setPersonnelMetrics] = useState<PersonnelMetric[]>([]);
+  
+  // --- Estados de Caché para Normalización ---
+  const [provinceCorrectionsCache, setProvinceCorrectionsCache] = useState<Record<string, string>>({});
+  const [productCorrectionsCache, setProductCorrectionsCache] = useState<Record<string, string>>({});
+
   const { toast } = useToast();
 
   useEffect(() => {
@@ -61,6 +78,7 @@ export default function Dashboard() {
     const unsubscribe = onSnapshot(ordersCollectionRef, async (querySnapshot) => {
       if (querySnapshot.empty) {
         setIsLoading(false);
+        // Reset all metrics if there are no orders
         setDailyMetrics([]);
         setProvinceMetrics([]);
         setProductMetrics([]);
@@ -70,30 +88,64 @@ export default function Dashboard() {
         return;
       }
       
-      const orders = querySnapshot.docs.map(doc => doc.data());
+      const orders: OrderData[] = querySnapshot.docs.map(doc => doc.data() as OrderData);
+
+      // --- Normalización Inteligente de Provincias y Productos ---
       const uniqueProvinces = [...new Set(orders.map(order => order.province || 'Desconocida').filter(p => p !== 'Desconocida'))];
+      const uniqueProducts = [...new Set(orders.flatMap(order => order.products?.map(p => p.title) || []))];
       
-      setIsNormalizing(true);
-      let provinceCorrections: Record<string, string> = {};
-      try {
-        if (uniqueProvinces.length > 0) {
-            const result = await normalizeProvinces({ provinceNames: uniqueProvinces });
-            provinceCorrections = result.corrections;
+      // Filtra solo los nombres que no están en la caché
+      const provincesToNormalize = uniqueProvinces.filter(p => !provinceCorrectionsCache[p]);
+      const productsToNormalize = uniqueProducts.filter(p => !productCorrectionsCache[p]);
+      
+      let newProvinceCorrections: Record<string, string> = {};
+      let newProductCorrections: Record<string, string> = {};
+
+      if (provincesToNormalize.length > 0 || productsToNormalize.length > 0) {
+        setIsNormalizing(true);
+        try {
+          // Llama a las IAs solo si hay datos nuevos que normalizar
+          const provincePromise = provincesToNormalize.length > 0
+            ? normalizeProvinces({ provinceNames: provincesToNormalize })
+            : Promise.resolve({ corrections: {} });
+            
+          const productPromise = productsToNormalize.length > 0
+            ? normalizeProducts({ productTitles: productsToNormalize })
+            : Promise.resolve({ corrections: {} });
+          
+          const [provinceResult, productResult] = await Promise.all([provincePromise, productResult]);
+          
+          newProvinceCorrections = provinceResult.corrections;
+          newProductCorrections = productResult.corrections;
+
+          // Actualiza la caché de forma inmutable
+          setProvinceCorrectionsCache(prev => ({ ...prev, ...newProvinceCorrections }));
+          setProductCorrectionsCache(prev => ({ ...prev, ...newProductCorrections }));
+
+        } catch (aiError) {
+          console.warn("AI normalization failed:", aiError);
+          toast({
+              variant: "destructive",
+              title: "Error de IA",
+              description: "La normalización de datos falló. Mostrando datos sin procesar."
+          });
+          // En caso de error, llena la caché con los valores originales para no reintentar
+          provincesToNormalize.forEach(p => newProvinceCorrections[p] = p);
+          productsToNormalize.forEach(p => newProductCorrections[p] = p);
+          setProvinceCorrectionsCache(prev => ({ ...prev, ...newProvinceCorrections }));
+          setProductCorrectionsCache(prev => ({ ...prev, ...newProductCorrections }));
+        } finally {
+          setIsNormalizing(false);
         }
-      } catch (aiError) {
-        console.warn("AI normalization failed, falling back to raw province names:", aiError);
-        uniqueProvinces.forEach(p => provinceCorrections[p] = p);
-        toast({
-            variant: "destructive",
-            title: "Error de IA",
-            description: "La normalización de provincias falló. Mostrando datos sin procesar."
-        })
       }
-      setIsNormalizing(false);
       
+      // Fusiona la caché existente con las nuevas correcciones
+      const finalProvinceCorrections = { ...provinceCorrectionsCache, ...newProvinceCorrections };
+      const finalProductCorrections = { ...productCorrectionsCache, ...newProductCorrections };
+
+      // --- Agregación de Datos ---
       let totalConfirmed = 0;
       let totalUnconfirmed = 0;
-      
       const dailyData: { [key: string]: { confirmed: number; unconfirmed: number } } = {};
       const provinceData: { [key: string]: { totalOrders: number; confirmedOrders: number; totalSpent: number; } } = {};
       const productData: { [key: string]: number } = {};
@@ -101,13 +153,9 @@ export default function Dashboard() {
 
       orders.forEach((order) => {
         const isOrderConfirmed = order.isConfirmed === true;
-
-        if (isOrderConfirmed) {
-          totalConfirmed++;
-        } else {
-          totalUnconfirmed++;
-        }
+        isOrderConfirmed ? totalConfirmed++ : totalUnconfirmed++;
         
+        // Daily Metrics
         if (order.createdAt && typeof order.createdAt.toDate === 'function') {
           const orderDate = order.createdAt.toDate();
           const dateStr = `${String(orderDate.getDate()).padStart(2, '0')}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${orderDate.getFullYear()}`;
@@ -115,41 +163,38 @@ export default function Dashboard() {
           isOrderConfirmed ? dailyData[dateStr].confirmed++ : dailyData[dateStr].unconfirmed++;
         }
 
+        // Province Metrics
         const rawProvince = order.province || 'Desconocida';
-        const correctedProvince = provinceCorrections[rawProvince] || rawProvince;
+        const correctedProvince = finalProvinceCorrections[rawProvince] || rawProvince;
         if (!provinceData[correctedProvince]) provinceData[correctedProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
         provinceData[correctedProvince].totalOrders++;
         provinceData[correctedProvince].totalSpent += order.totalPrice || 0;
         if (isOrderConfirmed) provinceData[correctedProvince].confirmedOrders++;
         
+        // Product Metrics
         if (order.products && Array.isArray(order.products)) {
             order.products.forEach((product: { title: string }) => {
-                const productName = product.title || 'Producto Desconocido';
-                productData[productName] = (productData[productName] || 0) + 1;
+                const rawProduct = product.title || 'Producto Desconocido';
+                const correctedProduct = finalProductCorrections[rawProduct] || rawProduct;
+                productData[correctedProduct] = (productData[correctedProduct] || 0) + 1;
             });
         }
         
+        // Personnel Metrics
         if (isOrderConfirmed && order.confirmedBy) {
             const person = order.confirmedBy || 'No especificado';
             personnelData[person] = (personnelData[person] || 0) + 1;
         }
       });
       
+      // --- Preparación de Datos para el UI ---
       const aggregatedDailyMetrics: DailyMetric[] = Object.entries(dailyData).map(([date, data]) => {
           const dailyTotal = data.confirmed + data.unconfirmed;
-          return {
-              date,
-              totalOrders: dailyTotal,
-              confirmed: data.confirmed,
-              unconfirmed: data.unconfirmed,
-              confirmationRate: dailyTotal > 0 ? (data.confirmed / dailyTotal) * 100 : 0,
-          };
+          return { date, totalOrders: dailyTotal, confirmed: data.confirmed, unconfirmed: data.unconfirmed, confirmationRate: dailyTotal > 0 ? (data.confirmed / dailyTotal) * 100 : 0 };
       }).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
 
       const aggregatedProvinceMetrics: ProvinceMetric[] = Object.entries(provinceData).map(([name, data]) => ({
-        name,
-        ...data,
-        confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0
+        name, ...data, confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0
       })).sort((a, b) => b.totalOrders - a.totalOrders);
 
       const aggregatedProductMetrics: ProductMetric[] = Object.entries(productData).map(([name, totalOrders]) => ({
@@ -160,7 +205,7 @@ export default function Dashboard() {
           name, confirmedOrders
       })).sort((a, b) => b.confirmedOrders - a.confirmedOrders);
 
-
+      // --- Actualización de Estados del UI ---
       setGlobalConfirmed(totalConfirmed);
       setGlobalUnconfirmed(totalUnconfirmed);
       setDailyMetrics(aggregatedDailyMetrics);
@@ -174,19 +219,18 @@ export default function Dashboard() {
       toast({
         variant: "destructive",
         title: "Error de Conexión",
-        description: "No se pudieron cargar las métricas. Revisa las reglas de seguridad de Firestore y tu conexión.",
+        description: "No se pudieron cargar las métricas. Revisa tu conexión y las reglas de Firestore.",
       });
       setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [toast]);
+  }, [toast, provinceCorrectionsCache, productCorrectionsCache]);
 
   const globalTotal = globalConfirmed + globalUnconfirmed;
   const globalRate = globalTotal > 0 ? (globalConfirmed / globalTotal) * 100 : 0;
   const totalSpentAllProvinces = provinceMetrics.reduce((acc, curr) => acc + curr.totalSpent, 0);
   const averageSpentPerOrder = globalTotal > 0 ? totalSpentAllProvinces / globalTotal : 0;
-
 
   if (isLoading) {
     return (
@@ -311,7 +355,7 @@ export default function Dashboard() {
             <Card className="col-span-1 md:col-span-2 lg:grid-cols-2">
               <CardHeader>
                   <CardTitle className="flex items-center"><Package className="mr-2 h-5 w-5" />Top 10 Productos</CardTitle>
-                  <CardDescription>Los productos más pedidos en todas las tiendas.</CardDescription>
+                  <CardDescription>Los productos más pedidos, con nombres normalizados por IA.</CardDescription>
               </CardHeader>
                <CardContent className="h-[350px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -321,7 +365,7 @@ export default function Dashboard() {
                         <BarChart data={productMetrics.slice(0, 10)} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis type="number" fontSize={12} />
-                          <YAxis dataKey="name" type="category" fontSize={12} tickLine={false} axisLine={false} width={100} />
+                          <YAxis dataKey="name" type="category" fontSize={12} tickLine={false} axisLine={false} width={120} interval={0} />
                           <Tooltip content={<ChartTooltipContent />} cursor={{fill: 'hsl(var(--muted))'}} />
                           <Legend verticalAlign="top" />
                           <Bar dataKey="totalOrders" name="Total Pedidos" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />

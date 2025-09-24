@@ -1,0 +1,21 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Permite que los clientes (el dashboard en el navegador) lean
+    // y los servidores (webhooks, cargas CSV) escriban en la colección de pedidos.
+    match /shopify_orders/{orderId} {
+      // Por ahora, permitimos la lectura y escritura para cualquier usuario autenticado.
+      // Puedes restringir esto más en el futuro si es necesario.
+      // Las escrituras desde el servidor (Admin SDK) bypassan estas reglas de todas formas.
+      allow read, write: if request.auth != null; // Cambiado para seguridad básica
+    }
+
+    // Regla de respaldo para cualquier otro documento.
+    // Por defecto, denegar todo para mayor seguridad.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

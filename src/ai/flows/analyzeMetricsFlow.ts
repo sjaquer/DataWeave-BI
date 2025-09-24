@@ -45,28 +45,35 @@ const analyzeMetricsFlow = ai.defineFlow(
               skip_empty_lines: true,
             });
             
-            const orders: Order[] = records.map((r: any) => ({
-                // Robust ID handling: check for common variations of the ID column name.
+            const orders: Order[] = records.map((r: any) => {
+              // Lógica de mapeo robusta para evitar errores con 'undefined'
+              const billingName = r['Billing Name'] || '';
+              const nameParts = billingName.split(' ');
+              const firstName = nameParts.shift() || '';
+              const lastName = nameParts.join(' ');
+
+              return {
                 id: r.id || r.ID || r['Order ID'] || 0,
-                name: r.Name,
-                created_at: r['Created at'],
-                total_price: r['Total'],
+                name: r.Name || '',
+                created_at: r['Created at'] || new Date().toISOString(),
+                total_price: r['Total'] || '0',
                 customer: {
-                  first_name: r['Billing Name']?.split(' ')[0],
-                  last_name: r['Billing Name']?.split(' ').slice(1).join(' '),
+                  first_name: firstName,
+                  last_name: lastName,
                 },
                 shipping_address: {
-                    province: r['Shipping Province Name'],
-                    city: r['Shipping City'],
-                    zip: r['Shipping Zip'],
-                    country: r['Shipping Country'],
+                    province: r['Shipping Province Name'] || '',
+                    city: r['Shipping City'] || '',
+                    zip: r['Shipping Zip'] || '',
+                    country: r['Shipping Country'] || '',
                 },
-                line_items: [{ // This is a simplification. Real logic might handle multiple items.
-                    title: r['Lineitem name'],
-                    quantity: parseInt(r['Lineitem quantity'], 10),
-                    price: r['Lineitem price']
+                line_items: [{
+                    title: r['Lineitem name'] || 'N/A',
+                    quantity: parseInt(r['Lineitem quantity'] || '0', 10),
+                    price: r['Lineitem price'] || '0'
                 }]
-            }));
+              };
+            });
             allOrders.push(...orders);
         }
         

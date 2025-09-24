@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { onSnapshot, collection, Timestamp } from "firebase/firestore";
-import { Loader, CheckCircle, XCircle, Percent, CalendarDays, TrendingUp, TrendingDown } from "lucide-react";
+import { onSnapshot, collection } from "firebase/firestore";
+import { Loader, CheckCircle, XCircle, Percent, CalendarDays, TrendingUp } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -33,35 +33,48 @@ export default function Dashboard() {
     const unsubscribe = onSnapshot(ordersCollectionRef, (querySnapshot) => {
       let totalConfirmed = 0;
       let totalUnconfirmed = 0;
+      // Objeto para agregar datos por día. La clave es la fecha en formato 'DD-MM-YYYY'.
       const dailyData: { [key: string]: { confirmed: number; unconfirmed: number } } = {};
 
       querySnapshot.forEach((doc) => {
         const order = doc.data();
         
-        if (!order.createdAt || typeof order.createdAt.toDate !== 'function') {
-          return; 
-        }
-        
-        const orderDate = order.createdAt.toDate();
-        const dateStr = `${String(orderDate.getDate()).padStart(2, '0')}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${orderDate.getFullYear()}`;
+        // 1. Clasificar como confirmado o no confirmado.
+        // Si 'isConfirmed' es estrictamente true, es confirmado. Cualquier otro caso, no confirmado.
+        const isOrderConfirmed = order.isConfirmed === true;
 
-        if (!dailyData[dateStr]) {
-          dailyData[dateStr] = { confirmed: 0, unconfirmed: 0 };
-        }
-
-        if (order.isConfirmed === true) {
+        if (isOrderConfirmed) {
           totalConfirmed++;
-          dailyData[dateStr].confirmed++;
         } else {
           totalUnconfirmed++;
-          dailyData[dateStr].unconfirmed++;
+        }
+
+        // 2. Procesar y agrupar por fecha.
+        if (order.createdAt && typeof order.createdAt.toDate === 'function') {
+          const orderDate = order.createdAt.toDate();
+          // Formato de fecha consistente 'DD-MM-YYYY'
+          const dateStr = `${String(orderDate.getDate()).padStart(2, '0')}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${orderDate.getFullYear()}`;
+
+          // Inicializar el contador para un nuevo día si no existe.
+          if (!dailyData[dateStr]) {
+            dailyData[dateStr] = { confirmed: 0, unconfirmed: 0 };
+          }
+
+          // Incrementar el contador diario correspondiente.
+          if (isOrderConfirmed) {
+            dailyData[dateStr].confirmed++;
+          } else {
+            dailyData[dateStr].unconfirmed++;
+          }
         }
       });
 
+      // 3. Calcular métricas globales.
       const totalOrders = totalConfirmed + totalUnconfirmed;
       const overallRate = totalOrders > 0 ? (totalConfirmed / totalOrders) * 100 : 0;
 
-      const aggregatedMetrics = Object.entries(dailyData).map(([date, data]) => {
+      // 4. Calcular métricas diarias y formatear para la tabla.
+      const aggregatedMetrics: DailyMetric[] = Object.entries(dailyData).map(([date, data]) => {
           const dailyTotal = data.confirmed + data.unconfirmed;
           const rate = dailyTotal > 0 ? (data.confirmed / dailyTotal) * 100 : 0;
           return {
@@ -71,8 +84,10 @@ export default function Dashboard() {
               unconfirmed: data.unconfirmed,
               confirmationRate: parseFloat(rate.toFixed(2)),
           };
+      // Ordenar por fecha, de más reciente a más antiguo.
       }).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
 
+      // 5. Actualizar el estado del componente.
       setGlobalConfirmed(totalConfirmed);
       setGlobalUnconfirmed(totalUnconfirmed);
       setGlobalRate(overallRate);
@@ -84,7 +99,7 @@ export default function Dashboard() {
       toast({
         variant: "destructive",
         title: "Error de Conexión",
-        description: "No se pudieron cargar las métricas. La base de datos puede estar inaccesible.",
+        description: "No se pudieron cargar las métricas. Revisa las reglas de seguridad de Firestore y tu conexión.",
       });
       setIsLoading(false);
     });
@@ -129,12 +144,12 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-bold">{globalUnconfirmed.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">Total de pedidos pendientes de confirmación.</p>
+              <p className="text-xs text-muted-foreground">Total de pedidos pendientes o sin confirmar.</p>
             </CardContent>
           </Card>
           <Card className="col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Tasa de Confirmación</CardTitle>
+              <CardTitle className="text-sm font-medium">Tasa de Confirmación Global</CardTitle>
               <Percent className="h-5 w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -195,7 +210,7 @@ export default function Dashboard() {
                     ) : (
                       <TableRow>
                         <TableCell colSpan={5} className="h-24 text-center">
-                          No se encontraron datos para los días especificados.
+                          No se encontraron datos de pedidos para mostrar.
                         </TableCell>
                       </TableRow>
                     )}

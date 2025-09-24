@@ -20,7 +20,7 @@ import type { DailyMetric, ProvinceMetric, ProductMetric, PersonnelMetric, MiscM
 
 const CACHE_KEY = 'dashboardMetricsCache';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000; // 15 minutos
-const MAIN_STORES = ["dearel", "blumi", "novi", "trazo", "cumbre"];
+const MAIN_STORES = ["dearel", "blumi", "novi", "trazto", "cumbre"];
 
 
 export default function Dashboard() {

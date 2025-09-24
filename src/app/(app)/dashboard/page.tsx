@@ -2,14 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { onSnapshot, collection } from "firebase/firestore";
-import { Loader, CheckCircle, XCircle, Percent, CalendarDays, TrendingUp, Upload, MapPin, Package, UserCheck, Banknote } from "lucide-react";
+import { Loader, CheckCircle, XCircle, Percent, CalendarDays, Upload, MapPin, Package, UserCheck, Banknote } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import DataUploader from "@/components/DataUploader";
+import { normalizeProvinces } from "@/ai/flows/normalizeProvinceFlow";
+
 
 interface DailyMetric {
   date: string;
@@ -23,6 +27,7 @@ interface ProvinceMetric {
     name: string;
     totalOrders: number;
     confirmedOrders: number;
+
     confirmationRate: number;
     totalSpent: number;
 }
@@ -40,6 +45,7 @@ interface PersonnelMetric {
 
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
+  const [isNormalizing, setIsNormalizing] = useState(false);
   const [globalConfirmed, setGlobalConfirmed] = useState(0);
   const [globalUnconfirmed, setGlobalUnconfirmed] = useState(0);
   const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
@@ -52,7 +58,31 @@ export default function Dashboard() {
     setIsLoading(true);
     const ordersCollectionRef = collection(db, "shopify_orders");
 
-    const unsubscribe = onSnapshot(ordersCollectionRef, (querySnapshot) => {
+    const unsubscribe = onSnapshot(ordersCollectionRef, async (querySnapshot) => {
+      if (querySnapshot.empty) {
+        setIsLoading(false);
+        return;
+      }
+      
+      const orders = querySnapshot.docs.map(doc => doc.data());
+      const uniqueProvinces = [...new Set(orders.map(order => order.province || 'Desconocida').filter(p => p !== 'Desconocida'))];
+      
+      setIsNormalizing(true);
+      let provinceCorrections: Record<string, string> = {};
+      try {
+        const result = await normalizeProvinces({ provinceNames: uniqueProvinces });
+        provinceCorrections = result.corrections;
+      } catch (aiError) {
+        console.warn("AI normalization failed, falling back to raw province names:", aiError);
+        uniqueProvinces.forEach(p => provinceCorrections[p] = p);
+        toast({
+            variant: "destructive",
+            title: "Error de IA",
+            description: "La normalización de provincias falló. Mostrando datos sin procesar."
+        })
+      }
+      setIsNormalizing(false);
+      
       let totalConfirmed = 0;
       let totalUnconfirmed = 0;
       
@@ -61,8 +91,7 @@ export default function Dashboard() {
       const productData: { [key: string]: number } = {};
       const personnelData: { [key: string]: number } = {};
 
-      querySnapshot.forEach((doc) => {
-        const order = doc.data();
+      orders.forEach((order) => {
         const isOrderConfirmed = order.isConfirmed === true;
 
         if (isOrderConfirmed) {
@@ -71,7 +100,6 @@ export default function Dashboard() {
           totalUnconfirmed++;
         }
         
-        // --- Análisis Diario ---
         if (order.createdAt && typeof order.createdAt.toDate === 'function') {
           const orderDate = order.createdAt.toDate();
           const dateStr = `${String(orderDate.getDate()).padStart(2, '0')}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${orderDate.getFullYear()}`;
@@ -79,14 +107,13 @@ export default function Dashboard() {
           isOrderConfirmed ? dailyData[dateStr].confirmed++ : dailyData[dateStr].unconfirmed++;
         }
 
-        // --- Análisis Demográfico (Provincia) ---
-        const province = order.province || 'Desconocida';
-        if (!provinceData[province]) provinceData[province] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
-        provinceData[province].totalOrders++;
-        provinceData[province].totalSpent += order.totalPrice || 0;
-        if (isOrderConfirmed) provinceData[province].confirmedOrders++;
+        const rawProvince = order.province || 'Desconocida';
+        const correctedProvince = provinceCorrections[rawProvince] || rawProvince;
+        if (!provinceData[correctedProvince]) provinceData[correctedProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
+        provinceData[correctedProvince].totalOrders++;
+        provinceData[correctedProvince].totalSpent += order.totalPrice || 0;
+        if (isOrderConfirmed) provinceData[correctedProvince].confirmedOrders++;
         
-        // --- Análisis de Productos ---
         if (order.products && Array.isArray(order.products)) {
             order.products.forEach((product: { title: string }) => {
                 const productName = product.title || 'Producto Desconocido';
@@ -94,14 +121,12 @@ export default function Dashboard() {
             });
         }
         
-        // --- Análisis de Personal ---
         if (isOrderConfirmed && order.confirmedBy) {
             const person = order.confirmedBy || 'No especificado';
             personnelData[person] = (personnelData[person] || 0) + 1;
         }
       });
       
-      // --- Procesar y Ordenar Métricas ---
       const aggregatedDailyMetrics: DailyMetric[] = Object.entries(dailyData).map(([date, data]) => {
           const dailyTotal = data.confirmed + data.unconfirmed;
           return {
@@ -161,7 +186,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
               <Loader className="h-8 w-8 animate-spin text-primary" />
               <p className="text-muted-foreground text-lg">
-                Cargando métricas...
+                {isNormalizing ? "Normalizando datos con IA..." : "Cargando métricas..."}
               </p>
           </div>
       </div>
@@ -230,83 +255,54 @@ export default function Dashboard() {
                 <DataUploader />
               </CardContent>
           </Card>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 col-span-1 md:col-span-2 lg:col-span-4 gap-6">
-                <Card className="lg:col-span-1">
-                    <CardHeader>
-                        <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Top Provincias por Pedidos</CardTitle>
-                        <CardDescription>Provincias con más pedidos y su tasa de confirmación.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="overflow-auto max-h-[300px]">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Provincia</TableHead>
-                                    <TableHead className="text-center">Pedidos</TableHead>
-                                    <TableHead className="text-right">Tasa Conf.</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {provinceMetrics.map(p => (
-                                    <TableRow key={p.name}>
-                                        <TableCell className="font-medium">{p.name}</TableCell>
-                                        <TableCell className="text-center">{p.totalOrders}</TableCell>
-                                        <TableCell className="text-right">{p.confirmationRate.toFixed(1)}%</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-                <Card className="lg:col-span-1">
-                     <CardHeader>
-                        <CardTitle className="flex items-center"><Package className="mr-2 h-5 w-5" />Top Productos Pedidos</CardTitle>
-                        <CardDescription>Productos que aparecen con más frecuencia en los pedidos.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="overflow-auto max-h-[300px]">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Producto</TableHead>
-                                    <TableHead className="text-right">Nº de Pedidos</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                 {productMetrics.slice(0, 10).map(p => (
-                                    <TableRow key={p.name}>
-                                        <TableCell className="font-medium truncate" style={{maxWidth: '200px'}}>{p.name}</TableCell>
-                                        <TableCell className="text-right">{p.totalOrders}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-            </div>
             
-            <Card className="col-span-1 md:col-span-2 lg:col-span-4">
-                  <CardHeader>
-                    <CardTitle className="flex items-center"><UserCheck className="mr-2 h-5 w-5" />Rendimiento del Personal</CardTitle>
-                    <CardDescription>Número de pedidos confirmados por cada miembro del equipo.</CardDescription>
-                </CardHeader>
-                <CardContent className="overflow-auto max-h-[300px]">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Personal</TableHead>
-                                <TableHead className="text-right">Pedidos Confirmados</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                             {personnelMetrics.map(p => (
-                                <TableRow key={p.name}>
-                                    <TableCell className="font-medium">{p.name}</TableCell>
-                                    <TableCell className="text-right">{p.confirmedOrders}</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </CardContent>
+            <Card className="col-span-1 md:col-span-2">
+              <CardHeader>
+                  <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
+                  <CardDescription>Top 10 provincias con más pedidos y su tasa de confirmación.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[350px] w-full">
+                 <ResponsiveContainer>
+                    <BarChart data={provinceMetrics.slice(0, 10)} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
+                      <YAxis yAxisId="left" orientation="left" stroke="hsl(var(--primary))" fontSize={12} />
+                      <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-1))" fontSize={12} />
+                      <Tooltip 
+                        content={<ChartTooltipContent 
+                          formatter={(value, name) => (
+                            <div className="flex flex-col">
+                              <span className="font-bold">{name === 'totalOrders' ? 'Total Pedidos' : 'Tasa Confirmación'}</span>
+                              <span>{name === 'confirmationRate' ? `${(value as number).toFixed(1)}%` : value}</span>
+                            </div>
+                          )}
+                        />}
+                      />
+                      <Legend />
+                      <Bar yAxisId="left" dataKey="totalOrders" name="Pedidos Totales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                      <Bar yAxisId="right" dataKey="confirmationRate" name="Tasa de Confirmación (%)" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="col-span-1 md:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center"><UserCheck className="mr-2 h-5 w-5" />Rendimiento del Personal</CardTitle>
+                  <CardDescription>Número de pedidos confirmados por cada miembro del equipo.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[350px] w-full">
+                 <ResponsiveContainer>
+                    <BarChart data={personnelMetrics.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" fontSize={12} />
+                      <YAxis dataKey="name" type="category" fontSize={12} tickLine={false} axisLine={false} />
+                      <Tooltip content={<ChartTooltipContent />} cursor={{fill: 'hsl(var(--muted))'}} />
+                      <Legend />
+                      <Bar dataKey="confirmedOrders" name="Pedidos Confirmados" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+              </CardContent>
             </Card>
 
            <Card className="col-span-1 md:col-span-2 lg:col-span-4">

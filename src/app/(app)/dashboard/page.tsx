@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { DailyMetric, ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics } from "@/ai/schemas/getMetricsSchema";
+import type { DailyMetric, ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput } from "@/ai/schemas/getMetricsSchema";
 
 const CACHE_KEY = 'dashboardMetricsCache';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000; // 15 minutos
@@ -32,7 +32,12 @@ export default function Dashboard() {
   
   const { toast } = useToast();
 
-  const processAndSetMetrics = useCallback((data: any) => {
+  const processAndSetMetrics = useCallback((data: GetMetricsOutput | null) => {
+      if (!data) {
+        setIsLoading(false);
+        return;
+      }
+      
       // --- Normalización Local de Provincias ---
       const provinceCorrectionsCache: Record<string, string> = {};
       const uniqueProvinces = [...new Set(data.provinceMetrics.map((p: ProvinceMetric) => p.name).filter((p: string) => p !== 'Desconocida'))];

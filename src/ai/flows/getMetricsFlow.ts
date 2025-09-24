@@ -9,7 +9,7 @@
 
 import { db } from '@/lib/firebase-admin';
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 
 // --- Definición de Esquemas de Salida ---
 
@@ -195,5 +195,7 @@ export async function getMetrics(): Promise<GetMetricsOutput> {
     return getMetricsFlow();
 }
 
+
+    
 
     

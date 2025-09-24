@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Loader, CheckCircle, XCircle, Percent, CalendarDays, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store } from "lucide-react";
+import { Loader, CheckCircle, XCircle, Percent, CalendarDays, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -30,7 +30,8 @@ export default function Dashboard() {
   const [miscMetrics, setMiscMetrics] = useState<MiscMetrics | null>(null);
   const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
   const [provinceMetrics, setProvinceMetrics] = useState<ProvinceMetric[]>([]);
-  const [productMetrics, setProductMetrics] = useState<ProductMetric[]>([]);
+  const [mostRequestedProducts, setMostRequestedProducts] = useState<ProductMetric[]>([]);
+  const [mostPurchasedProducts, setMostPurchasedProducts] = useState<ProductMetric[]>([]);
   const [personnelMetrics, setPersonnelMetrics] = useState<PersonnelMetric[]>([]);
   const [storeMetrics, setStoreMetrics] = useState<StoreMetric[]>([]);
   
@@ -76,7 +77,8 @@ export default function Dashboard() {
       setMiscMetrics(data.miscMetrics);
       setDailyMetrics(data.dailyMetrics);
       setProvinceMetrics(aggregatedProvinceMetrics);
-      setProductMetrics(data.productMetrics);
+      setMostRequestedProducts(data.mostRequestedProducts || []);
+      setMostPurchasedProducts(data.mostPurchasedProducts || []);
       setPersonnelMetrics(data.personnelMetrics);
       setStoreMetrics(data.storeMetrics || []);
       setIsLoading(false);
@@ -209,6 +211,21 @@ export default function Dashboard() {
       </Table>
     );
   };
+  
+  const renderProductList = (products: ProductMetric[]) => (
+    <ul className="space-y-3">
+      {products.length > 0 ? (
+        products.slice(0, 5).map((product, index) => (
+          <li key={product.name} className="flex justify-between items-center text-sm">
+            <span className="truncate pr-4">{index + 1}. {product.name}</span>
+            <span className="font-bold text-primary">{product.totalOrders}</span>
+          </li>
+        ))
+      ) : (
+        <li className="text-center text-muted-foreground">No hay datos.</li>
+      )}
+    </ul>
+  );
 
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
@@ -375,27 +392,24 @@ export default function Dashboard() {
               </CardContent>
             </Card>
             
-            <Card className="col-span-1 md:col-span-4 lg:col-span-4">
-              <CardHeader>
-                  <CardTitle className="flex items-center"><Package className="mr-2 h-5 w-5" />Top 10 Productos</CardTitle>
-                  <CardDescription>Los productos más pedidos.</CardDescription>
-              </CardHeader>
-               <CardContent className="h-[350px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                    <ChartContainer config={{
-                        totalOrders: { label: "Total Pedidos", color: "hsl(var(--chart-2))" }
-                    }}>
-                        <BarChart data={productMetrics.slice(0, 10)} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis type="number" fontSize={12} />
-                          <YAxis dataKey="name" type="category" fontSize={12} tickLine={false} axisLine={false} width={120} interval={0} />
-                          <Tooltip content={<ChartTooltipContent />} cursor={{fill: 'hsl(var(--muted))'}} />
-                          <Legend verticalAlign="top" />
-                          <Bar dataKey="totalOrders" name="Total Pedidos" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
-                        </BarChart>
-                    </ChartContainer>
-                  </ResponsiveContainer>
-              </CardContent>
+             <Card className="col-span-1 md:col-span-2">
+                <CardHeader>
+                    <CardTitle className="flex items-center"><TrendingUp className="mr-2 h-5 w-5" />Top 5 Productos Más Pedidos</CardTitle>
+                    <CardDescription>Productos con mayor demanda (confirmados o no).</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {renderProductList(mostRequestedProducts)}
+                </CardContent>
+            </Card>
+
+            <Card className="col-span-1 md:col-span-2">
+                <CardHeader>
+                    <CardTitle className="flex items-center"><ShoppingCart className="mr-2 h-5 w-5" />Top 5 Productos Más Comprados</CardTitle>
+                    <CardDescription>Productos con más ventas confirmadas.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {renderProductList(mostPurchasedProducts)}
+                </CardContent>
             </Card>
 
 

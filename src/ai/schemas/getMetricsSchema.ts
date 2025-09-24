@@ -58,7 +58,8 @@ export type StoreMetric = z.infer<typeof StoreMetricSchema>;
 export const GetMetricsOutputSchema = z.object({
     dailyMetrics: z.array(DailyMetricSchema),
     provinceMetrics: z.array(ProvinceMetricSchema),
-    productMetrics: z.array(ProductMetricSchema),
+    mostRequestedProducts: z.array(ProductMetricSchema),
+    mostPurchasedProducts: z.array(ProductMetricSchema),
     personnelMetrics: z.array(PersonnelMetricSchema),
     storeMetrics: z.array(StoreMetricSchema),
     miscMetrics: MiscMetricsSchema

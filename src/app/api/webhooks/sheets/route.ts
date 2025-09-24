@@ -4,7 +4,7 @@ import type { ConfirmedOrderInfo } from '@/lib/firestore';
 
 /**
  * Endpoint para recibir los webhooks desde Google Sheets cuando se confirma un pedido.
- * Espera un array de objetos con `PEDIDO` y opcionalmente `CONFIRMADO_POR`.
+ * Espera un array de objetos con `PEDIDO`, `TIENDA` y `ATENDIDO`.
  */
 export async function POST(req: Request) {
   try {

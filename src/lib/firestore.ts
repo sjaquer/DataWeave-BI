@@ -38,7 +38,8 @@ export interface Order {
 
 export interface ConfirmedOrderInfo {
   PEDIDO: string;
-  CONFIRMADO_POR?: string;
+  TIENDA: string;
+  ATENDIDO?: string;
 }
 
 
@@ -51,7 +52,9 @@ function normalizeOrderNumber(name: string): string {
 
 function getShopifyOrderDocId(orderName: string, storeId: string): string {
     const normalizedNumber = normalizeOrderNumber(orderName);
-    return `${storeId}-${normalizedNumber}`;
+    // Normalizamos el storeId para que sea apto para un ID de documento.
+    const normalizedStoreId = storeId.toLowerCase().replace(/\s+/g, '-');
+    return `${normalizedStoreId}-${normalizedNumber}`;
 }
 
 
@@ -90,6 +93,7 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
   };
 
   try {
+    // Usamos merge: true para no sobrescribir los datos de confirmación si ya existen.
     await writeBatch(db).set(orderDocRef, orderData, { merge: true }).commit();
     console.log(`[Firestore] Pedido ${order.name} de ${storeId} guardado/actualizado en 'shopify_orders'.`);
   } catch (error) {
@@ -144,60 +148,56 @@ export async function updateConfirmedOrders(
 ): Promise<{ status: string; message: string }> {
 
   if (!confirmedOrders || confirmedOrders.length === 0) {
-    return { status: 'success', message: 'No se encontraron números de pedido válidos para procesar.' };
+    return { status: 'success', message: 'No se encontraron pedidos válidos para procesar.' };
   }
   
   const batch = writeBatch(db);
   let processedCount = 0;
   let notFoundCount = 0;
-
-  const storeIds = Array.from({length: 5}, (_, i) => `tienda-${i+1}`);
-  storeIds.push('dearel'); // Añadimos dearel
+  let alreadyConfirmedCount = 0;
 
   for (const item of confirmedOrders) {
     const rawOrderName = String(item.PEDIDO || '');
-    if (!rawOrderName) continue;
-    
-    let orderFound = false;
-    for (const storeId of storeIds) {
-        const orderDocId = getShopifyOrderDocId(rawOrderName, storeId);
-        const orderDocRef = doc(db, 'shopify_orders', orderDocId);
+    const storeId = item.TIENDA;
 
-        const docSnap = await getDoc(orderDocRef);
-        
-        if (docSnap.exists() && !docSnap.data().isConfirmed) {
+    if (!rawOrderName || !storeId) {
+        console.warn(`[Firestore] Item ignorado por falta de PEDIDO o TIENDA:`, item);
+        continue;
+    };
+    
+    const orderDocId = getShopifyOrderDocId(rawOrderName, storeId);
+    const orderDocRef = doc(db, 'shopify_orders', orderDocId);
+
+    const docSnap = await getDoc(orderDocRef);
+    
+    if (docSnap.exists()) {
+        if (!docSnap.data().isConfirmed) {
             batch.update(orderDocRef, {
                 isConfirmed: true,
                 confirmedAt: Timestamp.now(),
-                confirmedBy: item.CONFIRMADO_POR || 'No especificado'
+                confirmedBy: item.ATENDIDO || 'No especificado'
             });
             processedCount++;
-            orderFound = true;
-            break; 
-        } else if (docSnap.exists() && docSnap.data().isConfirmed) {
-            orderFound = true; 
-            break;
+        } else {
+            alreadyConfirmedCount++;
         }
-    }
-    if (!orderFound) {
+    } else {
       notFoundCount++;
-      console.warn(`[Firestore] Pedido ${rawOrderName} no fue encontrado en ninguna de las tiendas o ya estaba confirmado.`);
+      console.warn(`[Firestore] Pedido ${rawOrderName} de la tienda ${storeId} no fue encontrado.`);
     }
   }
 
-  if (processedCount === 0 && notFoundCount > 0) {
-      return { status: 'success', message: `No se actualizó ningún pedido. ${notFoundCount} pedidos no fueron encontrados o ya estaban confirmados.` };
-  }
-  
-  if (processedCount === 0 && notFoundCount === 0) {
-      return { status: 'success', message: 'No se recibieron pedidos para procesar.' };
+  if (processedCount > 0) {
+    await batch.commit();
   }
 
-  await batch.commit();
+  let message = `${processedCount} pedidos fueron marcados como confirmados.`;
+  if (notFoundCount > 0) message += ` ${notFoundCount} no se encontraron.`;
+  if (alreadyConfirmedCount > 0) message += ` ${alreadyConfirmedCount} ya estaban confirmados.`;
 
   return {
     status: 'success',
-    message: `${processedCount} pedidos fueron marcados como confirmados. ${notFoundCount > 0 ? `${notFoundCount} no se encontraron o ya estaban confirmados.` : ''}`,
+    message,
   };
 }
 
@@ -209,6 +209,9 @@ export async function processShopifyCsv(orders: Order[], storeId: string) {
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
   for (const order of orders) {
+    // Asegurarse de que el objeto order y created_at existen.
+    if (!order || !order.created_at) continue;
+
     const orderDate = new Date(order.created_at);
     if (orderDate < sixMonthsAgo) continue;
 
@@ -231,11 +234,10 @@ export async function processShopifyCsv(orders: Order[], storeId: string) {
             quantity: item.quantity || 0,
             price: parseFloat(item.price || '0')
         })) || [],
-        isConfirmed: false,
-        confirmedAt: null,
-        confirmedBy: null,
     };
 
+    // Usamos merge: true para no sobrescribir los datos de confirmación
+    // si un pedido se sube dos veces.
     batch.set(orderDocRef, orderData, { merge: true });
   }
 

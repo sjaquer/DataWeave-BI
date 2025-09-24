@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, Trash2, Upload, RefreshCw } from "lucide-react";
+import { Loader, TrendingUp, CheckCircle, Percent, AlertCircle, Trash2, Upload } from "lucide-react";
 import { onSnapshot, collection, query, where, Timestamp } from "firebase/firestore";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -24,7 +24,6 @@ import {
 import { db } from "@/lib/firebase";
 import { deleteOldMetrics } from "@/lib/firestore";
 import DataUploader from "@/components/DataUploader";
-import SyncButton from "@/components/SyncButton";
 
 interface Metric {
   date: string;
@@ -152,21 +151,7 @@ export default function Dashboard() {
           </AlertDescription>
         </Alert>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center">
-                        <RefreshCw className="mr-2 h-5 w-5" />
-                        Sincronización con API de Shopify
-                    </CardTitle>
-                    <CardDescription>
-                        Usa este botón para hacer una carga única del historial de los últimos 6 meses de una tienda específica, directamente desde la API de Shopify.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <SyncButton />
-                </CardContent>
-            </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center">

@@ -12,7 +12,7 @@ import {
   getDoc,
   query,
   where,
-} from 'firebase/firestore';
+} from 'firebase-admin/firestore';
 
 
 export interface AnalyzeAndStoreMetricsInput {

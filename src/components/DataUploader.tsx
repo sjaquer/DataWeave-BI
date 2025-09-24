@@ -8,7 +8,7 @@ import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { analyzeMetrics } from "@/ai/flows/analyzeMetricsFlow";
+import { analyzeAndStoreMetrics } from "@/lib/firestore";
 import { Loader, Upload } from "lucide-react";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
@@ -58,7 +58,7 @@ export default function DataUploader() {
         throw new Error("No se han seleccionado archivos de Shopify válidos.");
       }
 
-      const result = await analyzeMetrics({
+      const result = await analyzeAndStoreMetrics({
         storeId: values.storeId,
         shopifyDataUris,
       });
@@ -80,7 +80,6 @@ export default function DataUploader() {
     } finally {
       setIsProcessing(false);
       form.reset();
-      // Reset the file input manually
       const fileInput = document.getElementById('shopifyFiles-input') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
     }

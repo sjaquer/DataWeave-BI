@@ -1,6 +1,7 @@
 'use server';
 
-import { db } from '@/lib/firebase-admin'; // Cambiado para usar siempre la instancia de admin
+import { db } from '@/lib/firebase-admin';
+import { parse } from 'csv-parse/sync';
 import {
   collection,
   doc,
@@ -13,28 +14,16 @@ import {
   where,
 } from 'firebase/firestore';
 
-export interface Order {
-  id: number;
-  name: string;
-  created_at: string;
-  total_price: string;
-  customer?: {
-    first_name?: string;
-    last_name?: string;
-  };
-  shipping_address?: {
-    city?: string;
-    province?: string;
-    zip?: string;
-    country?: string;
-  };
-  line_items?: {
-    title?: string;
-    quantity?: number;
-    price?: string;
-  }[];
+
+export interface AnalyzeAndStoreMetricsInput {
+  storeId: string;
+  shopifyDataUris: string[];
 }
 
+export interface AnalyzeAndStoreMetricsOutput {
+  status: string;
+  message: string;
+}
 
 export interface ConfirmedOrderInfo {
   PEDIDO: string;
@@ -58,7 +47,7 @@ function getShopifyOrderDocId(orderName: string, storeId: string): string {
 }
 
 
-export async function processNewShopifyOrder(order: Order, storeId: string) {
+export async function processNewShopifyOrder(order: any, storeId: string) {
   const orderDate = new Date(order.created_at);
 
   const sixMonthsAgo = new Date();
@@ -151,7 +140,6 @@ export async function updateConfirmedOrders(
 
   let orders = confirmedOrders;
 
-  // Si no es un array, lo envolvemos en uno. Esto da flexibilidad al endpoint.
   if (!Array.isArray(orders)) {
     orders = [orders];
   }
@@ -199,7 +187,6 @@ export async function updateConfirmedOrders(
       }
     } catch (e) {
        console.error(`Error al obtener el documento ${orderDocId}:`, e);
-       // Continúa con el siguiente item para no detener todo el lote por un solo error.
        continue;
     }
   }
@@ -219,41 +206,83 @@ export async function updateConfirmedOrders(
 }
 
 
-
-export async function processShopifyCsv(orders: Order[], storeId: string) {
-  const batch = writeBatch(db);
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-
-  for (const order of orders) {
-    if (!order || !order.created_at) continue;
-
-    const orderDate = new Date(order.created_at);
-    if (orderDate < sixMonthsAgo) continue;
-
-    const orderDocId = getShopifyOrderDocId(order.name, storeId);
-    const orderDocRef = doc(db, 'shopify_orders', orderDocId);
-    
-    const orderData = {
-        storeId: storeId,
-        orderId: order.id,
-        orderName: order.name,
-        createdAt: Timestamp.fromDate(orderDate),
-        totalPrice: parseFloat(order.total_price || '0'),
-        customerName: `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim(),
-        province: order.shipping_address?.province || 'N/A',
-        city: order.shipping_address?.city || 'N/A',
-        zip: order.shipping_address?.zip || 'N/A',
-        country: order.shipping_address?.country || 'N/A',
-        products: order.line_items?.map(item => ({ 
-            title: item.title || 'N/A', 
-            quantity: item.quantity || 0,
-            price: parseFloat(item.price || '0')
-        })) || [],
-    };
-
-    batch.set(orderDocRef, orderData, { merge: true });
+export async function analyzeAndStoreMetrics(
+  input: AnalyzeAndStoreMetricsInput
+): Promise<AnalyzeAndStoreMetricsOutput> {
+  let totalProcessedOrders = 0;
+  const { storeId, shopifyDataUris } = input;
+  
+  if (!shopifyDataUris || shopifyDataUris.length === 0) {
+    return { status: 'error', message: 'No se proporcionaron archivos de Shopify.' };
+  }
+  if (!storeId) {
+    return { status: 'error', message: 'No se proporcionó el ID de la tienda.' };
   }
 
-  await batch.commit();
+  try {
+    const batch = writeBatch(db);
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    for (const dataUri of shopifyDataUris) {
+      const csvData = Buffer.from(dataUri.split(',')[1], 'base64').toString('utf-8');
+      const records = parse(csvData, {
+        columns: true,
+        skip_empty_lines: true,
+      });
+      
+      for (const r of records) {
+        const orderDate = new Date(r['Created at'] || '');
+        if (!r['Created at'] || orderDate < sixMonthsAgo) {
+          continue; // Ignorar registros sin fecha o muy antiguos
+        }
+
+        const orderId = r.id || r.ID || r['Order ID'];
+        if (!orderId) {
+            continue; // Ignorar registros sin un ID de pedido identificable
+        }
+
+        const orderDocId = getShopifyOrderDocId(r.Name || '', storeId);
+        const orderDocRef = doc(db, 'shopify_orders', orderDocId);
+
+        const billingName = r['Billing Name'] || '';
+        const nameParts = billingName.split(' ');
+        const firstName = nameParts.shift() || '';
+        const lastName = nameParts.join(' ');
+
+        const orderData = {
+          storeId: storeId,
+          orderId: orderId,
+          orderName: r.Name || '',
+          createdAt: Timestamp.fromDate(orderDate),
+          totalPrice: parseFloat(r.Total || '0'),
+          customerName: `${firstName} ${lastName}`.trim(),
+          province: r['Shipping Province Name'] || 'N/A',
+          city: r['Shipping City'] || 'N/A',
+          zip: r['Shipping Zip'] || 'N/A',
+          country: r['Shipping Country'] || 'N/A',
+          products: [{ // Esto asume que el CSV exportado tiene una línea por producto, lo cual puede no ser cierto.
+              title: r['Lineitem name'] || 'N/A', 
+              quantity: parseInt(r['Lineitem quantity'] || '0', 10),
+              price: parseFloat(r['Lineitem price'] || '0')
+          }],
+          // isConfirmed y otros se dejan fuera para que merge:true no los sobreescriba si ya existen
+        };
+        batch.set(orderDocRef, orderData, { merge: true });
+        totalProcessedOrders++;
+      }
+    }
+    
+    await batch.commit();
+
+    return {
+      status: 'success',
+      message: `Se procesaron y guardaron ${totalProcessedOrders} pedidos de Shopify para la tienda ${storeId}.`,
+    };
+
+  } catch (e: any) {
+    const errorMessage = `Error procesando los archivos de Shopify: ${e.message}`;
+    console.error(errorMessage, e);
+    return { status: 'error', message: errorMessage };
+  }
 }

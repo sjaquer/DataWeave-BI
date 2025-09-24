@@ -1,23 +1,25 @@
 'use server';
 /**
- * @fileOverview Flujo para procesar cargas masivas de archivos CSV de Shopify.
- *
- * - analyzeMetrics - Procesa el archivo CSV y lo guarda en la colección `shopify_orders`.
+ * @fileOverview Este archivo está obsoleto para la carga de CSV. La lógica se ha movido a /lib/firestore.ts.
+ * Se mantiene por si se reutiliza para otras funcionalidades de Genkit en el futuro.
  */
 import {ai} from '@/ai/genkit';
-import {parse} from 'csv-parse/sync';
 import {
   AnalyzeMetricsInputSchema,
   AnalyzeMetricsOutputSchema,
   type AnalyzeMetricsInput,
   type AnalyzeMetricsOutput,
 } from '@/ai/schemas/analyzeMetricsSchema';
-import {processShopifyCsv} from '@/lib/firestore';
-import type { Order } from '@/lib/firestore';
 
-// Función que será llamada desde la UI
+// Esta función ya no debe ser llamada desde la UI para la carga de CSV.
 export async function analyzeMetrics(input: AnalyzeMetricsInput): Promise<AnalyzeMetricsOutput> {
-  return analyzeMetricsFlow(input);
+  // Se podría implementar una nueva funcionalidad aquí en el futuro.
+  // Por ahora, devuelve un mensaje indicando que está obsoleto o no hace nada.
+  return {
+    status: 'success',
+    message: 'Esta función de Genkit no procesa CSV. La lógica ha sido migrada.',
+    dashboardData: [],
+  };
 }
 
 const analyzeMetricsFlow = ai.defineFlow(
@@ -27,69 +29,11 @@ const analyzeMetricsFlow = ai.defineFlow(
     outputSchema: AnalyzeMetricsOutputSchema,
   },
   async (input) => {
-    let totalProcessedOrders = 0;
-    
-    if (!input.shopifyDataUris || input.shopifyDataUris.length === 0) {
-        throw new Error('No se proporcionaron archivos de Shopify.');
-    }
-
-    // Procesar datos de Shopify si se proporcionaron
-    if (input.shopifyDataUris && input.storeId) {
-      try {
-        let allOrders: Order[] = [];
-
-        for (const dataUri of input.shopifyDataUris) {
-            const csvData = Buffer.from(dataUri.split(',')[1], 'base64').toString('utf-8');
-            const records = parse(csvData, {
-              columns: true,
-              skip_empty_lines: true,
-            });
-            
-            const orders: Order[] = records.map((r: any) => {
-              // Lógica de mapeo robusta y defensiva para evitar errores con 'undefined'
-              const billingName = r['Billing Name'] || '';
-              const nameParts = billingName.split(' ');
-              const firstName = nameParts.shift() || '';
-              const lastName = nameParts.join(' ');
-
-              return {
-                id: r.id || r.ID || r['Order ID'] || 0,
-                name: r.Name || '',
-                created_at: r['Created at'] || new Date().toISOString(),
-                total_price: r['Total'] || '0',
-                customer: {
-                  first_name: firstName,
-                  last_name: lastName,
-                },
-                shipping_address: {
-                    province: r['Shipping Province Name'] || '',
-                    city: r['Shipping City'] || '',
-                    zip: r['Shipping Zip'] || '',
-                    country: r['Shipping Country'] || '',
-                },
-                line_items: [{
-                    title: r['Lineitem name'] || 'N/A',
-                    quantity: parseInt(r['Lineitem quantity'] || '0', 10),
-                    price: r['Lineitem price'] || '0'
-                }]
-              };
-            });
-            allOrders.push(...orders);
-        }
-        
-        totalProcessedOrders = allOrders.length;
-        await processShopifyCsv(allOrders, input.storeId);
-
-      } catch (e: any) {
-        const errorMessage = `Error procesando los archivos de Shopify: ${e.message}`;
-        console.error(errorMessage, e);
-        throw new Error(errorMessage);
-      }
-    }
-    
+    // La lógica de procesamiento de CSV fue movida a /lib/firestore.ts en la función analyzeAndStoreMetrics.
+    // Este flujo de Genkit ahora está vacío y no realiza ninguna acción de carga de archivos.
     return {
       status: 'success',
-      message: `Se procesaron y guardaron ${totalProcessedOrders} pedidos de Shopify para la tienda ${input.storeId}.`,
+      message: `El flujo de Genkit 'analyzeMetricsFlow' fue ejecutado, pero ya no procesa archivos CSV.`,
       dashboardData: [], 
     };
   }

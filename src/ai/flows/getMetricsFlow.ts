@@ -89,7 +89,8 @@ const getMetricsFlow = ai.defineFlow(
       // Product Metrics
       if (order.products && Array.isArray(order.products)) {
           order.products.forEach((product: { title: string }) => {
-              const rawProduct = product.title || 'Producto Desconocido';
+              if (!product || !product.title) return;
+              const rawProduct = product.title;
               const cleanedProduct = rawProduct.replace(/^[0-9]+\s*x\s+/i, '').trim();
               
               // Contar para 'más pedidos'

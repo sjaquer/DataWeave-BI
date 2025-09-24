@@ -23,7 +23,7 @@ export interface ConfirmedOrderInfo {
   TIENDA: string;
   ATENDIDO?: string;
   COURIER?: string;
-  PROVINCIA?: string; // Añadimos el campo provincia
+  PROVINCIA?: string; 
   'FECHA DE ATENCIÓN'?: string;
 }
 
@@ -112,6 +112,7 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
   };
 
   try {
+    // Usamos set con merge:true para crear o actualizar el pedido sin sobreescribir datos de confirmación
     await db.collection('shopify_orders').doc(orderDocId).set(orderData, { merge: true });
     console.log(`[Firestore] Pedido ${order.name} de ${storeId} guardado/actualizado en 'shopify_orders'.`);
   } catch (error) {
@@ -150,13 +151,11 @@ export async function updateConfirmedOrders(
     const confirmedAtTimestamp = dateString ? Timestamp.fromDate(new Date(dateString)) : Timestamp.now();
 
     const orderData = {
-        orderName: rawOrderName,
-        storeId: storeId,
         isConfirmed: true,
         confirmedAt: confirmedAtTimestamp,
         confirmedBy: item.ATENDIDO || 'No especificado',
         courier: item.COURIER || 'No especificado',
-        province: item.PROVINCIA || 'N/A', // Añadimos la provincia desde el Sheet
+        province: item.PROVINCIA || 'N/A', 
     };
 
     batch.set(orderDocRef, orderData, { merge: true });
@@ -230,7 +229,7 @@ export async function analyzeAndStoreMetrics(
           createdAt: Timestamp.fromDate(orderDate),
           totalPrice: parseFloat(r.Total || '0'),
           customerName: (r['Billing Name'] || '').trim(),
-          province: r['Shipping Province Name'] || 'N/A', // Guardamos la provincia desde el CSV
+          province: r['Shipping Province Name'] || 'N/A', 
           city: r['Shipping City'] || 'N/A',
           zip: r['Shipping Zip'] || 'N/A',
           country: r['Shipping Country'] || 'N/A',

@@ -5,10 +5,10 @@ import type { Order } from '@/lib/firestore';
 import * as crypto from 'crypto';
 
 function getShopifyWebhookSecret(storeId: string): string | undefined {
-  // Las variables de entorno se nombran SHOPIFY_WEBHOOK_SECRET_TIENDA_1, SHOPIFY_WEBHOOK_SECRET_TIENDA_2, etc.
-  // El storeId viene de la URL (ej: 'tienda-1')
-  // Convertimos 'tienda-1' a 'TIENDA_1'
-  const envVarName = `SHOPIFY_WEBHOOK_SECRET_${storeId.toUpperCase().replace(/-/g, '_')}`;
+  // Las variables de entorno se nombran SHOPIFY_WEBHOOK_SECRET_BLUMI, SHOPIFY_WEBHOOK_SECRET_CUMBRE, etc.
+  // El storeId viene de la URL (ej: 'blumi')
+  // Convertimos 'blumi' a 'BLUMI'
+  const envVarName = `SHOPIFY_WEBHOOK_SECRET_${storeId.toUpperCase()}`;
   return process.env[envVarName];
 }
 

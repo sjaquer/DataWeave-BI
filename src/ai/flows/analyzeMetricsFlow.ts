@@ -46,7 +46,7 @@ const analyzeMetricsFlow = ai.defineFlow(
             });
             
             const orders: Order[] = records.map((r: any) => {
-              // Lógica de mapeo robusta para evitar errores con 'undefined'
+              // Lógica de mapeo robusta y defensiva para evitar errores con 'undefined'
               const billingName = r['Billing Name'] || '';
               const nameParts = billingName.split(' ');
               const firstName = nameParts.shift() || '';

@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { onSnapshot, collection } from "firebase/firestore";
-import { Loader, CheckCircle, XCircle, Percent, CalendarDays, TrendingUp } from "lucide-react";
+import { Loader, CheckCircle, XCircle, Percent, CalendarDays, TrendingUp, Upload } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
+import DataUploader from "@/components/DataUploader";
 
 interface DailyMetric {
   date: string;
@@ -33,14 +34,10 @@ export default function Dashboard() {
     const unsubscribe = onSnapshot(ordersCollectionRef, (querySnapshot) => {
       let totalConfirmed = 0;
       let totalUnconfirmed = 0;
-      // Objeto para agregar datos por día. La clave es la fecha en formato 'DD-MM-YYYY'.
       const dailyData: { [key: string]: { confirmed: number; unconfirmed: number } } = {};
 
       querySnapshot.forEach((doc) => {
         const order = doc.data();
-        
-        // 1. Clasificar como confirmado o no confirmado.
-        // Si 'isConfirmed' es estrictamente true, es confirmado. Cualquier otro caso, no confirmado.
         const isOrderConfirmed = order.isConfirmed === true;
 
         if (isOrderConfirmed) {
@@ -49,18 +46,14 @@ export default function Dashboard() {
           totalUnconfirmed++;
         }
 
-        // 2. Procesar y agrupar por fecha.
         if (order.createdAt && typeof order.createdAt.toDate === 'function') {
           const orderDate = order.createdAt.toDate();
-          // Formato de fecha consistente 'DD-MM-YYYY'
           const dateStr = `${String(orderDate.getDate()).padStart(2, '0')}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${orderDate.getFullYear()}`;
 
-          // Inicializar el contador para un nuevo día si no existe.
           if (!dailyData[dateStr]) {
             dailyData[dateStr] = { confirmed: 0, unconfirmed: 0 };
           }
 
-          // Incrementar el contador diario correspondiente.
           if (isOrderConfirmed) {
             dailyData[dateStr].confirmed++;
           } else {
@@ -69,11 +62,9 @@ export default function Dashboard() {
         }
       });
 
-      // 3. Calcular métricas globales.
       const totalOrders = totalConfirmed + totalUnconfirmed;
       const overallRate = totalOrders > 0 ? (totalConfirmed / totalOrders) * 100 : 0;
 
-      // 4. Calcular métricas diarias y formatear para la tabla.
       const aggregatedMetrics: DailyMetric[] = Object.entries(dailyData).map(([date, data]) => {
           const dailyTotal = data.confirmed + data.unconfirmed;
           const rate = dailyTotal > 0 ? (data.confirmed / dailyTotal) * 100 : 0;
@@ -84,10 +75,9 @@ export default function Dashboard() {
               unconfirmed: data.unconfirmed,
               confirmationRate: parseFloat(rate.toFixed(2)),
           };
-      // Ordenar por fecha, de más reciente a más antiguo.
+      // CORRECCIÓN: Ordenar por fecha, de más reciente a más antiguo.
       }).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
 
-      // 5. Actualizar el estado del componente.
       setGlobalConfirmed(totalConfirmed);
       setGlobalUnconfirmed(totalUnconfirmed);
       setGlobalRate(overallRate);
@@ -126,8 +116,8 @@ export default function Dashboard() {
         <h2 className="text-3xl font-bold tracking-tight">Dashboard de Confirmación</h2>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-4">
-          <Card className="col-span-1">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pedidos Confirmados</CardTitle>
               <CheckCircle className="h-5 w-5 text-green-500" />
@@ -137,7 +127,7 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground">Total de pedidos marcados como confirmados.</p>
             </CardContent>
           </Card>
-          <Card className="col-span-1">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pedidos No Confirmados</CardTitle>
               <XCircle className="h-5 w-5 text-red-500" />
@@ -147,7 +137,7 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground">Total de pedidos pendientes o sin confirmar.</p>
             </CardContent>
           </Card>
-          <Card className="col-span-1">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Tasa de Confirmación Global</CardTitle>
               <Percent className="h-5 w-5 text-muted-foreground" />
@@ -157,7 +147,7 @@ export default function Dashboard() {
                <p className="text-xs text-muted-foreground">Porcentaje global de pedidos confirmados.</p>
             </CardContent>
           </Card>
-           <Card className="col-span-1">
+           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total de Pedidos</CardTitle>
               <TrendingUp className="h-5 w-5 text-muted-foreground" />
@@ -167,8 +157,23 @@ export default function Dashboard() {
                <p className="text-xs text-muted-foreground">Suma de todos los pedidos registrados.</p>
             </CardContent>
           </Card>
+          
+          <Card className="col-span-1 md:col-span-2 lg:col-span-4">
+              <CardHeader>
+                  <CardTitle className="flex items-center">
+                      <Upload className="mr-2 h-5 w-5" />
+                      Carga Manual de Datos
+                  </CardTitle>
+                  <CardDescription>
+                      Sube aquí los archivos CSV exportados de Shopify para las tiendas no conectadas por webhooks.
+                  </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <DataUploader />
+              </CardContent>
+          </Card>
 
-           <Card className="col-span-1 md:col-span-3 lg:col-span-4">
+           <Card className="col-span-1 md:col-span-2 lg:col-span-4">
               <CardHeader>
                   <CardTitle className="flex items-center">
                       <CalendarDays className="mr-2 h-5 w-5" />

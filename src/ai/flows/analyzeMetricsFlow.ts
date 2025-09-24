@@ -46,7 +46,8 @@ const analyzeMetricsFlow = ai.defineFlow(
             });
             
             const orders: Order[] = records.map((r: any) => ({
-                id: r.id,
+                // Robust ID handling: check for common variations of the ID column name.
+                id: r.id || r.ID || r['Order ID'] || 0,
                 name: r.Name,
                 created_at: r['Created at'],
                 total_price: r['Total'],
@@ -60,7 +61,7 @@ const analyzeMetricsFlow = ai.defineFlow(
                     zip: r['Shipping Zip'],
                     country: r['Shipping Country'],
                 },
-                line_items: [{ // Esto sigue siendo una simplificación. La lógica real podría manejar múltiples items.
+                line_items: [{ // This is a simplification. Real logic might handle multiple items.
                     title: r['Lineitem name'],
                     quantity: parseInt(r['Lineitem quantity'], 10),
                     price: r['Lineitem price']
@@ -74,6 +75,7 @@ const analyzeMetricsFlow = ai.defineFlow(
 
       } catch (e: any) {
         const errorMessage = `Error procesando los archivos de Shopify: ${e.message}`;
+        console.error(errorMessage, e);
         throw new Error(errorMessage);
       }
     }

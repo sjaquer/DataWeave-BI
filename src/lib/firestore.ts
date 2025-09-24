@@ -232,28 +232,34 @@ export async function analyzeAndStoreMetrics(
       });
       
       for (const r of records) {
-        const orderDate = new Date(r['Created at'] || '');
-        if (!r['Created at'] || orderDate < sixMonthsAgo) {
-          continue; // Ignorar registros sin fecha o muy antiguos
+        const orderDateStr = r['Created at'] || '';
+        const orderDate = orderDateStr ? new Date(orderDateStr) : null;
+        if (!orderDate || orderDate < sixMonthsAgo) {
+          continue; // Ignorar registros sin fecha válida o muy antiguos
         }
 
-        const orderId = r.id || r.ID || r['Order ID'];
+        const orderId = r.id || r.ID || r['Order ID'] || null;
         if (!orderId) {
             continue; // Ignorar registros sin un ID de pedido identificable
         }
 
-        const orderDocId = getShopifyOrderDocId(r.Name || '', storeId);
+        const orderName = r.Name || '';
+        if (!orderName) {
+            continue; // Ignorar registros sin un nombre de pedido
+        }
+
+        const orderDocId = getShopifyOrderDocId(orderName, storeId);
         const orderDocRef = doc(db, 'shopify_orders', orderDocId);
 
         const billingName = r['Billing Name'] || '';
-        const nameParts = billingName.split(' ');
-        const firstName = nameParts.shift() || '';
-        const lastName = nameParts.join(' ');
+        const nameParts = billingName ? billingName.split(' ') : [];
+        const firstName = nameParts.length > 0 ? nameParts.shift() : '';
+        const lastName = nameParts.length > 0 ? nameParts.join(' ') : '';
 
         const orderData = {
           storeId: storeId,
           orderId: orderId,
-          orderName: r.Name || '',
+          orderName: orderName,
           createdAt: Timestamp.fromDate(orderDate),
           totalPrice: parseFloat(r.Total || '0'),
           customerName: `${firstName} ${lastName}`.trim(),
@@ -261,12 +267,11 @@ export async function analyzeAndStoreMetrics(
           city: r['Shipping City'] || 'N/A',
           zip: r['Shipping Zip'] || 'N/A',
           country: r['Shipping Country'] || 'N/A',
-          products: [{ // Esto asume que el CSV exportado tiene una línea por producto, lo cual puede no ser cierto.
+          products: [{ 
               title: r['Lineitem name'] || 'N/A', 
               quantity: parseInt(r['Lineitem quantity'] || '0', 10),
               price: parseFloat(r['Lineitem price'] || '0')
           }],
-          // isConfirmed y otros se dejan fuera para que merge:true no los sobreescriba si ya existen
         };
         batch.set(orderDocRef, orderData, { merge: true });
         totalProcessedOrders++;

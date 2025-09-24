@@ -27,7 +27,6 @@ interface ProvinceMetric {
     name: string;
     totalOrders: number;
     confirmedOrders: number;
-
     confirmationRate: number;
     totalSpent: number;
 }
@@ -262,32 +261,32 @@ export default function Dashboard() {
                   <CardDescription>Top 10 provincias con más pedidos y su tasa de confirmación.</CardDescription>
               </CardHeader>
               <CardContent className="h-[350px] w-full">
-                <ChartContainer config={{
-                    totalOrders: { label: "Pedidos Totales", color: "hsl(var(--chart-1))" },
-                    confirmationRate: { label: "Tasa de Confirmación", color: "hsl(var(--chart-2))" },
-                }}>
-                 <ResponsiveContainer>
-                    <BarChart data={provinceMetrics.slice(0, 10)} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                      <YAxis yAxisId="left" orientation="left" stroke="hsl(var(--primary))" fontSize={12} />
-                      <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-1))" fontSize={12} />
-                      <Tooltip 
-                        content={<ChartTooltipContent 
-                          formatter={(value, name) => (
-                            <div className="flex flex-col">
-                              <span className="font-bold">{name === 'totalOrders' ? 'Total Pedidos' : 'Tasa Confirmación'}</span>
-                              <span>{name === 'confirmationRate' ? `${(value as number).toFixed(1)}%` : value}</span>
-                            </div>
-                          )}
-                        />}
-                      />
-                      <Legend />
-                      <Bar yAxisId="left" dataKey="totalOrders" name="Pedidos Totales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                      <Bar yAxisId="right" dataKey="confirmationRate" name="Tasa de Confirmación (%)" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ChartContainer config={{
+                      totalOrders: { label: "Pedidos Totales", color: "hsl(var(--chart-1))" },
+                      confirmationRate: { label: "Tasa de Confirmación", color: "hsl(var(--chart-2))" },
+                  }}>
+                    <BarChart data={provinceMetrics.slice(0, 10)} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={60} />
+                        <YAxis yAxisId="left" orientation="left" stroke="hsl(var(--primary))" fontSize={12} />
+                        <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-1))" fontSize={12} />
+                        <Tooltip 
+                          content={<ChartTooltipContent 
+                            formatter={(value, name) => (
+                              <div className="flex flex-col">
+                                <span className="font-bold">{name === 'totalOrders' ? 'Total Pedidos' : 'Tasa Confirmación'}</span>
+                                <span>{name === 'confirmationRate' ? `${(value as number).toFixed(1)}%` : value}</span>
+                              </div>
+                            )}
+                          />}
+                        />
+                        <Legend verticalAlign="top" />
+                        <Bar yAxisId="left" dataKey="totalOrders" name="Pedidos Totales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                        <Bar yAxisId="right" dataKey="confirmationRate" name="Tasa de Confirmación (%)" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                  </ChartContainer>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
 
@@ -297,20 +296,20 @@ export default function Dashboard() {
                   <CardDescription>Número de pedidos confirmados por cada miembro del equipo.</CardDescription>
               </CardHeader>
               <CardContent className="h-[350px] w-full">
-                <ChartContainer config={{
-                    confirmedOrders: { label: "Pedidos Confirmados", color: "hsl(var(--chart-1))" }
-                }}>
-                 <ResponsiveContainer>
-                    <BarChart data={personnelMetrics.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" fontSize={12} />
-                      <YAxis dataKey="name" type="category" fontSize={12} tickLine={false} axisLine={false} />
-                      <Tooltip content={<ChartTooltipContent />} cursor={{fill: 'hsl(var(--muted))'}} />
-                      <Legend />
-                      <Bar dataKey="confirmedOrders" name="Pedidos Confirmados" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-                    </BarChart>
+                 <ResponsiveContainer width="100%" height="100%">
+                    <ChartContainer config={{
+                        confirmedOrders: { label: "Pedidos Confirmados", color: "hsl(var(--chart-1))" }
+                    }}>
+                        <BarChart data={personnelMetrics.slice(0, 10)} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis type="number" fontSize={12} />
+                          <YAxis dataKey="name" type="category" fontSize={12} tickLine={false} axisLine={false} width={80} />
+                          <Tooltip content={<ChartTooltipContent />} cursor={{fill: 'hsl(var(--muted))'}} />
+                          <Legend verticalAlign="top" />
+                          <Bar dataKey="confirmedOrders" name="Pedidos Confirmados" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                    </ChartContainer>
                   </ResponsiveContainer>
-                </ChartContainer>
               </CardContent>
             </Card>
 

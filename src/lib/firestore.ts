@@ -31,7 +31,10 @@ export interface Order {
     id: number | string;
     name: string;
     created_at: string;
+    updated_at?: string;
     total_price: string;
+    financial_status?: string; // paid, pending, partially_paid, refunded, etc.
+    fulfillment_status?: string | null; // fulfilled, null, partial
     customer?: {
         first_name: string;
         last_name: string;
@@ -120,6 +123,38 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
     throw error;
   }
 }
+
+/**
+ * Procesa una actualización de pedido que llega en tiempo real desde un webhook de Shopify.
+ */
+export async function processUpdatedShopifyOrder(order: Order, storeId: string) {
+  const orderDocId = getShopifyOrderDocId(order.name, storeId);
+  const orderDocRef = db.collection('shopify_orders').doc(orderDocId);
+  
+  // Define las condiciones para que un pedido se considere "confirmado" desde Shopify.
+  const isPaid = order.financial_status === 'paid' || order.financial_status === 'partially_paid';
+  const isFulfilled = order.fulfillment_status === 'fulfilled' || order.fulfillment_status === 'partial';
+
+  if (isPaid || isFulfilled) {
+    try {
+      const orderDoc = await orderDocRef.get();
+      // Solo actualiza si el pedido ya existe y no está confirmado, para evitar sobreescribir confirmaciones de Google Sheets.
+      if (orderDoc.exists && orderDoc.data()?.isConfirmed !== true) {
+        const updateData: { isConfirmed: boolean; confirmedAt: Timestamp; confirmedBy: string; } = {
+          isConfirmed: true,
+          confirmedAt: order.updated_at ? Timestamp.fromDate(new Date(order.updated_at)) : Timestamp.now(),
+          confirmedBy: 'Shopify Automation'
+        };
+        await orderDocRef.update(updateData);
+        console.log(`[Firestore] Pedido ${order.name} de ${storeId} marcado como CONFIRMADO vía webhook de actualización.`);
+      }
+    } catch (error) {
+       console.error(`Error al actualizar el pedido de Shopify en Firestore:`, error);
+       throw error;
+    }
+  }
+}
+
 
 /**
  * Crea o actualiza los pedidos en Firestore desde Google Sheets.
@@ -299,3 +334,5 @@ export async function deleteOldMetrics(): Promise<{ status: string; message: str
         };
     }
 }
+
+    

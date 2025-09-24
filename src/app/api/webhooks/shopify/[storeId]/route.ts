@@ -1,13 +1,10 @@
-
 import { NextResponse } from 'next/server';
-import { processNewShopifyOrder } from '@/lib/firestore';
+import { processNewShopifyOrder, processUpdatedShopifyOrder } from '@/lib/firestore';
 import type { Order } from '@/lib/firestore';
 import * as crypto from 'crypto';
 
 function getShopifyWebhookSecret(storeId: string): string | undefined {
   // Las variables de entorno se nombran SHOPIFY_WEBHOOK_SECRET_BLUMI, SHOPIFY_WEBHOOK_SECRET_CUMBRE, etc.
-  // El storeId viene de la URL (ej: 'blumi')
-  // Convertimos 'blumi' a 'BLUMI'
   const envVarName = `SHOPIFY_WEBHOOK_SECRET_${storeId.toUpperCase()}`;
   return process.env[envVarName];
 }
@@ -24,6 +21,7 @@ export async function POST(req: Request, { params }: { params: { storeId: string
 
   const body = await req.text();
   const hmacHeader = req.headers.get('x-shopify-hmac-sha256');
+  const topic = req.headers.get('x-shopify-topic'); // 'orders/create', 'orders/updated', etc.
   
   const shopifySecret = getShopifyWebhookSecret(storeId);
 
@@ -40,16 +38,26 @@ export async function POST(req: Request, { params }: { params: { storeId: string
   }
 
   try {
-    const newOrder: Order = JSON.parse(body);
+    const orderPayload: Order = JSON.parse(body);
 
-    if (!newOrder || !newOrder.id) {
+    if (!orderPayload || !orderPayload.id) {
        return NextResponse.json({ status: 'error', message: 'Datos del pedido inválidos.' }, { status: 400 });
     }
 
-    // Pasamos el storeId a la lógica de procesamiento
-    await processNewShopifyOrder(newOrder, storeId);
-
-    return NextResponse.json({ status: 'success', message: `Pedido ${newOrder.name} de la tienda ${storeId} procesado.` }, { status: 200 });
+    // Lógica para diferenciar el evento (topic)
+    switch (topic) {
+        case 'orders/create':
+            await processNewShopifyOrder(orderPayload, storeId);
+            return NextResponse.json({ status: 'success', message: `Pedido ${orderPayload.name} (nuevo) de ${storeId} procesado.` }, { status: 200 });
+        
+        case 'orders/updated':
+            await processUpdatedShopifyOrder(orderPayload, storeId);
+            return NextResponse.json({ status: 'success', message: `Pedido ${orderPayload.name} (actualizado) de ${storeId} procesado.` }, { status: 200 });
+            
+        default:
+            // Ignoramos otros eventos que no nos interesan
+            return NextResponse.json({ status: 'ignored', message: `Evento de webhook '${topic}' no manejado.` }, { status: 200 });
+    }
 
   } catch (error) {
     console.error(`Error en el webhook de Shopify para la tienda ${storeId}:`, error);
@@ -57,3 +65,5 @@ export async function POST(req: Request, { params }: { params: { storeId: string
     return NextResponse.json({ status: 'error', message: `Error interno del servidor: ${errorMessage}` }, { status: 500 });
   }
 }
+
+    

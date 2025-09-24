@@ -1,0 +1,37 @@
+
+export const provinceList: string[] = [
+  "Abancay", "Acomayo", "Aija", "Alto Amazonas", "Andahuaylas", "Anta",
+  "Arequipa", "Asunción", "Atalaya", "Ayabaca", "Azuquiro", "Bagua",
+  "Bajo Amazonas", "Balta", "Barranca", "Bellavista", "Bolognesi",
+  "Bongará", "Cabana", "Cajabamba", "Cajatambo", "Calca", "Callao",
+  "Camana", "Cañete", "Canas", "Canchis", "Cangallo", "Carabaya",
+  "Caravelí", "Carhuaz", "Carlos Fermín Fitzcarrald", "Casma", "Castilla",
+  "Castrovirreyna", "Caylloma", "Celendín", "Cercado de Lima", "Chachapoyas",
+  "Chancay", "Chanchamayo", "Chiclayo", "Chincha", "Chota", "Chucuito",
+  "Chumbivilcas", "Chupaca", "Coishco", "Colpa", "Concepción",
+  "Condesuyos", "Contralmirante Villar", "Contumazá", "Coracora",
+  "Coronel Portillo", "Corongo", "Cotabambas", "Cusco", "Cutervo",
+  "Daniel Alcides Carrión", "Datem del Marañón", "Dos de Mayo", "El Collao",
+  "El Dorado", "Espinar", "Ferreñafe", "General Sánchez Cerro", "Gran Chimú",
+  "Grau", "Huacaybamba", "Huacho", "Huallaga", "Huamalíes", "Huamanga",
+  "Huanca Sancos", "Huancabamba", "Huancané", "Huancavelica", "Huancayo",
+  "Huanta", "Huánuco", "Huaral", "Huaraz", "Huari", "Huarochirí", "Huaura",
+  "Huaylas", "Huaytará", "Ica", "Ilo", "Islay", "Jaén", "Jauja", "Jumbilla",
+  "Junín", "La Convención", "La Mar", "La Unión", "Lamas", "Lambayeque",
+  "Lampa", "Leoncio Prado", "Lima", "Lircay", "Loreto", "Lucanas", "Luya",
+  "Manu", "Mariscal Cáceres", "Mariscal Nieto", "Mariscal Ramón Castilla",
+  "Maynas", "Melgar", "Moho", "Moyobamba", "Ocros", "Ollantaytambo", "Oxapampa",
+  "Oyón", "Pacasmayo", "Padre Abad", "Pallasca", "Palpa", "Pampas", "Parinacochas",
+  "Paruro", "Pasco", "Pataz", "Paucar del Sara Sara", "Paucartambo",
+  "Paura", "Pichanaki", "Pallasca", "Picota", "Pisco", "Piura", "Pomabamba",
+  "Puno", "Purús", "Putumayo", "Quispicanchi", "Recuay", "Requena", "Rioja",
+  "Rodríguez de Mendoza", "Roma", "San Antonio de Putina", "San Ignacio",
+  "San Marcos", "San Martín", "San Miguel", "San Pablo", "San Román", "Sánchez Carrión",
+  "Sandia", "Santa", "Santa Cruz", "Santiago de Chuco", "Satipo", "Sechura",
+  "Sihuas", "Sullana", "Sucre", "Tahuamanu", "Talara", "Tambopata", "Tarma",
+  "Tayacaja", "Tocache", "Trujillo", "Tumbes", "Ucayali", "Urubamba",
+  "Utcubamba", "Víctor Fajardo", "Vilcas Huamán", "Virú", "Yauyos", "Yungay",
+  "Yunguyo", "Zarumilla"
+];
+
+    

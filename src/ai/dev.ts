@@ -2,7 +2,7 @@
 import { config } from 'dotenv';
 config();
 
-// Import all the flows you want to be available in the dev UI
-import './flows/analyzeMetricsFlow';
-import './flows/normalizeProvinceFlow';
-import './flows/normalizeProductsFlow';
+// No flows are currently in use after removing AI functionality.
+// This file is kept for potential future use.
+
+    

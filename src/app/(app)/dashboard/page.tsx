@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { onSnapshot, collection } from "firebase/firestore";
-import { Loader, CheckCircle, XCircle, Percent, CalendarDays, Upload, MapPin, Package, UserCheck, Banknote, TrendingUp, ArrowRight, RefreshCw } from "lucide-react";
+import { Loader, CheckCircle, XCircle, Percent, CalendarDays, Upload, MapPin, Package, UserCheck, Banknote } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,8 +14,8 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { normalizeProvinces } from "@/ai/flows/normalizeProvinceFlow";
-import { normalizeProducts } from "@/ai/flows/normalizeProductsFlow";
+import { findBestProvinceMatch } from "@/lib/utils";
+import { provinceList } from "@/lib/provinces";
 
 // --- Tipos de Datos del Dashboard ---
 interface DailyMetric {
@@ -56,7 +56,6 @@ interface OrderData {
 
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
-  const [isNormalizing, setIsNormalizing] = useState(false);
   
   // --- Estados de Métricas Agregadas ---
   const [globalConfirmed, setGlobalConfirmed] = useState(0);
@@ -66,9 +65,8 @@ export default function Dashboard() {
   const [productMetrics, setProductMetrics] = useState<ProductMetric[]>([]);
   const [personnelMetrics, setPersonnelMetrics] = useState<PersonnelMetric[]>([]);
   
-  // --- Estados de Caché para Normalización ---
+  // --- Estado de Caché para Normalización ---
   const [provinceCorrectionsCache, setProvinceCorrectionsCache] = useState<Record<string, string>>({});
-  const [productCorrectionsCache, setProductCorrectionsCache] = useState<Record<string, string>>({});
 
   const { toast } = useToast();
 
@@ -79,7 +77,6 @@ export default function Dashboard() {
     const unsubscribe = onSnapshot(ordersCollectionRef, async (querySnapshot) => {
       if (querySnapshot.empty) {
         setIsLoading(false);
-        // Reset all metrics if there are no orders
         setDailyMetrics([]);
         setProvinceMetrics([]);
         setProductMetrics([]);
@@ -91,58 +88,23 @@ export default function Dashboard() {
       
       const orders: OrderData[] = querySnapshot.docs.map(doc => doc.data() as OrderData);
 
-      // --- Normalización Inteligente de Provincias y Productos ---
+      // --- Normalización Local de Provincias ---
       const uniqueProvinces = [...new Set(orders.map(order => order.province || 'Desconocida').filter(p => p !== 'Desconocida'))];
-      const uniqueProducts = [...new Set(orders.flatMap(order => order.products?.map(p => p.title) || []))];
+      const newCorrections: Record<string, string> = {};
       
-      // Filtra solo los nombres que no están en la caché
-      const provincesToNormalize = uniqueProvinces.filter(p => !provinceCorrectionsCache[p]);
-      const productsToNormalize = uniqueProducts.filter(p => !productCorrectionsCache[p]);
-      
-      let newProvinceCorrections: Record<string, string> = {};
-      let newProductCorrections: Record<string, string> = {};
-
-      if (provincesToNormalize.length > 0 || productsToNormalize.length > 0) {
-        setIsNormalizing(true);
-        try {
-          // Llama a las IAs solo si hay datos nuevos que normalizar
-          const provincePromise = provincesToNormalize.length > 0
-            ? normalizeProvinces({ provinceNames: provincesToNormalize })
-            : Promise.resolve({});
-            
-          const productPromise = productsToNormalize.length > 0
-            ? normalizeProducts({ productTitles: productsToNormalize })
-            : Promise.resolve({});
-          
-          const [provinceResult, productResult] = await Promise.all([provincePromise, productPromise]);
-          
-          newProvinceCorrections = provinceResult;
-          newProductCorrections = productResult;
-
-          // Actualiza la caché de forma inmutable
-          setProvinceCorrectionsCache(prev => ({ ...prev, ...newProvinceCorrections }));
-          setProductCorrectionsCache(prev => ({ ...prev, ...newProductCorrections }));
-
-        } catch (aiError) {
-          console.warn("AI normalization failed:", aiError);
-          toast({
-              variant: "destructive",
-              title: "Error de IA",
-              description: "La normalización de datos falló. Mostrando datos sin procesar."
-          });
-          // En caso de error, llena la caché con los valores originales para no reintentar
-          provincesToNormalize.forEach(p => newProvinceCorrections[p] = p);
-          productsToNormalize.forEach(p => newProductCorrections[p] = p);
-          setProvinceCorrectionsCache(prev => ({ ...prev, ...newProvinceCorrections }));
-          setProductCorrectionsCache(prev => ({ ...prev, ...newProductCorrections }));
-        } finally {
-          setIsNormalizing(false);
+      uniqueProvinces.forEach(provinceName => {
+        if (!provinceCorrectionsCache[provinceName]) {
+          const bestMatch = findBestProvinceMatch(provinceName, provinceList);
+          newCorrections[provinceName] = bestMatch || provinceName;
         }
+      });
+
+      // Actualiza la caché si hay nuevas correcciones
+      if (Object.keys(newCorrections).length > 0) {
+        setProvinceCorrectionsCache(prev => ({ ...prev, ...newCorrections }));
       }
       
-      // Fusiona la caché existente con las nuevas correcciones
-      const finalProvinceCorrections = { ...provinceCorrectionsCache, ...newProvinceCorrections };
-      const finalProductCorrections = { ...productCorrectionsCache, ...newProductCorrections };
+      const finalProvinceCorrections = { ...provinceCorrectionsCache, ...newCorrections };
 
       // --- Agregación de Datos ---
       let totalConfirmed = 0;
@@ -172,12 +134,12 @@ export default function Dashboard() {
         provinceData[correctedProvince].totalSpent += order.totalPrice || 0;
         if (isOrderConfirmed) provinceData[correctedProvince].confirmedOrders++;
         
-        // Product Metrics
+        // Product Metrics (sin normalización de IA)
         if (order.products && Array.isArray(order.products)) {
             order.products.forEach((product: { title: string }) => {
                 const rawProduct = product.title || 'Producto Desconocido';
-                const correctedProduct = finalProductCorrections[rawProduct] || rawProduct;
-                productData[correctedProduct] = (productData[correctedProduct] || 0) + 1;
+                 const cleanedProduct = rawProduct.replace(/^[0-9]+\s*x\s+/i, '').trim();
+                productData[cleanedProduct] = (productData[cleanedProduct] || 0) + 1;
             });
         }
         
@@ -226,7 +188,7 @@ export default function Dashboard() {
     });
 
     return () => unsubscribe();
-  }, [toast]); // Se eliminan las dependencias de caché para evitar re-renders innecesarios
+  }, [toast]); // Dependencias originales
 
   const globalTotal = globalConfirmed + globalUnconfirmed;
   const globalRate = globalTotal > 0 ? (globalConfirmed / globalTotal) * 100 : 0;
@@ -239,7 +201,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
               <Loader className="h-8 w-8 animate-spin text-primary" />
               <p className="text-muted-foreground text-lg">
-                {isNormalizing ? "Normalizando datos con IA..." : "Cargando métricas..."}
+                Cargando métricas...
               </p>
           </div>
       </div>
@@ -250,7 +212,7 @@ export default function Dashboard() {
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard de Inteligencia de Negocio</h2>
-        <Link href="/dashboard/upload-data" passHref>
+         <Link href="/dashboard/upload-data" passHref>
           <Button variant="outline">
             <Upload className="mr-2 h-4 w-4" />
             Carga Manual
@@ -362,7 +324,7 @@ export default function Dashboard() {
             <Card className="col-span-1 md:col-span-4 lg:col-span-4">
               <CardHeader>
                   <CardTitle className="flex items-center"><Package className="mr-2 h-5 w-5" />Top 10 Productos</CardTitle>
-                  <CardDescription>Los productos más pedidos, con nombres normalizados por IA.</CardDescription>
+                  <CardDescription>Los productos más pedidos.</CardDescription>
               </CardHeader>
                <CardContent className="h-[350px] w-full">
                 <ResponsiveContainer width="100%" height="100%">

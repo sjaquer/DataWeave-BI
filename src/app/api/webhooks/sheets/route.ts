@@ -4,7 +4,7 @@ import type { ConfirmedOrderInfo } from '@/lib/firestore';
 
 /**
  * Endpoint para recibir los webhooks desde Google Sheets cuando se confirma un pedido.
- * Espera un array de objetos con `PEDIDO`, `TIENDA` y `ATENDIDO`.
+ * Espera un array de objetos con `PEDIDO`, `TIENDA`, `ATENDIDO` y `COURIER`.
  */
 export async function POST(req: Request) {
   try {
@@ -12,6 +12,14 @@ export async function POST(req: Request) {
 
     if (!Array.isArray(confirmedOrders)) {
       return NextResponse.json({ status: 'error', message: 'El formato de datos es inválido. Se esperaba un array de pedidos.' }, { status: 400 });
+    }
+
+    // Validar que los campos mínimos existan en el primer objeto como muestra
+    if (confirmedOrders.length > 0) {
+      const sample = confirmedOrders[0];
+      if (typeof sample.PEDIDO === 'undefined' || typeof sample.TIENDA === 'undefined') {
+        return NextResponse.json({ status: 'error', message: 'El payload debe contener al menos los campos PEDIDO y TIENDA.' }, { status: 400 });
+      }
     }
 
     const result = await updateConfirmedOrders(confirmedOrders);

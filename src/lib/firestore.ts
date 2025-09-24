@@ -40,6 +40,7 @@ export interface ConfirmedOrderInfo {
   PEDIDO: string;
   TIENDA: string;
   ATENDIDO?: string;
+  COURIER?: string; // Nuevo campo para el courier
 }
 
 
@@ -90,6 +91,7 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
       isConfirmed: false,
       confirmedAt: null,
       confirmedBy: null,
+      courier: null, // Campo courier inicializado
   };
 
   try {
@@ -159,6 +161,7 @@ export async function updateConfirmedOrders(
   for (const item of confirmedOrders) {
     const rawOrderName = String(item.PEDIDO || '');
     const storeId = item.TIENDA;
+    const courier = item.COURIER; // Obtenemos el courier
 
     if (!rawOrderName || !storeId) {
         console.warn(`[Firestore] Item ignorado por falta de PEDIDO o TIENDA:`, item);
@@ -175,7 +178,8 @@ export async function updateConfirmedOrders(
             batch.update(orderDocRef, {
                 isConfirmed: true,
                 confirmedAt: Timestamp.now(),
-                confirmedBy: item.ATENDIDO || 'No especificado'
+                confirmedBy: item.ATENDIDO || 'No especificado',
+                courier: courier || 'No especificado' // Guardamos el courier
             });
             processedCount++;
         } else {

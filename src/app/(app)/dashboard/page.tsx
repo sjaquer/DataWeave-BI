@@ -1,17 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { onSnapshot, collection } from "firebase/firestore";
-import { Loader, CheckCircle, XCircle, Percent, CalendarDays, Upload, MapPin, Package, UserCheck, Banknote } from "lucide-react";
+import { Loader, CheckCircle, XCircle, Percent, CalendarDays, Upload, MapPin, Package, UserCheck, Banknote, TrendingUp, ShoppingCart, ArrowRight } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import DataUploader from "@/components/DataUploader";
 import { normalizeProvinces } from "@/ai/flows/normalizeProvinceFlow";
 
 
@@ -203,7 +204,7 @@ export default function Dashboard() {
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard de Confirmación</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Dashboard de Inteligencia de Negocio</h2>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -248,22 +249,8 @@ export default function Dashboard() {
             </CardContent>
           </Card>
           
-          <Card className="col-span-1 md:col-span-2 lg:col-span-4">
-              <CardHeader>
-                  <CardTitle className="flex items-center">
-                      <Upload className="mr-2 h-5 w-5" />
-                      Carga Manual de Datos (CSV)
-                  </CardTitle>
-                  <CardDescription>
-                      Sube aquí los archivos CSV para las tiendas no conectadas por webhooks.
-                  </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <DataUploader />
-              </CardContent>
-          </Card>
             
-            <Card className="col-span-1 md:col-span-2">
+          <Card className="col-span-1 md:col-span-2 lg:grid-cols-2">
               <CardHeader>
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
                   <CardDescription>Top 10 provincias con más pedidos y su tasa de confirmación.</CardDescription>
@@ -296,12 +283,12 @@ export default function Dashboard() {
                   </ChartContainer>
                 </ResponsiveContainer>
               </CardContent>
-            </Card>
+          </Card>
 
-            <Card className="col-span-1 md:col-span-2">
+            <Card className="col-span-1 md:col-span-2 lg:grid-cols-2">
                 <CardHeader>
                   <CardTitle className="flex items-center"><UserCheck className="mr-2 h-5 w-5" />Rendimiento del Personal</CardTitle>
-                  <CardDescription>Número de pedidos confirmados por cada miembro del equipo.</CardDescription>
+                  <CardDescription>Pedidos confirmados por cada miembro del equipo.</CardDescription>
               </CardHeader>
               <CardContent className="h-[350px] w-full">
                  <ResponsiveContainer width="100%" height="100%">
@@ -321,32 +308,51 @@ export default function Dashboard() {
               </CardContent>
             </Card>
             
-            <Card className="col-span-1 md:col-span-2">
+            <Card className="col-span-1 md:col-span-2 lg:grid-cols-2">
               <CardHeader>
                   <CardTitle className="flex items-center"><Package className="mr-2 h-5 w-5" />Top 10 Productos</CardTitle>
                   <CardDescription>Los productos más pedidos en todas las tiendas.</CardDescription>
               </CardHeader>
-               <CardContent className="overflow-auto max-h-[350px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Producto</TableHead>
-                      <TableHead className="text-right">Total Pedidos</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {productMetrics.slice(0,10).map((product) => (
-                      <TableRow key={product.name}>
-                        <TableCell className="font-medium">{product.name}</TableCell>
-                        <TableCell className="text-right">{product.totalOrders}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+               <CardContent className="h-[350px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                    <ChartContainer config={{
+                        totalOrders: { label: "Total Pedidos", color: "hsl(var(--chart-2))" }
+                    }}>
+                        <BarChart data={productMetrics.slice(0, 10)} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis type="number" fontSize={12} />
+                          <YAxis dataKey="name" type="category" fontSize={12} tickLine={false} axisLine={false} width={100} />
+                          <Tooltip content={<ChartTooltipContent />} cursor={{fill: 'hsl(var(--muted))'}} />
+                          <Legend verticalAlign="top" />
+                          <Bar dataKey="totalOrders" name="Total Pedidos" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                    </ChartContainer>
+                  </ResponsiveContainer>
               </CardContent>
             </Card>
 
-           <Card className="col-span-1 md:col-span-2 lg:col-span-4">
+            <Card className="col-span-1 md:col-span-2 lg:grid-cols-2 flex flex-col">
+              <CardHeader>
+                  <CardTitle className="flex items-center">
+                      <Upload className="mr-2 h-5 w-5" />
+                      Carga Manual de Datos
+                  </CardTitle>
+                  <CardDescription>
+                      Para tiendas no conectadas por webhooks o para cargas históricas de datos.
+                  </CardDescription>
+              </CardHeader>
+              <CardContent className="flex-grow flex flex-col justify-center items-center">
+                  <Link href="/dashboard/upload-data" passHref>
+                    <Button>
+                      Ir a Carga Manual
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
+              </CardContent>
+            </Card>
+
+
+           <Card className="col-span-1 md:col-span-4">
               <CardHeader>
                   <CardTitle className="flex items-center">
                       <CalendarDays className="mr-2 h-5 w-5" />
@@ -400,5 +406,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-    

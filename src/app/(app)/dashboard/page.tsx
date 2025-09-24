@@ -75,13 +75,15 @@ export default function Dashboard() {
       querySnapshot.forEach((doc) => {
         const order = doc.data();
         const orderDate = (order.createdAt as Timestamp).toDate();
+        // Formato DD-MM-YYYY para consistencia
         const dateStr = `${String(orderDate.getUTCDate()).padStart(2, '0')}-${String(orderDate.getUTCMonth() + 1).padStart(2, '0')}-${orderDate.getUTCFullYear()}`;
 
         if (!dailyData[dateStr]) {
           dailyData[dateStr] = { total: 0, confirmed: 0 };
         }
         dailyData[dateStr].total++;
-        if (order.isConfirmed) {
+        // El campo isConfirmed se llena desde el webhook de Sheets.
+        if (order.isConfirmed === true) {
           dailyData[dateStr].confirmed++;
         }
       });
@@ -94,6 +96,7 @@ export default function Dashboard() {
               confirmedOrders: data.confirmed,
               confirmationRate: parseFloat(rate.toFixed(2)),
           };
+      // Ordenar de más reciente a más antiguo
       }).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
 
 
@@ -113,8 +116,8 @@ export default function Dashboard() {
   }, [toast]);
 
   
-  const totalOrders = metrics.reduce((acc, item) => acc + item.totalOrders, 0) ?? 0;
-  const totalConfirmedOrders = metrics.reduce((acc, item) => acc + item.confirmedOrders, 0) ?? 0;
+  const totalOrders = metrics.reduce((acc, item) => acc + item.totalOrders, 0);
+  const totalConfirmedOrders = metrics.reduce((acc, item) => acc + item.confirmedOrders, 0);
   const overallConfirmationRate = totalOrders > 0 ? (totalConfirmedOrders / totalOrders) * 100 : 0;
 
   return (

@@ -3,15 +3,14 @@
 import { db } from '@/lib/firebase-admin';
 import { parse } from 'csv-parse/sync';
 import {
-  collection,
-  doc,
+  Timestamp,
   writeBatch,
   getDocs,
-  Timestamp,
   deleteDoc,
-  getDoc,
   query,
   where,
+  collection,
+  doc,
 } from 'firebase-admin/firestore';
 
 
@@ -94,7 +93,6 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
   }
 
   const orderDocId = getShopifyOrderDocId(order.name, storeId);
-  const orderDocRef = doc(db, 'shopify_orders', orderDocId);
   
   const orderData = {
       storeId: storeId,
@@ -121,7 +119,7 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
 
   try {
     // Usamos merge: true para crear o actualizar el pedido sin sobrescribir los datos de confirmación si ya existen.
-    await doc(db, 'shopify_orders', orderDocId).set(orderData, { merge: true });
+    await db.collection('shopify_orders').doc(orderDocId).set(orderData, { merge: true });
     console.log(`[Firestore] Pedido ${order.name} de ${storeId} guardado/actualizado en 'shopify_orders'.`);
   } catch (error) {
     console.error(`Error al procesar el nuevo pedido de Shopify en Firestore:`, error);
@@ -146,7 +144,7 @@ export async function updateConfirmedOrders(
     return { status: 'success', message: 'No se encontraron pedidos válidos para procesar.' };
   }
   
-  const batch = writeBatch(db);
+  const batch = db.batch();
   let processedCount = 0;
   let notFoundCount = 0;
   let alreadyConfirmedCount = 0;
@@ -162,14 +160,15 @@ export async function updateConfirmedOrders(
     };
     
     const orderDocId = getShopifyOrderDocId(rawOrderName, storeId);
-    const orderDocRef = doc(db, 'shopify_orders', orderDocId);
+    const orderDocRef = db.collection('shopify_orders').doc(orderDocId);
 
     try {
-      const docSnap = await getDoc(orderDocRef);
+      const docSnap = await orderDocRef.get();
       
-      if (docSnap.exists()) {
+      if (docSnap.exists) {
+          const docData = docSnap.data();
           // Solo actualizamos si el pedido NO estaba confirmado previamente
-          if (!docSnap.data().isConfirmed) {
+          if (docData && !docData.isConfirmed) {
               batch.update(orderDocRef, {
                   isConfirmed: true,
                   confirmedAt: Timestamp.now(),
@@ -223,7 +222,7 @@ export async function analyzeAndStoreMetrics(
     return { status: 'error', message: 'No se proporcionó el ID de la tienda.' };
   }
 
-  const batch = writeBatch(db);
+  const batch = db.batch();
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
@@ -243,7 +242,7 @@ export async function analyzeAndStoreMetrics(
           continue; // Ignorar si la fecha es inválida o es de hace más de 6 meses
         }
 
-        const orderId = r.Id || null;
+        const orderId = r.Id || r.id || r['Order ID'] || null;
         const orderName = r.Name || '';
         if (!orderId || !orderName) {
             continue; // Ignorar si no tiene un ID o Nombre de pedido
@@ -251,20 +250,12 @@ export async function analyzeAndStoreMetrics(
 
         // --- 2. Creación del Documento y Mapeo ---
         const orderDocId = getShopifyOrderDocId(orderName, storeId);
-        const orderDocRef = doc(db, 'shopify_orders', orderDocId);
+        const orderDocRef = db.collection('shopify_orders').doc(orderDocId);
         
-        // El CSV exportado de Shopify puede tener una sola línea de producto por fila.
-        // Aquí lo estandarizamos a un array de productos.
-        const products = r['Lineitem name'] ? [{ 
-            title: r['Lineitem name'] || 'N/A', 
-            quantity: parseInt(r['Lineitem quantity'] || '0', 10),
-            price: parseFloat(r['Lineitem price'] || '0')
-        }] : [];
-
         // --- 3. Construcción del Objeto Limpio para Firestore ---
         const orderData = {
           storeId: storeId,
-          orderId: orderId,
+          orderId: String(orderId),
           orderName: orderName,
           createdAt: Timestamp.fromDate(orderDate),
           totalPrice: parseFloat(r.Total || '0'),
@@ -273,7 +264,10 @@ export async function analyzeAndStoreMetrics(
           city: r['Shipping City'] || 'N/A',
           zip: r['Shipping Zip'] || 'N/A',
           country: r['Shipping Country'] || 'N/A',
-          products: products,
+          // Simplificamos los datos del producto
+          productTitle: r['Lineitem name'] || 'N/A',
+          productQuantity: parseInt(r['Lineitem quantity'] || '0', 10),
+          productPrice: parseFloat(r['Lineitem price'] || '0'),
           // Se usa `merge: true` para no sobrescribir la info de confirmación
         };
 
@@ -318,7 +312,7 @@ export async function deleteOldMetrics(): Promise<{ status: string; message: str
              return { status: 'success', message: 'No se encontraron registros antiguos para eliminar.', deletedCount: 0 };
         }
 
-        const batch = writeBatch(db);
+        const batch = db.batch();
         ordersSnapshot.forEach(doc => {
             batch.delete(doc.ref);
             deletedCount++;

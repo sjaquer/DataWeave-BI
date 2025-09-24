@@ -1,6 +1,6 @@
 'use server';
 
-import { db } from '@/lib/firebase';
+import { db } from '@/lib/firebase-admin'; // Cambiado para usar siempre la instancia de admin
 import {
   collection,
   doc,
@@ -40,7 +40,7 @@ export interface ConfirmedOrderInfo {
   PEDIDO: string;
   TIENDA: string;
   ATENDIDO?: string;
-  COURIER?: string; // Nuevo campo para el courier
+  COURIER?: string;
 }
 
 
@@ -53,7 +53,6 @@ function normalizeOrderNumber(name: string): string {
 
 function getShopifyOrderDocId(orderName: string, storeId: string): string {
     const normalizedNumber = normalizeOrderNumber(orderName);
-    // Normalizamos el storeId para que sea apto para un ID de documento.
     const normalizedStoreId = storeId.toLowerCase().replace(/\s+/g, '-');
     return `${normalizedStoreId}-${normalizedNumber}`;
 }
@@ -91,12 +90,13 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
       isConfirmed: false,
       confirmedAt: null,
       confirmedBy: null,
-      courier: null, // Campo courier inicializado
+      courier: null,
   };
 
   try {
-    // Usamos merge: true para no sobrescribir los datos de confirmación si ya existen.
-    await writeBatch(db).set(orderDocRef, orderData, { merge: true }).commit();
+    const batch = writeBatch(db);
+    batch.set(orderDocRef, orderData, { merge: true });
+    await batch.commit();
     console.log(`[Firestore] Pedido ${order.name} de ${storeId} guardado/actualizado en 'shopify_orders'.`);
   } catch (error) {
     console.error(`Error al procesar el nuevo pedido de Shopify en Firestore:`, error);
@@ -149,7 +149,14 @@ export async function updateConfirmedOrders(
   confirmedOrders: ConfirmedOrderInfo[]
 ): Promise<{ status: string; message: string }> {
 
-  if (!confirmedOrders || confirmedOrders.length === 0) {
+  let orders = confirmedOrders;
+
+  // Si no es un array, lo envolvemos en uno. Esto da flexibilidad al endpoint.
+  if (!Array.isArray(orders)) {
+    orders = [orders];
+  }
+
+  if (!orders || orders.length === 0) {
     return { status: 'success', message: 'No se encontraron pedidos válidos para procesar.' };
   }
   
@@ -158,10 +165,10 @@ export async function updateConfirmedOrders(
   let notFoundCount = 0;
   let alreadyConfirmedCount = 0;
 
-  for (const item of confirmedOrders) {
+  for (const item of orders) {
     const rawOrderName = String(item.PEDIDO || '');
     const storeId = item.TIENDA;
-    const courier = item.COURIER; // Obtenemos el courier
+    const courier = item.COURIER;
 
     if (!rawOrderName || !storeId) {
         console.warn(`[Firestore] Item ignorado por falta de PEDIDO o TIENDA:`, item);
@@ -171,23 +178,29 @@ export async function updateConfirmedOrders(
     const orderDocId = getShopifyOrderDocId(rawOrderName, storeId);
     const orderDocRef = doc(db, 'shopify_orders', orderDocId);
 
-    const docSnap = await getDoc(orderDocRef);
-    
-    if (docSnap.exists()) {
-        if (!docSnap.data().isConfirmed) {
-            batch.update(orderDocRef, {
-                isConfirmed: true,
-                confirmedAt: Timestamp.now(),
-                confirmedBy: item.ATENDIDO || 'No especificado',
-                courier: courier || 'No especificado' // Guardamos el courier
-            });
-            processedCount++;
-        } else {
-            alreadyConfirmedCount++;
-        }
-    } else {
-      notFoundCount++;
-      console.warn(`[Firestore] Pedido ${rawOrderName} de la tienda ${storeId} no fue encontrado.`);
+    try {
+      const docSnap = await getDoc(orderDocRef);
+      
+      if (docSnap.exists()) {
+          if (!docSnap.data().isConfirmed) {
+              batch.update(orderDocRef, {
+                  isConfirmed: true,
+                  confirmedAt: Timestamp.now(),
+                  confirmedBy: item.ATENDIDO || 'No especificado',
+                  courier: courier || 'No especificado'
+              });
+              processedCount++;
+          } else {
+              alreadyConfirmedCount++;
+          }
+      } else {
+        notFoundCount++;
+        console.warn(`[Firestore] Pedido ${rawOrderName} de la tienda ${storeId} no fue encontrado.`);
+      }
+    } catch (e) {
+       console.error(`Error al obtener el documento ${orderDocId}:`, e);
+       // Continúa con el siguiente item para no detener todo el lote por un solo error.
+       continue;
     }
   }
 
@@ -213,7 +226,6 @@ export async function processShopifyCsv(orders: Order[], storeId: string) {
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
   for (const order of orders) {
-    // Asegurarse de que el objeto order y created_at existen.
     if (!order || !order.created_at) continue;
 
     const orderDate = new Date(order.created_at);
@@ -240,8 +252,6 @@ export async function processShopifyCsv(orders: Order[], storeId: string) {
         })) || [],
     };
 
-    // Usamos merge: true para no sobrescribir los datos de confirmación
-    // si un pedido se sube dos veces.
     batch.set(orderDocRef, orderData, { merge: true });
   }
 

@@ -76,12 +76,15 @@ export default function Dashboard() {
       querySnapshot.forEach((doc) => {
         const order = doc.data();
         
-        const orderTimestamp = order.createdAt;
-        if (!orderTimestamp || !(orderTimestamp instanceof Timestamp)) {
+        // CORRECCIÓN: Asegurarse de que createdAt existe y es un Timestamp de Firestore
+        if (!order.createdAt || typeof order.createdAt.toDate !== 'function') {
+            console.warn("Pedido ignorado por no tener una fecha 'createdAt' válida:", doc.id);
             return;
         }
-        const orderDate = orderTimestamp.toDate();
         
+        const orderDate = order.createdAt.toDate();
+        
+        // Formatear la fecha a DD-MM-YYYY para usarla como clave
         const dateStr = `${String(orderDate.getDate()).padStart(2, '0')}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${orderDate.getFullYear()}`;
 
         if (!dailyData[dateStr]) {

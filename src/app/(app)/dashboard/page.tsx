@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -249,6 +250,12 @@ export default function Dashboard() {
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard de Inteligencia de Negocio</h2>
+        <Link href="/dashboard/upload-data" passHref>
+          <Button variant="outline">
+            <Upload className="mr-2 h-4 w-4" />
+            Carga Manual
+          </Button>
+        </Link>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -352,7 +359,7 @@ export default function Dashboard() {
               </CardContent>
             </Card>
             
-            <Card className="col-span-1 md:col-span-2 lg:grid-cols-2">
+            <Card className="col-span-1 md:col-span-4 lg:col-span-4">
               <CardHeader>
                   <CardTitle className="flex items-center"><Package className="mr-2 h-5 w-5" />Top 10 Productos</CardTitle>
                   <CardDescription>Los productos más pedidos, con nombres normalizados por IA.</CardDescription>
@@ -372,26 +379,6 @@ export default function Dashboard() {
                         </BarChart>
                     </ChartContainer>
                   </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card className="col-span-1 md:col-span-2 lg:grid-cols-2 flex flex-col">
-              <CardHeader>
-                  <CardTitle className="flex items-center">
-                      <Upload className="mr-2 h-5 w-5" />
-                      Carga Manual de Datos
-                  </CardTitle>
-                  <CardDescription>
-                      Para tiendas no conectadas por webhooks o para cargas históricas de datos.
-                  </CardDescription>
-              </CardHeader>
-              <CardContent className="flex-grow flex flex-col justify-center items-center">
-                  <Link href="/dashboard/upload-data" passHref>
-                    <Button>
-                      Ir a Carga Manual
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </Link>
               </CardContent>
             </Card>
 
@@ -450,3 +437,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+    

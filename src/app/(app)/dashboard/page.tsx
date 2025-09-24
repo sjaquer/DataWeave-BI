@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { onSnapshot, collection } from "firebase/firestore";
-import { Loader, CheckCircle, XCircle, Percent, CalendarDays, TrendingUp, Upload } from "lucide-react";
+import { Loader, CheckCircle, XCircle, Percent, CalendarDays, TrendingUp, Upload, MapPin, Package, UserCheck, Banknote } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -19,12 +19,33 @@ interface DailyMetric {
   confirmationRate: number;
 }
 
+interface ProvinceMetric {
+    name: string;
+    totalOrders: number;
+    confirmedOrders: number;
+    confirmationRate: number;
+    totalSpent: number;
+}
+
+interface ProductMetric {
+    name: string;
+    totalOrders: number;
+}
+
+interface PersonnelMetric {
+    name: string;
+    confirmedOrders: number;
+}
+
+
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [globalConfirmed, setGlobalConfirmed] = useState(0);
   const [globalUnconfirmed, setGlobalUnconfirmed] = useState(0);
-  const [globalRate, setGlobalRate] = useState(0);
   const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
+  const [provinceMetrics, setProvinceMetrics] = useState<ProvinceMetric[]>([]);
+  const [productMetrics, setProductMetrics] = useState<ProductMetric[]>([]);
+  const [personnelMetrics, setPersonnelMetrics] = useState<PersonnelMetric[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -34,7 +55,11 @@ export default function Dashboard() {
     const unsubscribe = onSnapshot(ordersCollectionRef, (querySnapshot) => {
       let totalConfirmed = 0;
       let totalUnconfirmed = 0;
+      
       const dailyData: { [key: string]: { confirmed: number; unconfirmed: number } } = {};
+      const provinceData: { [key: string]: { totalOrders: number; confirmedOrders: number; totalSpent: number; } } = {};
+      const productData: { [key: string]: number } = {};
+      const personnelData: { [key: string]: number } = {};
 
       querySnapshot.forEach((doc) => {
         const order = doc.data();
@@ -45,43 +70,70 @@ export default function Dashboard() {
         } else {
           totalUnconfirmed++;
         }
-
+        
+        // --- Análisis Diario ---
         if (order.createdAt && typeof order.createdAt.toDate === 'function') {
           const orderDate = order.createdAt.toDate();
           const dateStr = `${String(orderDate.getDate()).padStart(2, '0')}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${orderDate.getFullYear()}`;
+          if (!dailyData[dateStr]) dailyData[dateStr] = { confirmed: 0, unconfirmed: 0 };
+          isOrderConfirmed ? dailyData[dateStr].confirmed++ : dailyData[dateStr].unconfirmed++;
+        }
 
-          if (!dailyData[dateStr]) {
-            dailyData[dateStr] = { confirmed: 0, unconfirmed: 0 };
-          }
-
-          if (isOrderConfirmed) {
-            dailyData[dateStr].confirmed++;
-          } else {
-            dailyData[dateStr].unconfirmed++;
-          }
+        // --- Análisis Demográfico (Provincia) ---
+        const province = order.province || 'Desconocida';
+        if (!provinceData[province]) provinceData[province] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
+        provinceData[province].totalOrders++;
+        provinceData[province].totalSpent += order.totalPrice || 0;
+        if (isOrderConfirmed) provinceData[province].confirmedOrders++;
+        
+        // --- Análisis de Productos ---
+        if (order.products && Array.isArray(order.products)) {
+            order.products.forEach((product: { title: string }) => {
+                const productName = product.title || 'Producto Desconocido';
+                productData[productName] = (productData[productName] || 0) + 1;
+            });
+        }
+        
+        // --- Análisis de Personal ---
+        if (isOrderConfirmed && order.confirmedBy) {
+            const person = order.confirmedBy || 'No especificado';
+            personnelData[person] = (personnelData[person] || 0) + 1;
         }
       });
-
-      const totalOrders = totalConfirmed + totalUnconfirmed;
-      const overallRate = totalOrders > 0 ? (totalConfirmed / totalOrders) * 100 : 0;
-
-      const aggregatedMetrics: DailyMetric[] = Object.entries(dailyData).map(([date, data]) => {
+      
+      // --- Procesar y Ordenar Métricas ---
+      const aggregatedDailyMetrics: DailyMetric[] = Object.entries(dailyData).map(([date, data]) => {
           const dailyTotal = data.confirmed + data.unconfirmed;
-          const rate = dailyTotal > 0 ? (data.confirmed / dailyTotal) * 100 : 0;
           return {
-              date: date,
+              date,
               totalOrders: dailyTotal,
               confirmed: data.confirmed,
               unconfirmed: data.unconfirmed,
-              confirmationRate: parseFloat(rate.toFixed(2)),
+              confirmationRate: dailyTotal > 0 ? (data.confirmed / dailyTotal) * 100 : 0,
           };
-      // CORRECCIÓN: Ordenar por fecha, de más reciente a más antiguo.
       }).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
+
+      const aggregatedProvinceMetrics: ProvinceMetric[] = Object.entries(provinceData).map(([name, data]) => ({
+        name,
+        ...data,
+        confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0
+      })).sort((a, b) => b.totalOrders - a.totalOrders);
+
+      const aggregatedProductMetrics: ProductMetric[] = Object.entries(productData).map(([name, totalOrders]) => ({
+          name, totalOrders
+      })).sort((a, b) => b.totalOrders - a.totalOrders);
+
+      const aggregatedPersonnelMetrics: PersonnelMetric[] = Object.entries(personnelData).map(([name, confirmedOrders]) => ({
+          name, confirmedOrders
+      })).sort((a, b) => b.confirmedOrders - a.confirmedOrders);
+
 
       setGlobalConfirmed(totalConfirmed);
       setGlobalUnconfirmed(totalUnconfirmed);
-      setGlobalRate(overallRate);
-      setDailyMetrics(aggregatedMetrics);
+      setDailyMetrics(aggregatedDailyMetrics);
+      setProvinceMetrics(aggregatedProvinceMetrics);
+      setProductMetrics(aggregatedProductMetrics);
+      setPersonnelMetrics(aggregatedPersonnelMetrics);
       setIsLoading(false);
 
     }, (error) => {
@@ -96,6 +148,12 @@ export default function Dashboard() {
 
     return () => unsubscribe();
   }, [toast]);
+
+  const globalTotal = globalConfirmed + globalUnconfirmed;
+  const globalRate = globalTotal > 0 ? (globalConfirmed / globalTotal) * 100 : 0;
+  const totalSpentAllProvinces = provinceMetrics.reduce((acc, curr) => acc + curr.totalSpent, 0);
+  const averageSpentPerOrder = globalTotal > 0 ? totalSpentAllProvinces / globalTotal : 0;
+
 
   if (isLoading) {
     return (
@@ -129,7 +187,7 @@ export default function Dashboard() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pedidos No Confirmados</CardTitle>
+              <CardTitle className="text-sm font-medium">Pedidos Sin Confirmar</CardTitle>
               <XCircle className="h-5 w-5 text-red-500" />
             </CardHeader>
             <CardContent>
@@ -149,12 +207,12 @@ export default function Dashboard() {
           </Card>
            <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total de Pedidos</CardTitle>
-              <TrendingUp className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Gasto Promedio por Pedido</CardTitle>
+              <Banknote className="h-5 w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">{(globalConfirmed + globalUnconfirmed).toLocaleString()}</div>
-               <p className="text-xs text-muted-foreground">Suma de todos los pedidos registrados.</p>
+              <div className="text-4xl font-bold">${averageSpentPerOrder.toFixed(2)}</div>
+               <p className="text-xs text-muted-foreground">Promedio gastado en todos los pedidos.</p>
             </CardContent>
           </Card>
           
@@ -162,16 +220,94 @@ export default function Dashboard() {
               <CardHeader>
                   <CardTitle className="flex items-center">
                       <Upload className="mr-2 h-5 w-5" />
-                      Carga Manual de Datos
+                      Carga Manual de Datos (CSV)
                   </CardTitle>
                   <CardDescription>
-                      Sube aquí los archivos CSV exportados de Shopify para las tiendas no conectadas por webhooks.
+                      Sube aquí los archivos CSV para las tiendas no conectadas por webhooks.
                   </CardDescription>
               </CardHeader>
               <CardContent>
                 <DataUploader />
               </CardContent>
           </Card>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 col-span-1 md:col-span-2 lg:col-span-4 gap-6">
+                <Card className="lg:col-span-1">
+                    <CardHeader>
+                        <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Top Provincias por Pedidos</CardTitle>
+                        <CardDescription>Provincias con más pedidos y su tasa de confirmación.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="overflow-auto max-h-[300px]">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Provincia</TableHead>
+                                    <TableHead className="text-center">Pedidos</TableHead>
+                                    <TableHead className="text-right">Tasa Conf.</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {provinceMetrics.map(p => (
+                                    <TableRow key={p.name}>
+                                        <TableCell className="font-medium">{p.name}</TableCell>
+                                        <TableCell className="text-center">{p.totalOrders}</TableCell>
+                                        <TableCell className="text-right">{p.confirmationRate.toFixed(1)}%</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+                <Card className="lg:col-span-1">
+                     <CardHeader>
+                        <CardTitle className="flex items-center"><Package className="mr-2 h-5 w-5" />Top Productos Pedidos</CardTitle>
+                        <CardDescription>Productos que aparecen con más frecuencia en los pedidos.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="overflow-auto max-h-[300px]">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Producto</TableHead>
+                                    <TableHead className="text-right">Nº de Pedidos</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                 {productMetrics.slice(0, 10).map(p => (
+                                    <TableRow key={p.name}>
+                                        <TableCell className="font-medium truncate" style={{maxWidth: '200px'}}>{p.name}</TableCell>
+                                        <TableCell className="text-right">{p.totalOrders}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            </div>
+            
+            <Card className="col-span-1 md:col-span-2 lg:col-span-4">
+                  <CardHeader>
+                    <CardTitle className="flex items-center"><UserCheck className="mr-2 h-5 w-5" />Rendimiento del Personal</CardTitle>
+                    <CardDescription>Número de pedidos confirmados por cada miembro del equipo.</CardDescription>
+                </CardHeader>
+                <CardContent className="overflow-auto max-h-[300px]">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Personal</TableHead>
+                                <TableHead className="text-right">Pedidos Confirmados</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                             {personnelMetrics.map(p => (
+                                <TableRow key={p.name}>
+                                    <TableCell className="font-medium">{p.name}</TableCell>
+                                    <TableCell className="text-right">{p.confirmedOrders}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
 
            <Card className="col-span-1 md:col-span-2 lg:col-span-4">
               <CardHeader>

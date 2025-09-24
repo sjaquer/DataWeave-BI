@@ -233,9 +233,11 @@ export async function analyzeAndStoreMetrics(
           city: r['Shipping City'] || 'N/A',
           zip: r['Shipping Zip'] || 'N/A',
           country: r['Shipping Country'] || 'N/A',
-          productTitle: r['Lineitem name'] || 'N/A',
-          productQuantity: parseInt(r['Lineitem quantity'] || '0', 10),
-          productPrice: parseFloat(r['Lineitem price'] || '0'),
+           products: [{ 
+              title: r['Lineitem name'] || 'N/A', 
+              quantity: parseInt(r['Lineitem quantity'] || '0', 10),
+              price: parseFloat(r['Lineitem price'] || '0')
+          }],
         };
 
         batch.set(orderDocRef, orderData, { merge: true });

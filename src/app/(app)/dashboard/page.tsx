@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Loader, CheckCircle, XCircle, Percent, CalendarDays, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw } from "lucide-react";
+import { Loader, CheckCircle, XCircle, Percent, CalendarDays, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -15,10 +15,12 @@ import { useToast } from "@/hooks/use-toast";
 import { findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { DailyMetric, ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput } from "@/ai/schemas/getMetricsSchema";
+import type { DailyMetric, ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric } from "@/ai/schemas/getMetricsSchema";
 
 const CACHE_KEY = 'dashboardMetricsCache';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000; // 15 minutos
+const MAIN_STORES = ["dearel", "blumi", "novi", "trazo", "cumbre"];
+
 
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
@@ -29,6 +31,7 @@ export default function Dashboard() {
   const [provinceMetrics, setProvinceMetrics] = useState<ProvinceMetric[]>([]);
   const [productMetrics, setProductMetrics] = useState<ProductMetric[]>([]);
   const [personnelMetrics, setPersonnelMetrics] = useState<PersonnelMetric[]>([]);
+  const [storeMetrics, setStoreMetrics] = useState<StoreMetric[]>([]);
   
   const { toast } = useToast();
 
@@ -74,6 +77,7 @@ export default function Dashboard() {
       setProvinceMetrics(aggregatedProvinceMetrics);
       setProductMetrics(data.productMetrics);
       setPersonnelMetrics(data.personnelMetrics);
+      setStoreMetrics(data.storeMetrics || []);
       setIsLoading(false);
   }, []);
 
@@ -81,7 +85,6 @@ export default function Dashboard() {
   const fetchMetrics = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
     
-    // 1. Intentar cargar desde localStorage si no se fuerza la actualización
     if (!forceRefresh) {
       try {
         const cachedData = localStorage.getItem(CACHE_KEY);
@@ -95,16 +98,14 @@ export default function Dashboard() {
         }
       } catch (e) {
         console.error("Error al leer la caché:", e);
-        localStorage.removeItem(CACHE_KEY); // Limpiar caché corrupta
+        localStorage.removeItem(CACHE_KEY); 
       }
     }
 
-    // 2. Si no hay caché o se fuerza, obtener de la fuente de datos
     try {
       toast({ title: "Actualizando métricas...", description: "Obteniendo los datos más recientes desde la base de datos." });
       const metricsData = await getMetrics();
       
-      // 3. Guardar en localStorage
       try {
         const cachePayload = { data: metricsData, timestamp: Date.now() };
         localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
@@ -149,6 +150,7 @@ export default function Dashboard() {
   const globalRate = globalTotal > 0 ? ((miscMetrics?.globalConfirmed ?? 0) / globalTotal) * 100 : 0;
   const totalSpentAllProvinces = provinceMetrics.reduce((acc, curr) => acc + curr.totalSpent, 0);
   const averageSpentPerOrder = globalTotal > 0 ? totalSpentAllProvinces / globalTotal : 0;
+  const otherStores = storeMetrics.filter(s => !MAIN_STORES.includes(s.name.toLowerCase()));
 
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
@@ -168,7 +170,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pedidos Confirmados</CardTitle>
@@ -209,8 +211,54 @@ export default function Dashboard() {
                <p className="text-xs text-muted-foreground">Promedio gastado en todos los pedidos.</p>
             </CardContent>
           </Card>
-          
-            
+      </div>
+
+       {/* --- Métricas por Tienda --- */}
+      <div className="space-y-2">
+          <h3 className="text-2xl font-bold tracking-tight">Análisis por Tienda</h3>
+          <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-6">
+              {MAIN_STORES.map(storeName => {
+                  const storeData = storeMetrics.find(s => s.name.toLowerCase() === storeName);
+                  const rate = storeData ? storeData.confirmationRate : 0;
+                  return (
+                      <Card key={storeName}>
+                          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <CardTitle className="text-sm font-medium capitalize">{storeName}</CardTitle>
+                              <Store className="h-5 w-5 text-muted-foreground" />
+                          </CardHeader>
+                          <CardContent>
+                              <div className="text-3xl font-bold">{rate.toFixed(2)}%</div>
+                              <p className="text-xs text-muted-foreground">Tasa de Confirmación</p>
+                          </CardContent>
+                      </Card>
+                  );
+              })}
+              {/* Card para 'Otras' si existen */}
+              {otherStores.length > 0 && (
+                  <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                          <CardTitle className="text-sm font-medium">Otras Tiendas</CardTitle>
+                          <Store className="h-5 w-5 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                          <div className="text-3xl font-bold">
+                            {
+                              (() => {
+                                const total = otherStores.reduce((acc, s) => acc + s.totalOrders, 0);
+                                const confirmed = otherStores.reduce((acc, s) => acc + s.confirmedOrders, 0);
+                                return total > 0 ? ((confirmed/total) * 100).toFixed(2) : '0.00'
+                              })()
+                            }%
+                          </div>
+                          <p className="text-xs text-muted-foreground">Tasa de Confirmación</p>
+                      </CardContent>
+                  </Card>
+              )}
+          </div>
+      </div>
+
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           <Card className="col-span-1 md:col-span-2 lg:grid-cols-2">
               <CardHeader>
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>

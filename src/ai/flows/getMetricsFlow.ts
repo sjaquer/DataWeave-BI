@@ -10,80 +10,7 @@
 import { db } from '@/lib/firebase-admin';
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-
-// --- Definición de Esquemas de Salida ---
-
-const DailyMetricSchema = z.object({
-  date: z.string(),
-  totalOrders: z.number(),
-  confirmed: z.number(),
-  unconfirmed: z.number(),
-  confirmationRate: z.number(),
-});
-
-const ProvinceMetricSchema = z.object({
-  name: z.string(),
-  totalOrders: z.number(),
-  confirmedOrders: z.number(),
-  confirmationRate: z.number(),
-  totalSpent: z.number(),
-});
-
-const ProductMetricSchema = z.object({
-  name: z.string(),
-  totalOrders: z.number(),
-});
-
-const PersonnelMetricSchema = z.object({
-  name: z.string(),
-  confirmedOrders: z.number(),
-});
-
-const MiscMetricsSchema = z.object({
-  globalConfirmed: z.number(),
-  globalUnconfirmed: z.number(),
-});
-
-
-const GetMetricsOutputSchema = z.object({
-    dailyMetrics: z.array(DailyMetricSchema),
-    provinceMetrics: z.array(ProvinceMetricSchema),
-    productMetrics: z.array(ProductMetricSchema),
-    personnelMetrics: z.array(PersonnelMetricSchema),
-    miscMetrics: MiscMetricsSchema
-});
-
-export type GetMetricsOutput = z.infer<typeof GetMetricsOutputSchema>;
-
-/**
- * Lee todos los documentos de una colección y los devuelve como un array de objetos.
- * @param collectionName El nombre de la colección a leer.
- * @returns Un array con los datos de los documentos.
- */
-async function readCollection<T>(collectionName: string, orderByField?: string, orderDirection: 'asc' | 'desc' = 'desc'): Promise<T[]> {
-  let query = db.collection(collectionName);
-  if (orderByField) {
-    query = query.orderBy(orderByField, orderDirection);
-  }
-  const snapshot = await query.get();
-  if (snapshot.empty) {
-    return [];
-  }
-  return snapshot.docs.map(doc => doc.data() as T);
-}
-
-
-/**
- * Lee un único documento de una colección.
- * @param collectionName El nombre de la colección.
- * @param docId El ID del documento a leer.
- * @returns Los datos del documento o null si no existe.
- */
-async function readDocument<T>(collectionName:string, docId: string): Promise<T | null> {
-    const docRef = db.collection(collectionName).doc(docId);
-    const docSnap = await docRef.get();
-    return docSnap.exists ? docSnap.data() as T : null;
-}
+import { GetMetricsOutputSchema, type GetMetricsOutput } from '@/ai/schemas/getMetricsSchema';
 
 
 // Define el flujo de Genkit.
@@ -107,6 +34,7 @@ const getMetricsFlow = ai.defineFlow(
         provinceMetrics: [],
         productMetrics: [],
         personnelMetrics: [],
+        storeMetrics: [],
         miscMetrics: { globalConfirmed: 0, globalUnconfirmed: 0 },
       };
     }
@@ -120,6 +48,8 @@ const getMetricsFlow = ai.defineFlow(
     const provinceData: { [key: string]: { totalOrders: number; confirmedOrders: number; totalSpent: number; } } = {};
     const productData: { [key: string]: number } = {};
     const personnelData: { [key: string]: number } = {};
+    const storeData: { [key: string]: { totalOrders: number, confirmedOrders: number } } = {};
+
 
     orders.forEach((order) => {
       const isOrderConfirmed = order.isConfirmed === true;
@@ -154,6 +84,16 @@ const getMetricsFlow = ai.defineFlow(
           const person = order.confirmedBy || 'No especificado';
           personnelData[person] = (personnelData[person] || 0) + 1;
       }
+
+      // Store Metrics
+      const storeName = order.storeId || 'Desconocida';
+      if (!storeData[storeName]) {
+          storeData[storeName] = { totalOrders: 0, confirmedOrders: 0 };
+      }
+      storeData[storeName].totalOrders++;
+      if (isOrderConfirmed) {
+          storeData[storeName].confirmedOrders++;
+      }
     });
     
     // --- Preparación de Datos para el UI ---
@@ -174,6 +114,12 @@ const getMetricsFlow = ai.defineFlow(
         name, confirmedOrders
     })).sort((a, b) => b.confirmedOrders - a.confirmedOrders);
     
+    const aggregatedStoreMetrics: any[] = Object.entries(storeData).map(([name, data]) => ({
+        name,
+        ...data,
+        confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0,
+    }));
+
     const miscMetrics = {
         globalConfirmed: totalConfirmed,
         globalUnconfirmed: totalUnconfirmed
@@ -184,6 +130,7 @@ const getMetricsFlow = ai.defineFlow(
       provinceMetrics: aggregatedProvinceMetrics,
       productMetrics: aggregatedProductMetrics,
       personnelMetrics: aggregatedPersonnelMetrics,
+      storeMetrics: aggregatedStoreMetrics,
       miscMetrics: miscMetrics,
     };
   }

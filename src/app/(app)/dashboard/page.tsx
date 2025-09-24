@@ -62,10 +62,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     setIsLoading(true);
-    // Escucha la colección 'shopify_orders'
     const ordersCollectionRef = collection(db, "shopify_orders");
     
-    // Filtra para obtener solo los pedidos de los últimos 6 meses.
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     const sixMonthsAgoTimestamp = Timestamp.fromDate(sixMonthsAgo);
@@ -73,22 +71,18 @@ export default function Dashboard() {
     const q = query(ordersCollectionRef, where("createdAt", ">=", sixMonthsAgoTimestamp));
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      // Objeto para agregar los datos por día.
       const dailyData: { [key: string]: { total: number; confirmed: number } } = {};
 
       querySnapshot.forEach((doc) => {
         const order = doc.data();
         
-        // Asegúrate de que el pedido tenga una fecha de creación válida.
-        // Usa `createdAt` para los pedidos de Shopify y `confirmedAt` para los de Sheets que no tengan `createdAt`.
-        const orderTimestamp = order.createdAt || order.confirmedAt;
+        const orderTimestamp = order.createdAt;
         if (!orderTimestamp || !(orderTimestamp instanceof Timestamp)) {
-            return; // Ignora documentos sin una fecha válida
+            return;
         }
         const orderDate = orderTimestamp.toDate();
         
-        // Formato DD-MM-YYYY para la clave de agregación.
-        const dateStr = `${String(orderDate.getUTCDate()).padStart(2, '0')}-${String(orderDate.getUTCMonth() + 1).padStart(2, '0')}-${orderDate.getUTCFullYear()}`;
+        const dateStr = `${String(orderDate.getDate()).padStart(2, '0')}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${orderDate.getFullYear()}`;
 
         if (!dailyData[dateStr]) {
           dailyData[dateStr] = { total: 0, confirmed: 0 };
@@ -109,19 +103,17 @@ export default function Dashboard() {
               confirmedOrders: data.confirmed,
               confirmationRate: parseFloat(rate.toFixed(2)),
           };
-      // Ordenar de más reciente a más antiguo
       }).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
 
       setMetrics(aggregatedMetrics);
       setIsLoading(false);
     }, (error) => {
       console.error("Error al obtener las métricas desde Firestore:", error);
-      // Solo mostramos el toast si el error no es por falta de permisos (que suele pasar si no hay datos)
       if (error.code !== 'permission-denied' && error.code !== 'unauthenticated') {
         toast({
           variant: "destructive",
           title: "Error de Conexión",
-          description: "No se pudieron cargar las métricas desde la base de datos.",
+          description: "No se pudieron cargar las métricas. La base de datos puede estar vacía o inaccesible.",
         });
       }
       setIsLoading(false);
@@ -268,7 +260,7 @@ export default function Dashboard() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={4} className="h-24 text-center">
-                        No se encontraron datos de métricas. Esperando nuevos pedidos...
+                        No se encontraron datos de métricas. Sube un CSV o espera nuevos pedidos de Shopify.
                       </TableCell>
                     </TableRow>
                   )}

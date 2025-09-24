@@ -23,7 +23,7 @@ export interface ConfirmedOrderInfo {
   TIENDA: string;
   ATENDIDO?: string;
   COURIER?: string;
-  // Añadimos opcionalmente otros campos que puedan venir del Sheet
+  PROVINCIA?: string; // Añadimos el campo provincia
   'FECHA DE ATENCIÓN'?: string;
 }
 
@@ -57,7 +57,6 @@ export interface Order {
  */
 function normalizeOrderNumber(name: string): string {
     if (!name) return '';
-    // Esta expresión regular es más robusta y captura números incluso si están precedidos por letras como en "N-10971"
     const match = String(name).match(/[0-9]+(-[0-9]+)*$/);
     return match ? match[0] : name.replace(/[^0-9a-zA-Z-]/g, '');
 }
@@ -81,7 +80,6 @@ function getShopifyOrderDocId(orderName: string, storeId: string): string {
 export async function processNewShopifyOrder(order: Order, storeId: string) {
   const orderDate = new Date(order.created_at);
 
-  // Ignorar pedidos con más de 6 meses de antigüedad
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
   if (orderDate < sixMonthsAgo) {
@@ -107,7 +105,6 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
           quantity: item.quantity || 0,
           price: parseFloat(item.price || '0')
       })) || [],
-      // Aseguramos que isConfirmed se inicie en false por defecto
       isConfirmed: false,
       confirmedAt: null,
       confirmedBy: null,
@@ -115,7 +112,6 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
   };
 
   try {
-    // Usamos merge: true para crear o actualizar el pedido sin sobrescribir los datos de confirmación si ya existen.
     await db.collection('shopify_orders').doc(orderDocId).set(orderData, { merge: true });
     console.log(`[Firestore] Pedido ${order.name} de ${storeId} guardado/actualizado en 'shopify_orders'.`);
   } catch (error) {
@@ -125,7 +121,7 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
 }
 
 /**
- * **Lógica CORREGIDA**: Crea o actualiza los pedidos en Firestore desde Google Sheets.
+ * Crea o actualiza los pedidos en Firestore desde Google Sheets.
  */
 export async function updateConfirmedOrders(
   confirmedOrders: ConfirmedOrderInfo[]
@@ -154,19 +150,15 @@ export async function updateConfirmedOrders(
     const confirmedAtTimestamp = dateString ? Timestamp.fromDate(new Date(dateString)) : Timestamp.now();
 
     const orderData = {
-        // Datos del pedido que podrían no existir si el webhook de Shopify no ha llegado
         orderName: rawOrderName,
         storeId: storeId,
-        // Datos de confirmación
         isConfirmed: true,
         confirmedAt: confirmedAtTimestamp,
         confirmedBy: item.ATENDIDO || 'No especificado',
-        courier: item.COURIER || 'No especificado'
+        courier: item.COURIER || 'No especificado',
+        province: item.PROVINCIA || 'N/A', // Añadimos la provincia desde el Sheet
     };
 
-    // **LA CLAVE ESTÁ AQUÍ**: Usamos set con merge: true.
-    // Si el doc no existe, lo crea con `orderData`.
-    // Si ya existe, fusiona `orderData` sobre el doc existente, actualizando los campos de confirmación.
     batch.set(orderDocRef, orderData, { merge: true });
     processedCount++;
   }
@@ -216,7 +208,6 @@ export async function analyzeAndStoreMetrics(
       });
       
       for (const r of records) {
-        // --- 1. Validación y Filtrado ---
         const orderDateStr = r['Created at'] || '';
         const orderDate = orderDateStr ? new Date(orderDateStr) : null;
         if (!orderDate || isNaN(orderDate.getTime()) || orderDate < sixMonthsAgo) {
@@ -229,11 +220,9 @@ export async function analyzeAndStoreMetrics(
             continue;
         }
 
-        // --- 2. Creación del Documento y Mapeo ---
         const orderDocId = getShopifyOrderDocId(orderName, storeId);
         const orderDocRef = db.collection('shopify_orders').doc(orderDocId);
         
-        // --- 3. Construcción del Objeto Limpio para Firestore ---
         const orderData = {
           storeId: storeId,
           orderId: String(orderId),
@@ -241,25 +230,20 @@ export async function analyzeAndStoreMetrics(
           createdAt: Timestamp.fromDate(orderDate),
           totalPrice: parseFloat(r.Total || '0'),
           customerName: (r['Billing Name'] || '').trim(),
-          province: r['Shipping Province Name'] || 'N/A',
+          province: r['Shipping Province Name'] || 'N/A', // Guardamos la provincia desde el CSV
           city: r['Shipping City'] || 'N/A',
           zip: r['Shipping Zip'] || 'N/A',
           country: r['Shipping Country'] || 'N/A',
-          // Simplificamos los datos del producto
           productTitle: r['Lineitem name'] || 'N/A',
           productQuantity: parseInt(r['Lineitem quantity'] || '0', 10),
           productPrice: parseFloat(r['Lineitem price'] || '0'),
         };
 
-        // --- 4. Añadir al Lote ---
-        // `merge: true` es crucial: si el pedido ya existe, solo actualiza los campos
-        // de este objeto, pero NO borra `isConfirmed`, `confirmedAt`, etc. si ya existen.
         batch.set(orderDocRef, orderData, { merge: true });
         totalProcessedOrders++;
       }
     }
     
-    // --- 5. Guardar Todo en la Base de Datos ---
     await batch.commit();
 
     return {

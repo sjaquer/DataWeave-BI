@@ -167,7 +167,7 @@ export default function Dashboard() {
   // Carga inicial de datos al montar el componente
   useEffect(() => {
     if (date?.from && date?.to) {
-        fetchMetrics();
+        fetchMetrics(false); // Llama sin forzar para usar la caché si está disponible
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -633,3 +633,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+    

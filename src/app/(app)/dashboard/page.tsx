@@ -483,14 +483,16 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="overflow-auto max-h-[350px] p-2">
                  <ResponsiveContainer width="100%" height={300}>
-                   <BarChart data={personnelMetrics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" />
-                      <YAxis dataKey="name" type="category" width={80} />
-                      <Tooltip content={<ChartTooltipContent />} />
-                      <Legend />
-                      <Bar dataKey="confirmedOrders" name="Confirmados" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
-                   </BarChart>
+                   <ChartContainer config={{ confirmedOrders: { label: "Confirmados", color: "hsl(var(--chart-1))" } }}>
+                     <BarChart data={personnelMetrics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" />
+                        <YAxis dataKey="name" type="category" width={80} />
+                        <Tooltip content={<ChartTooltipContent />} />
+                        <Legend />
+                        <Bar dataKey="confirmedOrders" name="Confirmados" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
+                     </BarChart>
+                   </ChartContainer>
                  </ResponsiveContainer>
               </CardContent>
           </Card>
@@ -541,7 +543,7 @@ export default function Dashboard() {
                     <TabsList className="grid w-full grid-cols-7">
                         <TabsTrigger value="all">General</TabsTrigger>
                         {MAIN_STORES.map(store => (
-                            <TabsTrigger key={store} value={store.toLowerCase()} className="capitalize">{capitalize(store)}</TabsTrigger>
+                            <TabsTrigger key={store} value={store} className="capitalize">{capitalize(store)}</TabsTrigger>
                         ))}
                          <TabsTrigger value="others">Otras</TabsTrigger>
                     </TabsList>
@@ -549,7 +551,7 @@ export default function Dashboard() {
                         {renderDailyMetricsTable(dailyMetrics)}
                     </TabsContent>
                     {MAIN_STORES.map(store => (
-                        <TabsContent key={store} value={store.toLowerCase()} className="mt-4">
+                        <TabsContent key={store} value={store} className="mt-4">
                             {renderDailyMetricsTable(dailyMetrics, store)}
                         </TabsContent>
                     ))}

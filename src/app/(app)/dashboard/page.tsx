@@ -51,7 +51,7 @@ export default function Dashboard() {
   const { toast } = useToast();
 
   const processAndSetMetrics = useCallback((data: GetMetricsOutput | null) => {
-      if (!data) {
+      if (!data || !data.provinceMetrics) {
         setIsLoading(false);
         return;
       }
@@ -147,9 +147,11 @@ export default function Dashboard() {
     }
   }, [toast, processAndSetMetrics, date]);
 
+  // Carga inicial de datos al montar el componente
   useEffect(() => {
     fetchMetrics();
-  }, [fetchMetrics]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (isLoading) {
     return (
@@ -566,3 +568,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+    

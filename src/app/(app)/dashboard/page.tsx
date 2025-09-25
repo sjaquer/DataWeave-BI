@@ -51,45 +51,49 @@ export default function Dashboard() {
   const { toast } = useToast();
 
   const processAndSetMetrics = useCallback((data: GetMetricsOutput | null) => {
-      if (!data || !data.provinceMetrics) {
+      if (!data) {
         setIsLoading(false);
         return;
       }
       
       const provinceCorrectionsCache: Record<string, string> = {};
-      const uniqueProvinces = [...new Set(data.provinceMetrics.map((p: ProvinceMetric) => p.name).filter((p: string) => p !== 'Desconocida'))];
       
-      uniqueProvinces.forEach((provinceName: string) => {
-        if (!provinceCorrectionsCache[provinceName]) {
-          const bestMatch = findBestProvinceMatch(provinceName, provinceList);
-          provinceCorrectionsCache[provinceName] = bestMatch || provinceName;
-        }
-      });
-      
-      const correctedProvinceMetrics = data.provinceMetrics.map((metric: ProvinceMetric) => ({
-          ...metric,
-          name: provinceCorrectionsCache[metric.name] || metric.name,
-      }));
+      if (data.provinceMetrics) {
+        const uniqueProvinces = [...new Set(data.provinceMetrics.map((p: ProvinceMetric) => p.name).filter((p: string) => p !== 'Desconocida'))];
+        
+        uniqueProvinces.forEach((provinceName: string) => {
+          if (!provinceCorrectionsCache[provinceName]) {
+            const bestMatch = findBestProvinceMatch(provinceName, provinceList);
+            provinceCorrectionsCache[provinceName] = bestMatch || provinceName;
+          }
+        });
+        
+        const correctedProvinceMetrics = data.provinceMetrics.map((metric: ProvinceMetric) => ({
+            ...metric,
+            name: provinceCorrectionsCache[metric.name] || metric.name,
+        }));
 
-      const aggregatedProvinceMetrics: ProvinceMetric[] = Object.values(
-        correctedProvinceMetrics.reduce((acc: Record<string, ProvinceMetric>, metric: ProvinceMetric) => {
-            if (!acc[metric.name]) {
-                acc[metric.name] = { ...metric, totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
-            }
-            acc[metric.name].totalOrders += metric.totalOrders;
-            acc[metric.name].confirmedOrders += metric.confirmedOrders;
-            acc[metric.name].totalSpent += metric.totalSpent;
-            acc[metric.name].confirmationRate = acc[metric.name].totalOrders > 0 ? (acc[metric.name].confirmedOrders / acc[metric.name].totalOrders) * 100 : 0;
-            return acc;
-        }, {})
-      ).sort((a: ProvinceMetric, b: ProvinceMetric) => b.totalOrders - a.totalOrders);
+        const aggregatedProvinceMetrics: ProvinceMetric[] = Object.values(
+          correctedProvinceMetrics.reduce((acc: Record<string, ProvinceMetric>, metric: ProvinceMetric) => {
+              if (!acc[metric.name]) {
+                  acc[metric.name] = { ...metric, totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
+              }
+              acc[metric.name].totalOrders += metric.totalOrders;
+              acc[metric.name].confirmedOrders += metric.confirmedOrders;
+              acc[metric.name].totalSpent += metric.totalSpent;
+              acc[metric.name].confirmationRate = acc[metric.name].totalOrders > 0 ? (acc[metric.name].confirmedOrders / acc[metric.name].totalOrders) * 100 : 0;
+              return acc;
+          }, {})
+        ).sort((a: ProvinceMetric, b: ProvinceMetric) => b.totalOrders - a.totalOrders);
+        setProvinceMetrics(aggregatedProvinceMetrics);
+      }
 
-      setMiscMetrics(data.miscMetrics);
-      setDailyMetrics(data.dailyMetrics);
-      setProvinceMetrics(aggregatedProvinceMetrics);
+
+      setMiscMetrics(data.miscMetrics || null);
+      setDailyMetrics(data.dailyMetrics || []);
       setMostRequestedProducts(data.mostRequestedProducts || []);
       setMostPurchasedProducts(data.mostPurchasedProducts || []);
-      setPersonnelMetrics(data.personnelMetrics);
+      setPersonnelMetrics(data.personnelMetrics || []);
       setStoreMetrics(data.storeMetrics || []);
       setIsLoading(false);
   }, []);
@@ -135,6 +139,7 @@ export default function Dashboard() {
       }
 
       processAndSetMetrics(metricsData);
+      toast({ title: "Métricas Actualizadas", description: "Los datos se han cargado correctamente." });
 
     } catch (error) {
       console.error("Error al obtener las métricas:", error);
@@ -149,10 +154,11 @@ export default function Dashboard() {
 
   // Carga inicial de datos al montar el componente
   useEffect(() => {
-    // No hacer nada aquí, la carga se dispara con el botón
+    fetchMetrics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (isLoading) {
+  if (isLoading && !miscMetrics) { // Solo muestra el loader a pantalla completa en la carga inicial
     return (
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 flex items-center justify-center h-screen">
           <div className="flex items-center gap-4">
@@ -275,8 +281,8 @@ export default function Dashboard() {
               />
             </PopoverContent>
           </Popover>
-          <Button variant="outline" size="sm" onClick={() => fetchMetrics(true)}>
-            <RefreshCw className="mr-2 h-4 w-4" />
+          <Button variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>
+            {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Actualizar Datos
           </Button>
           <Link href="/dashboard/upload-data" passHref>
@@ -443,7 +449,7 @@ export default function Dashboard() {
               </CardContent>
           </Card>
 
-            <Card className="col-span-1 md:col-span-2 lg:col-span-4">
+            {/* <Card className="col-span-1 md:col-span-2 lg:col-span-4">
               <CardHeader>
                   <CardTitle className="flex items-center"><UserCheck className="mr-2 h-5 w-5" />Rendimiento del Personal</CardTitle>
                   <CardDescription>Pedidos confirmados por cada miembro del equipo.</CardDescription>
@@ -462,7 +468,7 @@ export default function Dashboard() {
                     </ChartContainer>
                   </ResponsiveContainer>
               </CardContent>
-            </Card>
+            </Card> */}
             
              <Card className="col-span-1 md:col-span-2">
                 <CardHeader>

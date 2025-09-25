@@ -90,7 +90,9 @@ const getMetricsFlow = ai.defineFlow(
 
       // Province Metrics
       const rawProvince = order.province || 'Desconocida';
-      if (!provinceData[rawProvince]) provinceData[rawProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
+      if (!provinceData[rawProvince]) {
+        provinceData[rawProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
+      }
       provinceData[rawProvince].totalOrders++;
       provinceData[rawProvince].totalSpent += order.totalPrice || 0;
       if (isOrderConfirmed) provinceData[rawProvince].confirmedOrders++;

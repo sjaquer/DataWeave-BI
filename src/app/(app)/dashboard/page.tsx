@@ -161,8 +161,8 @@ export default function Dashboard() {
 
   // Carga inicial de datos al montar el componente
   useEffect(() => {
-    // This will run only on the first load or when the date range is applied by the user
-    // The fetch is triggered by the "Actualizar Datos" button
+    fetchMetrics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (isLoading && !miscMetrics) { // Solo muestra el loader a pantalla completa en la carga inicial
@@ -478,6 +478,25 @@ export default function Dashboard() {
 
             <Card className="col-span-1 md:col-span-4">
               <CardHeader>
+                  <CardTitle className="flex items-center"><UserCheck className="mr-2 h-5 w-5" />Rendimiento del Personal</CardTitle>
+                  <CardDescription>Pedidos confirmados por cada miembro del equipo.</CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-auto max-h-[350px] p-2">
+                 <ResponsiveContainer width="100%" height={300}>
+                   <BarChart data={personnelMetrics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" />
+                      <YAxis dataKey="name" type="category" width={80} />
+                      <Tooltip content={<ChartTooltipContent />} />
+                      <Legend />
+                      <Bar dataKey="confirmedOrders" name="Confirmados" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
+                   </BarChart>
+                 </ResponsiveContainer>
+              </CardContent>
+          </Card>
+
+            <Card className="col-span-1 md:col-span-4">
+              <CardHeader>
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Métricas por Provincia</CardTitle>
                   <CardDescription>Desglose completo de pedidos y gasto por cada provincia.</CardDescription>
               </CardHeader>
@@ -531,7 +550,7 @@ export default function Dashboard() {
                     </TabsContent>
                     {MAIN_STORES.map(store => (
                         <TabsContent key={store} value={store.toLowerCase()} className="mt-4">
-                            {renderDailyMetricsTable(dailyMetrics, capitalize(store))}
+                            {renderDailyMetricsTable(dailyMetrics, store)}
                         </TabsContent>
                     ))}
                     <TabsContent value="others" className="mt-4">

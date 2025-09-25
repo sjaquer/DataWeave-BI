@@ -62,6 +62,22 @@ export const StoreMetricSchema = z.object({
 });
 export type StoreMetric = z.infer<typeof StoreMetricSchema>;
 
+// --- Esquemas de Inventario ---
+
+export const InventoryOutflowTrendSchema = z.object({
+  date: z.string(),
+  units: z.number(),
+});
+export type InventoryOutflowTrend = z.infer<typeof InventoryOutflowTrendSchema>;
+
+export const MostMovedProductsSchema = z.object({
+  name: z.string(),
+  movements: z.number(),
+});
+export type MostMovedProducts = z.infer<typeof MostMovedProductsSchema>;
+
+
+// --- Esquema de Salida Principal ---
 
 export const GetMetricsOutputSchema = z.object({
     dailyMetrics: z.array(DailyMetricSchema),
@@ -70,7 +86,9 @@ export const GetMetricsOutputSchema = z.object({
     mostPurchasedProducts: z.array(ProductMetricSchema),
     personnelMetrics: z.array(PersonnelMetricSchema),
     storeMetrics: z.array(StoreMetricSchema),
-    miscMetrics: MiscMetricsSchema
+    miscMetrics: MiscMetricsSchema,
+    inventoryOutflowTrend: z.array(InventoryOutflowTrendSchema).optional(),
+    mostMovedProducts: z.array(MostMovedProductsSchema).optional(),
 });
 
 export type GetMetricsOutput = z.infer<typeof GetMetricsOutputSchema>;

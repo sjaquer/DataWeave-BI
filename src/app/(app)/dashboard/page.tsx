@@ -6,8 +6,8 @@ import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, CheckCircle, XCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LabelList } from "recharts";
+import { Loader, CheckCircle, XCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LabelList, LineChart, Line } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { DailyMetric, ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput } from "@/ai/schemas/getMetricsSchema";
+import type { DailyMetric, ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, InventoryOutflowTrend, MostMovedProducts } from "@/ai/schemas/getMetricsSchema";
 
 const CACHE_KEY = 'dashboardMetricsCache';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000; // 15 minutos
@@ -46,6 +46,9 @@ export default function Dashboard() {
   const [mostPurchasedProducts, setMostPurchasedProducts] = useState<ProductMetric[]>([]);
   const [personnelMetrics, setPersonnelMetrics] = useState<PersonnelMetric[]>([]);
   const [storeMetrics, setStoreMetrics] = useState<StoreMetric[]>([]);
+  const [inventoryOutflowTrend, setInventoryOutflowTrend] = useState<InventoryOutflowTrend[]>([]);
+  const [mostMovedProducts, setMostMovedProducts] = useState<MostMovedProducts[]>([]);
+
 
   // Estado para el filtro de fechas
   const [date, setDate] = useState<DateRange | undefined>(() => {
@@ -102,6 +105,8 @@ export default function Dashboard() {
       setMostPurchasedProducts(data.mostPurchasedProducts || []);
       setPersonnelMetrics(data.personnelMetrics || []);
       setStoreMetrics(data.storeMetrics.map(s => ({ ...s, name: capitalize(s.name) })) || []);
+      setInventoryOutflowTrend(data.inventoryOutflowTrend || []);
+      setMostMovedProducts(data.mostMovedProducts || []);
       setIsLoading(false);
   }, []);
 
@@ -130,10 +135,10 @@ export default function Dashboard() {
     try {
       toast({ title: "Actualizando métricas...", description: "Obteniendo datos para el período seleccionado." });
       
-      const input: GetMetricsInput = {
-        startDate: date?.from?.toISOString(),
-        endDate: date?.to?.toISOString()
-      };
+      const input: GetMetricsInput = date?.from && date?.to ? {
+        startDate: date.from.toISOString(),
+        endDate: date.to.toISOString()
+      } : {};
       
       const metricsData = await getMetrics(input);
       
@@ -161,7 +166,9 @@ export default function Dashboard() {
 
   // Carga inicial de datos al montar el componente
   useEffect(() => {
-    fetchMetrics();
+    if (date?.from && date?.to) {
+        fetchMetrics();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -185,7 +192,7 @@ export default function Dashboard() {
   const renderDailyMetricsTable = (metrics: DailyMetric[], storeId?: string) => {
     const dataToRender = storeId
       ? metrics.map(m => {
-          const storeData = m.byStore?.[storeId.toLowerCase()] || { confirmed: 0, unconfirmed: 0 };
+          const storeData = m.byStore?.[storeId] || { confirmed: 0, unconfirmed: 0 };
           const total = storeData.confirmed + storeData.unconfirmed;
           return {
             date: m.date,
@@ -419,8 +426,75 @@ export default function Dashboard() {
           </CardContent>
       </Card>
 
+      {/* --- SECCIÓN DE ANÁLISIS DE INVENTARIO --- */}
+      <div className="space-y-2 pt-6">
+          <h3 className="text-2xl font-bold tracking-tight">Análisis de Inventario</h3>
+          <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
+              <Card className="col-span-1 lg:col-span-2">
+                <CardHeader>
+                    <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Salida de Inventario</CardTitle>
+                    <CardDescription>Unidades totales que salen del inventario por día.</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[350px] w-full">
+                  <ChartContainer config={{ units: { label: "Unidades", color: "hsl(var(--chart-1))" } }}>
+                     <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={inventoryOutflowTrend} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                         <CartesianGrid strokeDasharray="3 3" />
+                         <XAxis dataKey="date" />
+                         <YAxis />
+                         <Tooltip content={<ChartTooltipContent />} />
+                         <Legend />
+                         <Line type="monotone" dataKey="units" stroke="hsl(var(--chart-1))" strokeWidth={2} />
+                      </LineChart>
+                     </ResponsiveContainer>
+                   </ChartContainer>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5" />Top 10 Productos por Rotación (Salidas)</CardTitle>
+                    <CardDescription>Productos con mayor cantidad de movimientos de salida.</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[350px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <ChartContainer config={{ movements: { label: "Movimientos", color: "hsl(var(--chart-2))" } }}>
+                            <BarChart data={mostMovedProducts.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 100, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis type="number" />
+                                <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+                                <Tooltip content={<ChartTooltipContent />} />
+                                <Legend />
+                                <Bar dataKey="movements" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
+                            </BarChart>
+                        </ChartContainer>
+                    </ResponsiveContainer>
+                </CardContent>
+            </Card>
+             <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center"><UserCheck className="mr-2 h-5 w-5" />Rendimiento del Equipo (Pedidos)</CardTitle>
+                    <CardDescription>Pedidos confirmados gestionados por cada miembro del equipo.</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[350px] w-full">
+                   <ResponsiveContainer width="100%" height={300}>
+                     <ChartContainer config={{ confirmedOrders: { label: "Confirmados", color: "hsl(var(--chart-1))" } }}>
+                       <BarChart data={personnelMetrics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis type="number" />
+                          <YAxis dataKey="name" type="category" width={80} />
+                          <Tooltip content={<ChartTooltipContent />} />
+                          <Legend />
+                          <Bar dataKey="confirmedOrders" name="Confirmados" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
+                       </BarChart>
+                     </ChartContainer>
+                   </ResponsiveContainer>
+                </CardContent>
+            </Card>
+          </div>
+      </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 pt-6">
           <Card className="col-span-1 md:col-span-2 lg:col-span-4">
               <CardHeader>
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
@@ -475,27 +549,6 @@ export default function Dashboard() {
                     {renderProductList(mostPurchasedProducts)}
                 </CardContent>
             </Card>
-
-            <Card className="col-span-1 md:col-span-4">
-              <CardHeader>
-                  <CardTitle className="flex items-center"><UserCheck className="mr-2 h-5 w-5" />Rendimiento del Personal</CardTitle>
-                  <CardDescription>Pedidos confirmados por cada miembro del equipo.</CardDescription>
-              </CardHeader>
-              <CardContent className="overflow-auto max-h-[350px] p-2">
-                 <ResponsiveContainer width="100%" height={300}>
-                   <ChartContainer config={{ confirmedOrders: { label: "Confirmados", color: "hsl(var(--chart-1))" } }}>
-                     <BarChart data={personnelMetrics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis type="number" />
-                        <YAxis dataKey="name" type="category" width={80} />
-                        <Tooltip content={<ChartTooltipContent />} />
-                        <Legend />
-                        <Bar dataKey="confirmedOrders" name="Confirmados" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
-                     </BarChart>
-                   </ChartContainer>
-                 </ResponsiveContainer>
-              </CardContent>
-          </Card>
 
             <Card className="col-span-1 md:col-span-4">
               <CardHeader>

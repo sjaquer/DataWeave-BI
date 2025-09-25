@@ -20,47 +20,45 @@ const getMetricsFlow = ai.defineFlow(
     outputSchema: GetMetricsOutputSchema,
   },
   async (input) => {
-    let query = db.collection('shopify_orders');
+    // --- CONSULTAS A FIRESTORE ---
+    let ordersQuery = db.collection('shopify_orders');
+    let inventoryQuery = db.collection('inventory_movements');
 
     // Aplicar filtro de fecha si se proporciona
     if (input && input.startDate && input.endDate) {
       const startDate = new Date(input.startDate);
       const endDate = new Date(input.endDate);
-      query = query.where('createdAt', '>=', startDate).where('createdAt', '<=', endDate);
+      ordersQuery = ordersQuery.where('createdAt', '>=', startDate).where('createdAt', '<=', endDate);
+      inventoryQuery = inventoryQuery.where('timestamp', '>=', startDate).where('timestamp', '<=', endDate);
     } else {
       // Por defecto, últimos 6 meses si no hay filtro
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      query = query.where('createdAt', '>=', sixMonthsAgo);
+      ordersQuery = ordersQuery.where('createdAt', '>=', sixMonthsAgo);
+      inventoryQuery = inventoryQuery.where('timestamp', '>=', sixMonthsAgo);
     }
     
-    const querySnapshot = await query.get();
-
-    if (querySnapshot.empty) {
-      return {
-        dailyMetrics: [],
-        provinceMetrics: [],
-        mostRequestedProducts: [],
-        mostPurchasedProducts: [],
-        personnelMetrics: [],
-        storeMetrics: [],
-        miscMetrics: { globalConfirmed: 0, globalUnconfirmed: 0 },
-      };
-    }
+    const [ordersSnapshot, inventorySnapshot] = await Promise.all([
+      ordersQuery.get(),
+      inventoryQuery.get()
+    ]);
     
-    const orders: any[] = querySnapshot.docs.map(doc => doc.data());
+    // --- INICIALIZACIÓN DE DATOS AGREGADOS ---
+    const orders: any[] = ordersSnapshot.docs.map(doc => doc.data());
+    const inventoryMovements: any[] = inventorySnapshot.docs.map(doc => doc.data());
 
-    // --- Agregación de Datos ---
     let totalConfirmed = 0;
     let totalUnconfirmed = 0;
     const dailyData: { [key: string]: { confirmed: number; unconfirmed: number, byStore: { [store: string]: { confirmed: number, unconfirmed: number } } } } = {};
     const provinceData: { [key: string]: { totalOrders: number; confirmedOrders: number; totalSpent: number; } } = {};
-    const requestedProductData: { [key: string]: number } = {}; // Para 'más pedidos'
-    const purchasedProductData: { [key: string]: number } = {}; // Para 'más comprados' (confirmados)
-    const personnelData: { [key: string]: number } = {};
+    const requestedProductData: { [key: string]: number } = {};
+    const purchasedProductData: { [key: string]: number } = {};
     const storeData: { [key: string]: { totalOrders: number, confirmedOrders: number } } = {};
+    const personnelData: { [key: string]: number } = {}; // Para Rendimiento del Personal (Pedidos)
+    const inventoryOutflowData: { [key: string]: number } = {}; // Para Tendencia de Salida
+    const mostMovedProductsData: { [key: string]: number } = {}; // Para Productos con más rotación
 
-
+    // --- PROCESAMIENTO DE PEDIDOS (Orders) ---
     orders.forEach((order) => {
       const isOrderConfirmed = order.isConfirmed === true;
       const storeName = order.storeId || 'Desconocida';
@@ -111,7 +109,7 @@ const getMetricsFlow = ai.defineFlow(
           });
       }
       
-      // Personnel Metrics
+      // Personnel Metrics (from confirmed orders)
       if (isOrderConfirmed && order.confirmedBy) {
           const person = order.confirmedBy || 'No especificado';
           personnelData[person] = (personnelData[person] || 0) + 1;
@@ -126,47 +124,54 @@ const getMetricsFlow = ai.defineFlow(
           storeData[storeName].confirmedOrders++;
       }
     });
+
+    // --- PROCESAMIENTO DE INVENTARIO (Inventory Movements) ---
+    inventoryMovements.forEach((mov) => {
+        if (mov.type === 'SALIDA') {
+            const movDate = mov.timestamp?.toDate();
+            if (movDate) {
+                const dateStr = `${String(movDate.getDate()).padStart(2, '0')}-${String(movDate.getMonth() + 1).padStart(2, '0')}-${movDate.getFullYear()}`;
+                const quantity = Math.abs(mov.quantity || 0); // Usamos valor absoluto para salidas
+
+                // Tendencia de Salida
+                inventoryOutflowData[dateStr] = (inventoryOutflowData[dateStr] || 0) + quantity;
+            }
+
+            // Productos más movidos
+            if (mov.productName) {
+                mostMovedProductsData[mov.productName] = (mostMovedProductsData[mov.productName] || 0) + 1;
+            }
+        }
+    });
     
-    // --- Preparación de Datos para el UI ---
-    const aggregatedDailyMetrics: any[] = Object.entries(dailyData).map(([date, data]) => {
-        const dailyTotal = data.confirmed + data.unconfirmed;
-        return { 
-          date, 
-          totalOrders: dailyTotal, 
-          confirmed: data.confirmed, 
-          unconfirmed: data.unconfirmed, 
-          confirmationRate: dailyTotal > 0 ? (data.confirmed / dailyTotal) * 100 : 0,
-          byStore: data.byStore 
-        };
-    }).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
+    // --- PREPARACIÓN DE DATOS PARA EL UI ---
+    const aggregatedDailyMetrics: any[] = Object.entries(dailyData).map(([date, data]) => ({ 
+        date, 
+        totalOrders: data.confirmed + data.unconfirmed, 
+        confirmed: data.confirmed, 
+        unconfirmed: data.unconfirmed, 
+        confirmationRate: (data.confirmed + data.unconfirmed) > 0 ? (data.confirmed / (data.confirmed + data.unconfirmed)) * 100 : 0,
+        byStore: data.byStore 
+    })).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
 
     const aggregatedProvinceMetrics: any[] = Object.entries(provinceData).map(([name, data]) => ({
       name, ...data, confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0
     })).sort((a, b) => b.totalOrders - a.totalOrders);
 
-    const aggregatedRequestedProducts: any[] = Object.entries(requestedProductData).map(([name, totalOrders]) => ({
-        name, totalOrders
-    })).sort((a, b) => b.totalOrders - a.totalOrders);
-
-    const aggregatedPurchasedProducts: any[] = Object.entries(purchasedProductData).map(([name, totalOrders]) => ({
-        name, totalOrders
-    })).sort((a, b) => b.totalOrders - a.totalOrders);
-
-
-    const aggregatedPersonnelMetrics: any[] = Object.entries(personnelData).map(([name, confirmedOrders]) => ({
-        name, confirmedOrders
-    })).sort((a, b) => b.confirmedOrders - a.confirmedOrders);
+    const aggregatedRequestedProducts: any[] = Object.entries(requestedProductData).map(([name, totalOrders]) => ({ name, totalOrders })).sort((a, b) => b.totalOrders - a.totalOrders);
+    const aggregatedPurchasedProducts: any[] = Object.entries(purchasedProductData).map(([name, totalOrders]) => ({ name, totalOrders })).sort((a, b) => b.totalOrders - a.totalOrders);
+    
+    const aggregatedPersonnelMetrics: any[] = Object.entries(personnelData).map(([name, confirmedOrders]) => ({ name, confirmedOrders })).sort((a, b) => b.confirmedOrders - a.confirmedOrders);
     
     const aggregatedStoreMetrics: any[] = Object.entries(storeData).map(([name, data]) => ({
-        name,
-        ...data,
-        confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0,
+        name, ...data, confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0,
     }));
 
-    const miscMetrics = {
-        globalConfirmed: totalConfirmed,
-        globalUnconfirmed: totalUnconfirmed
-    };
+    const aggregatedInventoryOutflow: any[] = Object.entries(inventoryOutflowData).map(([date, units]) => ({ date, units })).sort((a, b) => new Date(a.date.split('-').reverse().join('-')).getTime() - new Date(b.date.split('-').reverse().join('-')).getTime());
+    
+    const aggregatedMostMovedProducts: any[] = Object.entries(mostMovedProductsData).map(([name, movements]) => ({ name, movements })).sort((a, b) => b.movements - a.movements);
+
+    const miscMetrics = { globalConfirmed: totalConfirmed, globalUnconfirmed: totalUnconfirmed };
 
     return {
       dailyMetrics: aggregatedDailyMetrics,
@@ -176,10 +181,11 @@ const getMetricsFlow = ai.defineFlow(
       personnelMetrics: aggregatedPersonnelMetrics,
       storeMetrics: aggregatedStoreMetrics,
       miscMetrics: miscMetrics,
+      inventoryOutflowTrend: aggregatedInventoryOutflow,
+      mostMovedProducts: aggregatedMostMovedProducts,
     };
   }
 );
-
 
 // Exporta una función wrapper para ser llamada desde el cliente.
 export async function getMetrics(input: GetMetricsInput): Promise<GetMetricsOutput> {

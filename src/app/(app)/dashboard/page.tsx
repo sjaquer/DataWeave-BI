@@ -257,8 +257,8 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="flex-1 space-y-8 p-4 md:p-8 pt-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard de Inteligencia de Negocio</h2>
         <div className="flex items-center gap-2 flex-wrap">
           <Popover>
@@ -266,7 +266,7 @@ export default function Dashboard() {
               <Button
                 id="date"
                 variant={"outline"}
-                className={cn("w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}
+                className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
                 {date?.from ? (
@@ -295,20 +295,22 @@ export default function Dashboard() {
               />
             </PopoverContent>
           </Popover>
-          <Button variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>
-            {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Actualizar Datos
-          </Button>
-          <Link href="/dashboard/upload-data" passHref>
-            <Button variant="outline" size="sm">
-              <Upload className="mr-2 h-4 w-4" />
-              Carga Manual
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button className="flex-1 sm:flex-initial" variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>
+              {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Actualizar
             </Button>
-          </Link>
+            <Link href="/dashboard/upload-data" passHref className="flex-1 sm:flex-initial">
+              <Button variant="outline" size="sm" className="w-full">
+                <Upload className="mr-2 h-4 w-4" />
+                Carga Manual
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
 
-       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pedidos Confirmados</CardTitle>
@@ -351,9 +353,9 @@ export default function Dashboard() {
           </Card>
       </div>
       
-       <div className="space-y-2">
+       <div className="space-y-4">
           <h3 className="text-2xl font-bold tracking-tight">Análisis por Tienda</h3>
-          <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
               {MAIN_STORES.map(storeName => {
                   const storeData = storeMetrics.find(s => s.name.toLowerCase() === storeName);
                   const rate = storeData ? storeData.confirmationRate : 0;
@@ -364,8 +366,8 @@ export default function Dashboard() {
                               <Store className="h-5 w-5 text-muted-foreground" />
                           </CardHeader>
                           <CardContent>
-                              <div className="text-3xl font-bold">{rate.toFixed(2)}%</div>
-                              <p className="text-xs text-muted-foreground">Tasa de Confirmación</p>
+                              <div className="text-2xl lg:text-3xl font-bold">{rate.toFixed(2)}%</div>
+                              <p className="text-xs text-muted-foreground">Confirmación</p>
                           </CardContent>
                       </Card>
                   );
@@ -377,7 +379,7 @@ export default function Dashboard() {
                           <Store className="h-5 w-5 text-muted-foreground" />
                       </CardHeader>
                       <CardContent>
-                          <div className="text-3xl font-bold">
+                          <div className="text-2xl lg:text-3xl font-bold">
                             {
                               (() => {
                                 const total = otherStores.reduce((acc, s) => acc + s.totalOrders, 0);
@@ -386,14 +388,14 @@ export default function Dashboard() {
                               })()
                             }%
                           </div>
-                          <p className="text-xs text-muted-foreground">Tasa de Confirmación</p>
+                          <p className="text-xs text-muted-foreground">Confirmación</p>
                       </CardContent>
                   </Card>
               )}
           </div>
       </div>
 
-       <Card className="col-span-1 md:col-span-4">
+       <Card>
           <CardHeader>
               <CardTitle className="flex items-center"><Store className="mr-2 h-5 w-5" />Pedidos vs Confirmados por Tienda</CardTitle>
               <CardDescription>Comparativa de pedidos totales vs. pedidos confirmados para cada tienda.</CardDescription>
@@ -427,10 +429,10 @@ export default function Dashboard() {
       </Card>
 
       {/* --- SECCIÓN DE ANÁLISIS DE INVENTARIO --- */}
-      <div className="space-y-2 pt-6">
+      <div className="space-y-4 pt-6">
           <h3 className="text-2xl font-bold tracking-tight">Análisis de Inventario</h3>
-          <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
-              <Card className="col-span-1 lg:col-span-2">
+          <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
+              <Card className="lg:col-span-2">
                 <CardHeader>
                     <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Salida de Inventario</CardTitle>
                     <CardDescription>Unidades totales que salen del inventario por día.</CardDescription>
@@ -444,7 +446,7 @@ export default function Dashboard() {
                          <YAxis />
                          <Tooltip content={<ChartTooltipContent />} />
                          <Legend />
-                         <Line type="monotone" dataKey="units" stroke="hsl(var(--chart-1))" strokeWidth={2} />
+                         <Line type="monotone" dataKey="units" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
                       </LineChart>
                      </ResponsiveContainer>
                    </ChartContainer>
@@ -494,8 +496,8 @@ export default function Dashboard() {
       </div>
 
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 pt-6">
-          <Card className="col-span-1 md:col-span-2 lg:col-span-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 pt-6">
+          <Card className="md:col-span-2 lg:col-span-4">
               <CardHeader>
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
                   <CardDescription>Top 10 provincias con más pedidos y su gasto total.</CardDescription>
@@ -530,7 +532,7 @@ export default function Dashboard() {
               </CardContent>
           </Card>
             
-             <Card className="col-span-1 md:col-span-2">
+             <Card className="md:col-span-1">
                 <CardHeader>
                     <CardTitle className="flex items-center"><TrendingUp className="mr-2 h-5 w-5" />Top 5 Productos Más Pedidos</CardTitle>
                     <CardDescription>Productos con mayor demanda (confirmados o no).</CardDescription>
@@ -540,7 +542,7 @@ export default function Dashboard() {
                 </CardContent>
             </Card>
 
-            <Card className="col-span-1 md:col-span-2">
+            <Card className="md:col-span-1">
                 <CardHeader>
                     <CardTitle className="flex items-center"><ShoppingCart className="mr-2 h-5 w-5" />Top 5 Productos Más Comprados</CardTitle>
                     <CardDescription>Productos con más ventas confirmadas.</CardDescription>
@@ -550,7 +552,7 @@ export default function Dashboard() {
                 </CardContent>
             </Card>
 
-            <Card className="col-span-1 md:col-span-4">
+            <Card className="md:col-span-2 lg:col-span-4">
               <CardHeader>
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Métricas por Provincia</CardTitle>
                   <CardDescription>Desglose completo de pedidos y gasto por cada provincia.</CardDescription>
@@ -586,14 +588,14 @@ export default function Dashboard() {
               </CardContent>
           </Card>
 
-           <Card className="col-span-1 md:col-span-4">
+           <Card className="md:col-span-2 lg:col-span-4">
               <CardHeader>
                   <CardTitle className="flex items-center"><CalendarIcon className="mr-2 h-5 w-5" />Análisis Detallado por Día</CardTitle>
                   <CardDescription>Desglose diario de pedidos por tienda y tasa de éxito.</CardDescription>
               </CardHeader>
               <CardContent className="overflow-auto max-h-[550px] p-2">
                  <Tabs defaultValue="all" className="w-full">
-                    <TabsList className="grid w-full grid-cols-7">
+                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
                         <TabsTrigger value="all">General</TabsTrigger>
                         {MAIN_STORES.map(store => (
                             <TabsTrigger key={store} value={store} className="capitalize">{capitalize(store)}</TabsTrigger>
@@ -633,5 +635,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-    

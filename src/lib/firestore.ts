@@ -28,6 +28,24 @@ export interface ConfirmedOrderInfo {
   PRODUCTO?: string; // Campo para los productos desde Google Sheets
 }
 
+export interface InventoryMovement {
+  ID_MOVIMIENTO: string;
+  TIMESTAMP: string;
+  USUARIO_REGISTRADOR: string;
+  SKU: string;
+  PRODUCTO: string;
+  VARIANTE: string;
+  CANTIDAD: number;
+  STOCK_ANTERIOR: number;
+  STOCK_POSTERIOR: number;
+  TIPO_MOVIMIENTO: 'ENTRADA' | 'SALIDA' | 'AJUSTE';
+  MOTIVO_DETALLE: string;
+  ID_REFERENCIA?: string;
+  ALMACEN?: string;
+  'NUM _PEDIDO'?: string;
+  TIENDA?: string;
+}
+
 export interface Order {
     id: number | string;
     name: string;
@@ -216,6 +234,77 @@ export async function updateConfirmedOrders(
   }
 
   const message = `${processedCount} pedidos fueron creados o actualizados como confirmados en la base de datos.`;
+  console.log(`[Firestore] ${message}`);
+  
+  return {
+    status: 'success',
+    message,
+  };
+}
+
+
+/**
+ * Procesa y almacena movimientos de inventario desde Google Sheets.
+ */
+export async function processInventoryMovements(
+  movements: InventoryMovement[]
+): Promise<{ status: string; message: string }> {
+  if (!Array.isArray(movements) || movements.length === 0) {
+    return { status: 'success', message: 'No se encontraron movimientos válidos para procesar.' };
+  }
+
+  const batch: WriteBatch = db.batch();
+  let processedCount = 0;
+
+  for (const item of movements) {
+    const movementId = item.ID_MOVIMIENTO;
+    if (!movementId) {
+      console.warn('[Firestore] Item de inventario ignorado por falta de ID_MOVIMIENTO:', item);
+      continue;
+    }
+    
+    // Intenta parsear el timestamp. Asume formato 'DD/MM/YYYY HH:mm:ss'
+    let movementTimestamp: Timestamp;
+    try {
+        const [datePart, timePart] = item.TIMESTAMP.split(' ');
+        const [day, month, year] = datePart.split('/');
+        const [hour, minute, second] = timePart.split(':');
+        const parsedDate = new Date(+year, +month - 1, +day, +hour, +minute, +second);
+        movementTimestamp = Timestamp.fromDate(parsedDate);
+    } catch(e) {
+        console.warn(`[Firestore] Timestamp inválido para ${movementId}. Usando fecha actual.`, e);
+        movementTimestamp = Timestamp.now();
+    }
+
+
+    const movementDocRef = db.collection('inventory_movements').doc(movementId);
+    
+    const movementData = {
+      timestamp: movementTimestamp,
+      user: item.USUARIO_REGISTRADOR || 'N/A',
+      sku: item.SKU || 'N/A',
+      productName: item.PRODUCTO || 'N/A',
+      variant: item.VARIANTE || 'N/A',
+      quantity: Number(item.CANTIDAD || 0),
+      stockBefore: Number(item.STOCK_ANTERIOR || 0),
+      stockAfter: Number(item.STOCK_POSTERIOR || 0),
+      type: item.TIPO_MOVIMIENTO || 'AJUSTE',
+      reason: item.MOTIVO_DETALLE || 'N/A',
+      referenceId: item.ID_REFERENCIA || null,
+      warehouse: item.ALMACEN || 'N/A',
+      orderNumber: item['NUM _PEDIDO'] || null,
+      store: item.TIENDA || 'N/A',
+    };
+
+    batch.set(movementDocRef, movementData, { merge: true });
+    processedCount++;
+  }
+
+  if (processedCount > 0) {
+    await batch.commit();
+  }
+
+  const message = `${processedCount} movimientos de inventario fueron guardados en la base de datos.`;
   console.log(`[Firestore] ${message}`);
   
   return {

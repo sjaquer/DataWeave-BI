@@ -28,6 +28,13 @@ const CACHE_EXPIRATION_MS = 15 * 60 * 1000; // 15 minutos
 const MAIN_STORES = ["dearel", "blumi", "novi", "trazto", "cumbre"];
 
 
+// Helper function to capitalize the first letter of a string
+const capitalize = (s: string) => {
+  if (typeof s !== 'string' || !s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+
+
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   
@@ -94,7 +101,7 @@ export default function Dashboard() {
       setMostRequestedProducts(data.mostRequestedProducts || []);
       setMostPurchasedProducts(data.mostPurchasedProducts || []);
       setPersonnelMetrics(data.personnelMetrics || []);
-      setStoreMetrics(data.storeMetrics || []);
+      setStoreMetrics(data.storeMetrics.map(s => ({ ...s, name: capitalize(s.name) })) || []);
       setIsLoading(false);
   }, []);
 
@@ -154,8 +161,8 @@ export default function Dashboard() {
 
   // Carga inicial de datos al montar el componente
   useEffect(() => {
-    fetchMetrics();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // This will run only on the first load or when the date range is applied by the user
+    // The fetch is triggered by the "Actualizar Datos" button
   }, []);
 
   if (isLoading && !miscMetrics) { // Solo muestra el loader a pantalla completa en la carga inicial
@@ -178,7 +185,7 @@ export default function Dashboard() {
   const renderDailyMetricsTable = (metrics: DailyMetric[], storeId?: string) => {
     const dataToRender = storeId
       ? metrics.map(m => {
-          const storeData = m.byStore?.[storeId] || { confirmed: 0, unconfirmed: 0 };
+          const storeData = m.byStore?.[storeId.toLowerCase()] || { confirmed: 0, unconfirmed: 0 };
           const total = storeData.confirmed + storeData.unconfirmed;
           return {
             date: m.date,
@@ -346,7 +353,7 @@ export default function Dashboard() {
                   return (
                       <Card key={storeName}>
                           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                              <CardTitle className="text-sm font-medium capitalize">{storeName}</CardTitle>
+                              <CardTitle className="text-sm font-medium">{capitalize(storeName)}</CardTitle>
                               <Store className="h-5 w-5 text-muted-foreground" />
                           </CardHeader>
                           <CardContent>
@@ -448,27 +455,6 @@ export default function Dashboard() {
                 </ResponsiveContainer>
               </CardContent>
           </Card>
-
-            {/* <Card className="col-span-1 md:col-span-2 lg:col-span-4">
-              <CardHeader>
-                  <CardTitle className="flex items-center"><UserCheck className="mr-2 h-5 w-5" />Rendimiento del Personal</CardTitle>
-                  <CardDescription>Pedidos confirmados por cada miembro del equipo.</CardDescription>
-              </CardHeader>
-              <CardContent className="h-[350px] w-full">
-                 <ResponsiveContainer width="100%" height="100%">
-                    <ChartContainer config={{ confirmedOrders: { label: "Pedidos Confirmados", color: "hsl(var(--chart-1))" } }}>
-                        <BarChart data={personnelMetrics.slice(0, 10)} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis type="number" fontSize={12} />
-                          <YAxis dataKey="name" type="category" fontSize={12} tickLine={false} axisLine={false} width={80} />
-                          <Tooltip content={<ChartTooltipContent />} cursor={{fill: 'hsl(var(--muted))'}} />
-                          <Legend verticalAlign="top" />
-                          <Bar dataKey="confirmedOrders" name="Pedidos Confirmados" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-                        </BarChart>
-                    </ChartContainer>
-                  </ResponsiveContainer>
-              </CardContent>
-            </Card> */}
             
              <Card className="col-span-1 md:col-span-2">
                 <CardHeader>
@@ -536,7 +522,7 @@ export default function Dashboard() {
                     <TabsList className="grid w-full grid-cols-7">
                         <TabsTrigger value="all">General</TabsTrigger>
                         {MAIN_STORES.map(store => (
-                            <TabsTrigger key={store} value={store} className="capitalize">{store}</TabsTrigger>
+                            <TabsTrigger key={store} value={store.toLowerCase()} className="capitalize">{capitalize(store)}</TabsTrigger>
                         ))}
                          <TabsTrigger value="others">Otras</TabsTrigger>
                     </TabsList>
@@ -544,13 +530,13 @@ export default function Dashboard() {
                         {renderDailyMetricsTable(dailyMetrics)}
                     </TabsContent>
                     {MAIN_STORES.map(store => (
-                        <TabsContent key={store} value={store} className="mt-4">
-                            {renderDailyMetricsTable(dailyMetrics, store)}
+                        <TabsContent key={store} value={store.toLowerCase()} className="mt-4">
+                            {renderDailyMetricsTable(dailyMetrics, capitalize(store))}
                         </TabsContent>
                     ))}
                     <TabsContent value="others" className="mt-4">
                       {renderDailyMetricsTable(dailyMetrics.map(m => {
-                          const otherStoresData = Object.keys(m.byStore || {}).filter(s => !MAIN_STORES.includes(s)).reduce((acc, key) => {
+                          const otherStoresData = Object.keys(m.byStore || {}).filter(s => !MAIN_STORES.includes(s.toLowerCase())).reduce((acc, key) => {
                             acc.confirmed += m.byStore![key].confirmed;
                             acc.unconfirmed += m.byStore![key].unconfirmed;
                             return acc;

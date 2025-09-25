@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { processInventoryMovements } from '@/lib/firestore';
 import type { InventoryMovement } from '@/lib/firestore';

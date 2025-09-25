@@ -149,8 +149,7 @@ export default function Dashboard() {
 
   // Carga inicial de datos al montar el componente
   useEffect(() => {
-    fetchMetrics();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // No hacer nada aquí, la carga se dispara con el botón
   }, []);
 
   if (isLoading) {
@@ -568,5 +567,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-    

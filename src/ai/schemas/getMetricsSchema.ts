@@ -1,5 +1,13 @@
-
 import { z } from 'zod';
+
+// --- Esquema de Entrada ---
+export const GetMetricsInputSchema = z.object({
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+}).optional();
+
+export type GetMetricsInput = z.infer<typeof GetMetricsInputSchema>;
+
 
 // --- Definición de Esquemas de Salida ---
 

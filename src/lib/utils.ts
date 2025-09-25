@@ -80,5 +80,3 @@ export function findBestProvinceMatch(
   // Only return the match if it's within the similarity threshold
   return minDistance <= threshold ? bestMatch : inputProvince;
 }
-
-    

@@ -9,23 +9,32 @@
 import { db } from '@/lib/firebase-admin';
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { GetMetricsOutputSchema, type GetMetricsOutput } from '@/ai/schemas/getMetricsSchema';
+import { GetMetricsInputSchema, GetMetricsOutputSchema, type GetMetricsInput, type GetMetricsOutput } from '@/ai/schemas/getMetricsSchema';
 
 
 // Define el flujo de Genkit.
 const getMetricsFlow = ai.defineFlow(
   {
     name: 'getMetricsFlow',
-    inputSchema: z.void(),
+    inputSchema: GetMetricsInputSchema,
     outputSchema: GetMetricsOutputSchema,
   },
-  async () => {
+  async (input) => {
+    let query = db.collection('shopify_orders');
 
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-
-    const ordersCollectionRef = db.collection('shopify_orders').where('createdAt', '>=', sixMonthsAgo);
-    const querySnapshot = await ordersCollectionRef.get();
+    // Aplicar filtro de fecha si se proporciona
+    if (input && input.startDate && input.endDate) {
+      const startDate = new Date(input.startDate);
+      const endDate = new Date(input.endDate);
+      query = query.where('createdAt', '>=', startDate).where('createdAt', '<=', endDate);
+    } else {
+      // Por defecto, últimos 6 meses si no hay filtro
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      query = query.where('createdAt', '>=', sixMonthsAgo);
+    }
+    
+    const querySnapshot = await query.get();
 
     if (querySnapshot.empty) {
       return {
@@ -93,10 +102,7 @@ const getMetricsFlow = ai.defineFlow(
               const rawProduct = product.title;
               const cleanedProduct = rawProduct.replace(/^[0-9]+\s*x\s+/i, '').trim();
               
-              // Contar para 'más pedidos'
               requestedProductData[cleanedProduct] = (requestedProductData[cleanedProduct] || 0) + 1;
-
-              // Contar para 'más comprados' solo si el pedido está confirmado
               if (isOrderConfirmed) {
                   purchasedProductData[cleanedProduct] = (purchasedProductData[cleanedProduct] || 0) + 1;
               }
@@ -174,6 +180,6 @@ const getMetricsFlow = ai.defineFlow(
 
 
 // Exporta una función wrapper para ser llamada desde el cliente.
-export async function getMetrics(): Promise<GetMetricsOutput> {
-    return getMetricsFlow();
+export async function getMetrics(input: GetMetricsInput): Promise<GetMetricsOutput> {
+    return getMetricsFlow(input);
 }

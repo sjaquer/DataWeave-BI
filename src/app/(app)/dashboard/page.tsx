@@ -6,14 +6,11 @@ import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, CheckCircle, XCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users } from "lucide-react";
+import { Loader, CheckCircle, XCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LabelList, LineChart, Line } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -22,6 +19,7 @@ import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { DailyMetric, ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, InventoryOutflowTrend, MostMovedProducts } from "@/ai/schemas/getMetricsSchema";
+import DashboardNav from "@/components/DashboardNav";
 
 const CACHE_KEY = 'dashboardMetricsCache';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000; // 15 minutos
@@ -40,7 +38,6 @@ export default function Dashboard() {
   
   // --- Estados de Métricas Agregadas ---
   const [miscMetrics, setMiscMetrics] = useState<MiscMetrics | null>(null);
-  const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
   const [provinceMetrics, setProvinceMetrics] = useState<ProvinceMetric[]>([]);
   const [mostRequestedProducts, setMostRequestedProducts] = useState<ProductMetric[]>([]);
   const [mostPurchasedProducts, setMostPurchasedProducts] = useState<ProductMetric[]>([]);
@@ -104,7 +101,6 @@ export default function Dashboard() {
       }));
 
       setMiscMetrics(data.miscMetrics || null);
-      setDailyMetrics(data.dailyMetrics || []);
       setMostRequestedProducts(data.mostRequestedProducts || []);
       setMostPurchasedProducts(data.mostPurchasedProducts || []);
       setPersonnelMetrics(data.personnelMetrics || []);
@@ -114,9 +110,8 @@ export default function Dashboard() {
       setIsLoading(false);
   }, []);
 
- const fetchMetrics = useCallback(async (forceRefresh = false) => {
+  const fetchMetrics = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
-    
     const cacheKeyWithDate = `${CACHE_KEY}_${date?.from?.toISOString()}_${date?.to?.toISOString()}`;
 
     if (!forceRefresh) {
@@ -132,31 +127,28 @@ export default function Dashboard() {
         }
       } catch (e) {
         console.error("Error al leer la caché:", e);
-        localStorage.removeItem(cacheKeyWithDate); 
+        localStorage.removeItem(cacheKeyWithDate);
       }
     }
 
     try {
       toast({ title: "Actualizando métricas...", description: "Obteniendo datos para el período seleccionado." });
-      
       const input: GetMetricsInput = date?.from && date?.to ? {
         startDate: date.from.toISOString(),
         endDate: date.to.toISOString()
       } : {};
-      
       const metricsData = await getMetrics(input);
-      
+
       try {
         const cachePayload = { data: metricsData, timestamp: Date.now() };
         localStorage.setItem(cacheKeyWithDate, JSON.stringify(cachePayload));
       } catch (e) {
-         console.error("Error al guardar en la caché:", e);
-         toast({ variant: "destructive", title: "Error de Caché", description: "No se pudieron guardar las métricas localmente." });
+        console.error("Error al guardar en la caché:", e);
+        toast({ variant: "destructive", title: "Error de Caché", description: "No se pudieron guardar las métricas localmente." });
       }
 
       processAndSetMetrics(metricsData);
       toast({ title: "Métricas Actualizadas", description: "Los datos se han cargado correctamente." });
-
     } catch (error) {
       console.error("Error al obtener las métricas:", error);
       toast({
@@ -166,8 +158,7 @@ export default function Dashboard() {
       });
       setIsLoading(false);
     }
-  }, [toast, processAndSetMetrics, date]);
-
+  }, [date, processAndSetMetrics, toast]);
 
   useEffect(() => {
     if (date?.from && date?.to) {
@@ -194,58 +185,6 @@ export default function Dashboard() {
   const averageSpentPerOrder = globalTotal > 0 ? totalSpentAllProvinces / globalTotal : 0;
   const otherStores = storeMetrics.filter(s => !MAIN_STORES.includes(s.name.toLowerCase()));
 
-  const renderDailyMetricsTable = (metrics: DailyMetric[], storeId?: string) => {
-    const dataToRender = storeId
-      ? metrics.map(m => {
-          const storeData = m.byStore?.[storeId] || { confirmed: 0, unconfirmed: 0 };
-          const total = storeData.confirmed + storeData.unconfirmed;
-          return {
-            date: m.date,
-            confirmed: storeData.confirmed,
-            unconfirmed: storeData.unconfirmed,
-            totalOrders: total,
-            confirmationRate: total > 0 ? (storeData.confirmed / total) * 100 : 0,
-          };
-        }).filter(m => m.totalOrders > 0)
-      : metrics;
-
-    return (
-      <Table>
-        <TableHeader className="sticky top-0 bg-card">
-          <TableRow>
-            <TableHead className="w-[120px]">Fecha</TableHead>
-            <TableHead className="text-center">Confirmados</TableHead>
-            <TableHead className="text-center">No Confirmados</TableHead>
-            <TableHead className="text-center">Pedidos Totales</TableHead>
-            <TableHead className="w-[220px] text-right">Tasa de Confirmación</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {dataToRender.length > 0 ? (
-            dataToRender.map((metric) => (
-              <TableRow key={metric.date}>
-                <TableCell className="font-medium">{metric.date}</TableCell>
-                <TableCell className="text-center text-green-500 font-semibold">{metric.confirmed}</TableCell>
-                <TableCell className="text-center text-red-500 font-semibold">{metric.unconfirmed}</TableCell>
-                <TableCell className="text-center">{metric.totalOrders}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-3">
-                    <span className="font-medium text-sm w-16">{metric.confirmationRate.toFixed(2)}%</span>
-                    <Progress value={metric.confirmationRate} className="h-2 w-[100px]" />
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={5} className="h-24 text-center">No se encontraron datos de pedidos para esta selección.</TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    );
-  };
-  
   const renderProductList = (products: ProductMetric[]) => (
     <ul className="space-y-3">
       {products.length > 0 ? (
@@ -264,7 +203,10 @@ export default function Dashboard() {
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard de Inteligencia de Negocio</h2>
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Dashboard de Inteligencia de Negocio</h2>
+          <p className="text-muted-foreground">Una vista general de las métricas clave de tu negocio.</p>
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Popover>
             <PopoverTrigger asChild>
@@ -314,6 +256,8 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      
+      <DashboardNav active="main" />
 
        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
@@ -406,30 +350,30 @@ export default function Dashboard() {
               <CardDescription>Comparativa de pedidos totales vs. pedidos confirmados para cada tienda.</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <ChartContainer config={{
+             <ChartContainer config={{
                   totalOrders: { label: "Pedidos", color: "hsl(var(--chart-1))" },
                   confirmedOrders: { label: "Confirmados", color: "hsl(var(--chart-2))" },
               }}>
-                <BarChart data={storeMetrics.filter(s => s.totalOrders > 0)} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={60} />
-                    <YAxis fontSize={12} />
-                    <Tooltip content={<ChartTooltipContent />} />
-                    <Legend verticalAlign="top" />
-                    <Bar dataKey="totalOrders" name="Pedidos" fill="hsl(var(--primary-foreground))" fillOpacity={0.3} radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="confirmedOrders" name="Confirmados" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]}>
-                       <LabelList
-                          dataKey="confirmationRate"
-                          position="top"
-                          formatter={(value: number) => `${value.toFixed(1)}%`}
-                          className="fill-foreground"
-                          fontSize={12}
-                        />
-                    </Bar>
-                  </BarChart>
+                <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={storeMetrics.filter(s => s.totalOrders > 0)} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={60} />
+                        <YAxis fontSize={12} />
+                        <Tooltip content={<ChartTooltipContent />} />
+                        <Legend verticalAlign="top" />
+                        <Bar dataKey="totalOrders" name="Pedidos" fill="hsl(var(--primary-foreground))" fillOpacity={0.3} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="confirmedOrders" name="Confirmados" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]}>
+                           <LabelList
+                              dataKey="confirmationRate"
+                              position="top"
+                              formatter={(value: number) => `${value.toFixed(1)}%`}
+                              className="fill-foreground"
+                              fontSize={12}
+                            />
+                        </Bar>
+                      </BarChart>
+                </ResponsiveContainer>
               </ChartContainer>
-            </ResponsiveContainer>
           </CardContent>
       </Card>
 
@@ -500,8 +444,8 @@ export default function Dashboard() {
       </div>
 
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 pt-6">
-          <Card className="col-span-1 md:col-span-2 lg:col-span-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2 pt-6">
+           <Card>
               <CardHeader>
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
                   <CardDescription>Top 10 provincias con más pedidos y su gasto total.</CardDescription>
@@ -534,9 +478,44 @@ export default function Dashboard() {
                   </ChartContainer>
                 </ResponsiveContainer>
               </CardContent>
+               <div className="p-4 pt-0 text-center">
+                  <Link href="/dashboard/provinces" passHref>
+                    <Button variant="outline" className="w-full sm:w-auto">
+                        Ver Detalles por Provincia <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
+              </div>
           </Card>
             
-             <Card className="col-span-1 md:col-span-2 lg:col-span-2">
+            <Card>
+              <CardHeader>
+                  <CardTitle className="flex items-center"><CalendarIcon className="mr-2 h-5 w-5" />Análisis Diario</CardTitle>
+                  <CardDescription>Resumen general de la actividad diaria de pedidos.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                 <div className="grid grid-cols-2 gap-4 text-center">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Pedidos</p>
+                      <p className="text-2xl font-bold">{globalTotal.toLocaleString()}</p>
+                    </div>
+                     <div>
+                      <p className="text-sm text-muted-foreground">Tasa de Confirmación</p>
+                      <p className="text-2xl font-bold">{globalRate.toFixed(2)}%</p>
+                    </div>
+                 </div>
+              </CardContent>
+               <div className="p-4 pt-0 text-center">
+                  <Link href="/dashboard/daily" passHref>
+                    <Button variant="outline" className="w-full sm:w-auto">
+                        Ver Desglose por Día y Tienda <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
+              </div>
+          </Card>
+      </div>
+
+       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6">
+           <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center"><TrendingUp className="mr-2 h-5 w-5" />Top 5 Productos Más Pedidos</CardTitle>
                     <CardDescription>Productos con mayor demanda (confirmados o no).</CardDescription>
@@ -546,7 +525,7 @@ export default function Dashboard() {
                 </CardContent>
             </Card>
 
-            <Card className="col-span-1 md:col-span-2 lg:col-span-2">
+            <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center"><ShoppingCart className="mr-2 h-5 w-5" />Top 5 Productos Más Comprados</CardTitle>
                     <CardDescription>Productos con más ventas confirmadas.</CardDescription>
@@ -555,86 +534,6 @@ export default function Dashboard() {
                     {renderProductList(mostPurchasedProducts)}
                 </CardContent>
             </Card>
-
-            <Card className="col-span-1 md:col-span-2 lg:col-span-4">
-              <CardHeader>
-                  <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Métricas por Provincia</CardTitle>
-                  <CardDescription>Desglose completo de pedidos y gasto por cada provincia.</CardDescription>
-              </CardHeader>
-              <CardContent className="overflow-auto max-h-[550px] p-2">
-                 <Table>
-                    <TableHeader className="sticky top-0 bg-card">
-                      <TableRow>
-                        <TableHead>Provincia</TableHead>
-                        <TableHead className="text-center">Pedidos Totales</TableHead>
-                        <TableHead className="text-center">Pedidos Confirmados</TableHead>
-                        <TableHead className="text-right">Gasto Total (S/)</TableHead>
-                        <TableHead className="w-[220px] text-right">Tasa de Confirmación</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {provinceMetrics.filter(p => p.totalOrders > 0).map((p) => (
-                        <TableRow key={p.name}>
-                          <TableCell className="font-medium">{p.name}</TableCell>
-                          <TableCell className="text-center">{p.totalOrders}</TableCell>
-                          <TableCell className="text-center text-green-500 font-semibold">{p.confirmedOrders}</TableCell>
-                          <TableCell className="text-right font-medium">{p.totalSpent.toFixed(2)}</TableCell>
-                          <TableCell className="text-right">
-                             <div className="flex items-center justify-end gap-3">
-                                <span className="font-medium text-sm w-16">{p.confirmationRate.toFixed(2)}%</span>
-                                <Progress value={p.confirmationRate} className="h-2 w-[100px]" />
-                              </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-              </CardContent>
-          </Card>
-
-           <Card className="col-span-1 md:col-span-2 lg:col-span-4">
-              <CardHeader>
-                  <CardTitle className="flex items-center"><CalendarIcon className="mr-2 h-5 w-5" />Análisis Detallado por Día</CardTitle>
-                  <CardDescription>Desglose diario de pedidos por tienda y tasa de éxito.</CardDescription>
-              </CardHeader>
-              <CardContent className="overflow-auto max-h-[550px] p-2">
-                 <Tabs defaultValue="all" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
-                        <TabsTrigger value="all">General</TabsTrigger>
-                        {MAIN_STORES.map(store => (
-                            <TabsTrigger key={store} value={store} className="capitalize">{capitalize(store)}</TabsTrigger>
-                        ))}
-                         <TabsTrigger value="others">Otras</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="all" className="mt-4">
-                        {renderDailyMetricsTable(dailyMetrics)}
-                    </TabsContent>
-                    {MAIN_STORES.map(store => (
-                        <TabsContent key={store} value={store} className="mt-4">
-                            {renderDailyMetricsTable(dailyMetrics, store)}
-                        </TabsContent>
-                    ))}
-                    <TabsContent value="others" className="mt-4">
-                      {renderDailyMetricsTable(dailyMetrics.map(m => {
-                          const otherStoresData = Object.keys(m.byStore || {}).filter(s => !MAIN_STORES.includes(s.toLowerCase())).reduce((acc, key) => {
-                            acc.confirmed += m.byStore![key].confirmed;
-                            acc.unconfirmed += m.byStore![key].unconfirmed;
-                            return acc;
-                          }, { confirmed: 0, unconfirmed: 0 });
-                          const total = otherStoresData.confirmed + otherStoresData.unconfirmed;
-                          return {
-                            ...m,
-                            confirmed: otherStoresData.confirmed,
-                            unconfirmed: otherStoresData.unconfirmed,
-                            totalOrders: total,
-                            confirmationRate: total > 0 ? (otherStoresData.confirmed / total) * 100 : 0
-                          };
-                        }).filter(m => m.totalOrders > 0)
-                      )}
-                    </TabsContent>
-                </Tabs>
-              </CardContent>
-          </Card>
       </div>
     </div>
   );

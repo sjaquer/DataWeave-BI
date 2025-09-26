@@ -11,6 +11,13 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { GetMetricsInputSchema, GetMetricsOutputSchema, type GetMetricsInput, type GetMetricsOutput } from '@/ai/schemas/getMetricsSchema';
 
+// Función para ajustar la zona horaria. UTC-5 para ser consistente con la región.
+const adjustToLocalTimezone = (date: Date): Date => {
+  const offset = 5 * 60; // Desfase de 5 horas en minutos
+  const localDate = new Date(date.getTime() - offset * 60 * 1000);
+  return localDate;
+};
+
 
 // Define el flujo de Genkit.
 const getMetricsFlow = ai.defineFlow(
@@ -65,10 +72,12 @@ const getMetricsFlow = ai.defineFlow(
       
       isOrderConfirmed ? totalConfirmed++ : totalUnconfirmed++;
       
-      // Daily Metrics
+      // Daily Metrics con ajuste de zona horaria
       if (order.createdAt && typeof order.createdAt.toDate === 'function') {
-        const orderDate = order.createdAt.toDate();
-        const dateStr = `${String(orderDate.getDate()).padStart(2, '0')}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${orderDate.getFullYear()}`;
+        const utcDate = order.createdAt.toDate();
+        const localDate = adjustToLocalTimezone(utcDate); // Ajustamos a UTC-5
+        
+        const dateStr = `${String(localDate.getUTCDate()).padStart(2, '0')}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${localDate.getUTCFullYear()}`;
         
         if (!dailyData[dateStr]) {
             dailyData[dateStr] = { confirmed: 0, unconfirmed: 0, byStore: {} };
@@ -130,8 +139,9 @@ const getMetricsFlow = ai.defineFlow(
         if (mov.type === 'SALIDA') {
             const movDate = mov.timestamp?.toDate();
             if (movDate) {
-                const dateStr = `${String(movDate.getDate()).padStart(2, '0')}-${String(movDate.getMonth() + 1).padStart(2, '0')}-${movDate.getFullYear()}`;
-                const quantity = Math.abs(mov.quantity || 0); // Usamos valor absoluto para salidas
+                 const localDate = adjustToLocalTimezone(movDate);
+                 const dateStr = `${String(localDate.getUTCDate()).padStart(2, '0')}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${localDate.getUTCFullYear()}`;
+                 const quantity = Math.abs(mov.quantity || 0);
 
                 // Tendencia de Salida
                 inventoryOutflowData[dateStr] = (inventoryOutflowData[dateStr] || 0) + quantity;

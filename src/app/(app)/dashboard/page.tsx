@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, CheckCircle, XCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon } from "lucide-react";
+import { Loader, CheckCircle, XCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LabelList, LineChart, Line } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -98,19 +98,23 @@ export default function Dashboard() {
         setProvinceMetrics(aggregatedProvinceMetrics);
       }
 
+      const capitalizedStoreMetrics = (data.storeMetrics || []).map(s => ({
+        ...s,
+        name: capitalize(s.name)
+      }));
 
       setMiscMetrics(data.miscMetrics || null);
       setDailyMetrics(data.dailyMetrics || []);
       setMostRequestedProducts(data.mostRequestedProducts || []);
       setMostPurchasedProducts(data.mostPurchasedProducts || []);
       setPersonnelMetrics(data.personnelMetrics || []);
-      setStoreMetrics(data.storeMetrics.map(s => ({ ...s, name: capitalize(s.name) })) || []);
+      setStoreMetrics(capitalizedStoreMetrics);
       setInventoryOutflowTrend(data.inventoryOutflowTrend || []);
       setMostMovedProducts(data.mostMovedProducts || []);
       setIsLoading(false);
   }, []);
 
-  const fetchMetrics = useCallback(async (forceRefresh = false) => {
+ const fetchMetrics = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
     
     const cacheKeyWithDate = `${CACHE_KEY}_${date?.from?.toISOString()}_${date?.to?.toISOString()}`;
@@ -164,17 +168,18 @@ export default function Dashboard() {
     }
   }, [toast, processAndSetMetrics, date]);
 
-  // Carga inicial de datos al montar el componente
+
   useEffect(() => {
     if (date?.from && date?.to) {
-        fetchMetrics(false); // Llama sin forzar para usar la caché si está disponible
+      fetchMetrics(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [date]);
 
-  if (isLoading && !miscMetrics) { // Solo muestra el loader a pantalla completa en la carga inicial
+
+  if (isLoading && !miscMetrics) { 
     return (
-      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 flex items-center justify-center h-screen">
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 flex items-center justify-center min-h-screen">
           <div className="flex items-center gap-4">
               <Loader className="h-8 w-8 animate-spin text-primary" />
               <p className="text-muted-foreground text-lg">Cargando métricas...</p>
@@ -257,7 +262,7 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="flex-1 space-y-8 p-4 md:p-8 pt-6">
+    <div className="flex-1 space-y-8 p-4 md:p-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard de Inteligencia de Negocio</h2>
         <div className="flex items-center gap-2 flex-wrap">
@@ -354,10 +359,10 @@ export default function Dashboard() {
       </div>
       
        <div className="space-y-4">
-          <h3 className="text-2xl font-bold tracking-tight">Análisis por Tienda</h3>
+          <h3 className="text-xl md:text-2xl font-bold tracking-tight">Análisis por Tienda</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
               {MAIN_STORES.map(storeName => {
-                  const storeData = storeMetrics.find(s => s.name.toLowerCase() === storeName);
+                  const storeData = storeMetrics.find(s => s.name.toLowerCase() === storeName.toLowerCase());
                   const rate = storeData ? storeData.confirmationRate : 0;
                   return (
                       <Card key={storeName}>
@@ -375,7 +380,7 @@ export default function Dashboard() {
               {otherStores.length > 0 && (
                   <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium">Otras Tiendas</CardTitle>
+                          <CardTitle className="text-sm font-medium">Otras</CardTitle>
                           <Store className="h-5 w-5 text-muted-foreground" />
                       </CardHeader>
                       <CardContent>
@@ -400,7 +405,7 @@ export default function Dashboard() {
               <CardTitle className="flex items-center"><Store className="mr-2 h-5 w-5" />Pedidos vs Confirmados por Tienda</CardTitle>
               <CardDescription>Comparativa de pedidos totales vs. pedidos confirmados para cada tienda.</CardDescription>
           </CardHeader>
-          <CardContent className="h-[350px] w-full">
+          <CardContent className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <ChartContainer config={{
                   totalOrders: { label: "Pedidos", color: "hsl(var(--chart-1))" },
@@ -428,16 +433,15 @@ export default function Dashboard() {
           </CardContent>
       </Card>
 
-      {/* --- SECCIÓN DE ANÁLISIS DE INVENTARIO --- */}
       <div className="space-y-4 pt-6">
-          <h3 className="text-2xl font-bold tracking-tight">Análisis de Inventario</h3>
-          <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
+          <h3 className="text-xl md:text-2xl font-bold tracking-tight">Análisis de Inventario</h3>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-8">
               <Card className="lg:col-span-2">
                 <CardHeader>
                     <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Salida de Inventario</CardTitle>
                     <CardDescription>Unidades totales que salen del inventario por día.</CardDescription>
                 </CardHeader>
-                <CardContent className="h-[350px] w-full">
+                <CardContent className="w-full aspect-video">
                   <ChartContainer config={{ units: { label: "Unidades", color: "hsl(var(--chart-1))" } }}>
                      <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={inventoryOutflowTrend} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -457,7 +461,7 @@ export default function Dashboard() {
                     <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5" />Top 10 Productos por Rotación (Salidas)</CardTitle>
                     <CardDescription>Productos con mayor cantidad de movimientos de salida.</CardDescription>
                 </CardHeader>
-                <CardContent className="h-[350px] w-full">
+                <CardContent className="h-[350px]">
                     <ResponsiveContainer width="100%" height="100%">
                         <ChartContainer config={{ movements: { label: "Movimientos", color: "hsl(var(--chart-2))" } }}>
                             <BarChart data={mostMovedProducts.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 100, bottom: 5 }}>
@@ -474,19 +478,19 @@ export default function Dashboard() {
             </Card>
              <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center"><UserCheck className="mr-2 h-5 w-5" />Rendimiento del Equipo (Pedidos)</CardTitle>
-                    <CardDescription>Pedidos confirmados gestionados por cada miembro del equipo.</CardDescription>
+                    <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Rendimiento del Equipo (Movimientos)</CardTitle>
+                    <CardDescription>Movimientos de salida procesados por cada miembro del equipo.</CardDescription>
                 </CardHeader>
-                <CardContent className="h-[350px] w-full">
-                   <ResponsiveContainer width="100%" height={300}>
-                     <ChartContainer config={{ confirmedOrders: { label: "Confirmados", color: "hsl(var(--chart-1))" } }}>
+                <CardContent className="h-[350px]">
+                   <ResponsiveContainer width="100%" height="100%">
+                     <ChartContainer config={{ confirmedOrders: { label: "Movimientos", color: "hsl(var(--chart-1))" } }}>
                        <BarChart data={personnelMetrics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis type="number" />
                           <YAxis dataKey="name" type="category" width={80} />
                           <Tooltip content={<ChartTooltipContent />} />
                           <Legend />
-                          <Bar dataKey="confirmedOrders" name="Confirmados" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
+                          <Bar dataKey="confirmedOrders" name="Movimientos" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
                        </BarChart>
                      </ChartContainer>
                    </ResponsiveContainer>
@@ -497,12 +501,12 @@ export default function Dashboard() {
 
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 pt-6">
-          <Card className="md:col-span-2 lg:col-span-4">
+          <Card className="col-span-1 md:col-span-2 lg:col-span-4">
               <CardHeader>
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
                   <CardDescription>Top 10 provincias con más pedidos y su gasto total.</CardDescription>
               </CardHeader>
-              <CardContent className="h-[350px] w-full">
+              <CardContent className="h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <ChartContainer config={{
                       totalOrders: { label: "Pedidos Totales", color: "hsl(var(--chart-1))" },
@@ -532,7 +536,7 @@ export default function Dashboard() {
               </CardContent>
           </Card>
             
-             <Card className="md:col-span-1">
+             <Card className="col-span-1 md:col-span-2 lg:col-span-2">
                 <CardHeader>
                     <CardTitle className="flex items-center"><TrendingUp className="mr-2 h-5 w-5" />Top 5 Productos Más Pedidos</CardTitle>
                     <CardDescription>Productos con mayor demanda (confirmados o no).</CardDescription>
@@ -542,7 +546,7 @@ export default function Dashboard() {
                 </CardContent>
             </Card>
 
-            <Card className="md:col-span-1">
+            <Card className="col-span-1 md:col-span-2 lg:col-span-2">
                 <CardHeader>
                     <CardTitle className="flex items-center"><ShoppingCart className="mr-2 h-5 w-5" />Top 5 Productos Más Comprados</CardTitle>
                     <CardDescription>Productos con más ventas confirmadas.</CardDescription>
@@ -552,7 +556,7 @@ export default function Dashboard() {
                 </CardContent>
             </Card>
 
-            <Card className="md:col-span-2 lg:col-span-4">
+            <Card className="col-span-1 md:col-span-2 lg:col-span-4">
               <CardHeader>
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Métricas por Provincia</CardTitle>
                   <CardDescription>Desglose completo de pedidos y gasto por cada provincia.</CardDescription>
@@ -588,7 +592,7 @@ export default function Dashboard() {
               </CardContent>
           </Card>
 
-           <Card className="md:col-span-2 lg:col-span-4">
+           <Card className="col-span-1 md:col-span-2 lg:col-span-4">
               <CardHeader>
                   <CardTitle className="flex items-center"><CalendarIcon className="mr-2 h-5 w-5" />Análisis Detallado por Día</CardTitle>
                   <CardDescription>Desglose diario de pedidos por tienda y tasa de éxito.</CardDescription>

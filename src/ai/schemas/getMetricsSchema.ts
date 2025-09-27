@@ -92,6 +92,10 @@ export const InventoryPersonnelMetricSchema = z.object({
 });
 export type InventoryPersonnelMetric = z.infer<typeof InventoryPersonnelMetricSchema>;
 
+// --- Esquema para el nuevo gráfico de rendimiento de tiendas ---
+export const DailyStorePerformanceSchema = z.record(z.union([z.string(), z.number()]));
+export type DailyStorePerformance = z.infer<typeof DailyStorePerformanceSchema>;
+
 
 // --- Esquema de Salida Principal ---
 
@@ -106,6 +110,7 @@ export const GetMetricsOutputSchema = z.object({
     inventoryFlowTrend: z.array(InventoryFlowTrendSchema).optional(),
     mostMovedProducts: z.array(MostMovedProductsSchema).optional(),
     inventoryPersonnelMetrics: z.array(InventoryPersonnelMetricSchema).optional(),
+    dailyStorePerformance: z.array(DailyStorePerformanceSchema).optional(),
 });
 
 export type GetMetricsOutput = z.infer<typeof GetMetricsOutputSchema>;

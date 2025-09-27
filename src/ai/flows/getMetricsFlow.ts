@@ -93,7 +93,7 @@ const getMetricsFlow = ai.defineFlow(
         const utcDate = order.createdAt.toDate();
         const localDate = adjustToLocalTimezone(utcDate); // Ajustamos a UTC-5
         
-        const dateStr = `${String(localDate.getUTCDate()).padStart(2, '0')}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${localDate.getUTCFullYear()}`;
+        const dateStr = `${String(localDate.getUTCFullYear())}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`;
         
         if (!dailyData[dateStr]) {
             dailyData[dateStr] = { confirmed: 0, unconfirmed: 0, byStore: {} };
@@ -164,7 +164,7 @@ const getMetricsFlow = ai.defineFlow(
 
         if (movDate) {
              const localDate = adjustToLocalTimezone(movDate);
-             const dateStr = `${String(localDate.getUTCDate()).padStart(2, '0')}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${localDate.getUTCFullYear()}`;
+             const dateStr = `${String(localDate.getUTCFullYear())}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`;
              
             if (!inventoryFlowData[dateStr]) {
                 inventoryFlowData[dateStr] = { inflow: 0, outflow: 0 };
@@ -218,8 +218,15 @@ const getMetricsFlow = ai.defineFlow(
     });
     
     // --- PREPARACIÓN DE DATOS PARA EL UI ---
+    
+    // Función para formatear fecha de YYYY-MM-DD a DD-MM-YYYY
+    const formatChartDate = (dateStr: string) => {
+        const [year, month, day] = dateStr.split('-');
+        return `${day}-${month}-${year}`;
+    }
+
     const aggregatedDailyMetrics: any[] = Object.entries(dailyData).map(([date, data]) => ({ 
-        date, 
+        date: formatChartDate(date), 
         totalOrders: data.confirmed + data.unconfirmed, 
         confirmed: data.confirmed, 
         unconfirmed: data.unconfirmed, 
@@ -262,7 +269,7 @@ const getMetricsFlow = ai.defineFlow(
       };
     });
 
-    const aggregatedInventoryFlow: any[] = Object.entries(inventoryFlowData).map(([date, {inflow, outflow}]) => ({ date, Entradas: inflow, Salidas: outflow })).sort((a, b) => new Date(a.date.split('-').reverse().join('-')).getTime() - new Date(b.date.split('-').reverse().join('-')).getTime());
+    const aggregatedInventoryFlow: any[] = Object.entries(inventoryFlowData).map(([date, {inflow, outflow}]) => ({ date: formatChartDate(date), Entradas: inflow, Salidas: outflow })).sort((a, b) => new Date(a.date.split('-').reverse().join('-')).getTime() - new Date(b.date.split('-').reverse().join('-')).getTime());
     
     const aggregatedMostMovedProducts: any[] = Object.entries(mostMovedProductsData).map(([name, movements]) => ({ name, movements })).sort((a, b) => b.movements - a.movements);
     
@@ -279,6 +286,16 @@ const getMetricsFlow = ai.defineFlow(
             dailyOrderVariation = 100;
         }
     }
+    
+    // --- NUEVA LÓGICA PARA GRÁFICO COMPARATIVO DE TIENDAS ---
+    const storePerformanceData = Object.entries(dailyData).map(([date, data]) => {
+      const dailyStoreValues: { [key: string]: any } = { date: formatChartDate(date) };
+      Object.entries(data.byStore).forEach(([storeName, storeData]) => {
+          dailyStoreValues[storeName] = storeData.confirmed;
+      });
+      return dailyStoreValues;
+    }).sort((a, b) => new Date(a.date.split('-').reverse().join('-')).getTime() - new Date(b.date.split('-').reverse().join('-')).getTime());
+
 
     const miscMetrics = { 
       globalConfirmed: totalConfirmed, 
@@ -297,6 +314,7 @@ const getMetricsFlow = ai.defineFlow(
       inventoryFlowTrend: aggregatedInventoryFlow,
       mostMovedProducts: aggregatedMostMovedProducts,
       inventoryPersonnelMetrics: aggregatedInventoryPersonnel,
+      dailyStorePerformance: storePerformanceData,
     };
   }
 );

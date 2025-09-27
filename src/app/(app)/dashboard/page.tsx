@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, InventoryFlowTrend, MostMovedProducts, InventoryPersonnelMetric } from "@/ai/schemas/getMetricsSchema";
+import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, DailyStorePerformance } from "@/ai/schemas/getMetricsSchema";
 import DashboardNav from "@/components/DashboardNav";
 import { Separator } from "@/components/ui/separator";
 
@@ -45,6 +45,7 @@ export default function Dashboard() {
   const [mostPurchasedProducts, setMostPurchasedProducts] = useState<ProductMetric[]>([]);
   const [personnelMetrics, setPersonnelMetrics] = useState<PersonnelMetric[]>([]);
   const [storeMetrics, setStoreMetrics] = useState<StoreMetric[]>([]);
+  const [dailyStorePerformance, setDailyStorePerformance] = useState<DailyStorePerformance[]>([]);
 
 
   // Estado para el filtro de fechas
@@ -133,6 +134,7 @@ export default function Dashboard() {
       setMostPurchasedProducts(data.mostPurchasedProducts || []);
       setPersonnelMetrics(data.personnelMetrics || []);
       setStoreMetrics(capitalizedStoreMetrics);
+      setDailyStorePerformance(data.dailyStorePerformance || []);
       setIsLoading(false);
   }, []);
 
@@ -431,6 +433,37 @@ export default function Dashboard() {
               ))}
           </div>
       </div>
+      
+       <Card>
+        <CardHeader>
+            <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Rendimiento Comparativo de Tiendas (Pedidos Confirmados)</CardTitle>
+            <CardDescription>Evolución de los pedidos confirmados por día para las tiendas principales.</CardDescription>
+        </CardHeader>
+        <CardContent className="w-full aspect-video">
+            <ChartContainer
+                config={{
+                    dearel: { label: "Dearel", color: "hsl(var(--chart-1))" },
+                    blumi: { label: "Blumi", color: "hsl(var(--chart-2))" },
+                    novi: { label: "Novi", color: "hsl(var(--chart-3))" },
+                    trazto: { label: "Trazto", color: "hsl(var(--chart-4))" },
+                    cumbre: { label: "Cumbre", color: "hsl(var(--chart-5))" },
+                }}
+            >
+                <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={dailyStorePerformance} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" />
+                        <YAxis />
+                        <Tooltip content={<ChartTooltipContent />} />
+                        <Legend />
+                        {MAIN_STORES.map(store => (
+                            <Line key={store} type="monotone" dataKey={store} stroke={`var(--color-${store})`} strokeWidth={2} dot={false} />
+                        ))}
+                    </LineChart>
+                </ResponsiveContainer>
+            </ChartContainer>
+        </CardContent>
+    </Card>
 
        <Card>
           <CardHeader>

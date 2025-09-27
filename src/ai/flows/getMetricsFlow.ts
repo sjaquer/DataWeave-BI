@@ -18,6 +18,12 @@ const adjustToLocalTimezone = (date: Date): Date => {
   return localDate;
 };
 
+// Función para formatear fecha de YYYY-MM-DD a DD-MM-YYYY
+const formatChartDate = (dateStr: string) => {
+    const [year, month, day] = dateStr.split('-');
+    return `${day}-${month}-${year}`;
+}
+
 
 // Define el flujo de Genkit.
 const getMetricsFlow = ai.defineFlow(
@@ -233,12 +239,6 @@ const getMetricsFlow = ai.defineFlow(
     
     // --- PREPARACIÓN DE DATOS PARA EL UI ---
     
-    // Función para formatear fecha de YYYY-MM-DD a DD-MM-YYYY
-    const formatChartDate = (dateStr: string) => {
-        const [year, month, day] = dateStr.split('-');
-        return `${day}-${month}-${year}`;
-    }
-
     const aggregatedDailyMetrics: any[] = Object.entries(dailyData).map(([date, data]) => ({ 
         date: formatChartDate(date), 
         totalOrders: data.confirmed + data.unconfirmed, 

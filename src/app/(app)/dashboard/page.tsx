@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, CheckCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight, Package2 } from "lucide-react";
+import { Loader, CheckCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight, Package2, ArrowDown, ArrowUp } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LabelList, LineChart, Line } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -218,6 +218,7 @@ export default function Dashboard() {
   const globalRate = globalTotal > 0 ? ((miscMetrics?.globalConfirmed ?? 0) / globalTotal) * 100 : 0;
   const totalSpentAllProvinces = provinceMetrics.reduce((acc, curr) => acc + curr.totalSpent, 0);
   const averageSpentPerOrder = globalTotal > 0 ? totalSpentAllProvinces / globalTotal : 0;
+  const dailyVariation = miscMetrics?.dailyOrderVariation ?? 0;
   
   const renderProductList = (products: ProductMetric[]) => (
     <ul className="space-y-3">
@@ -233,6 +234,21 @@ export default function Dashboard() {
       )}
     </ul>
   );
+  
+  const TrendIndicator = ({ value }: { value: number }) => {
+    const isPositive = value > 0;
+    const isNegative = value < 0;
+    const color = isPositive ? 'text-green-500' : isNegative ? 'text-red-500' : 'text-muted-foreground';
+    const Icon = isPositive ? ArrowUp : isNegative ? ArrowDown : ArrowRight;
+
+    return (
+        <div className={`flex items-center text-xs font-semibold ${color}`}>
+            <Icon className="h-3 w-3 mr-1" />
+            {value.toFixed(1)}% vs semana anterior
+        </div>
+    );
+  };
+
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
@@ -305,7 +321,7 @@ export default function Dashboard() {
       
       <DashboardNav active="main" />
 
-       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pedidos Totales</CardTitle>
@@ -314,16 +330,6 @@ export default function Dashboard() {
             <CardContent>
               <div className="text-4xl font-bold">{globalTotal.toLocaleString()}</div>
               <p className="text-xs text-muted-foreground">Confirmados y no confirmados.</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Gasto Promedio por Pedido</CardTitle>
-              <Banknote className="h-5 w-5 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold">S/ {averageSpentPerOrder.toFixed(2)}</div>
-               <p className="text-xs text-muted-foreground">Promedio en todos los pedidos.</p>
             </CardContent>
           </Card>
           <Card>
@@ -338,12 +344,35 @@ export default function Dashboard() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Tasa de Confirmación Global</CardTitle>
+              <CardTitle className="text-sm font-medium">Tasa de Confirmación</CardTitle>
               <Percent className="h-5 w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-bold">{globalRate.toFixed(2)}%</div>
                <p className="text-xs text-muted-foreground">Porcentaje global de confirmados.</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Gasto Promedio</CardTitle>
+              <Banknote className="h-5 w-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold">S/ {averageSpentPerOrder.toFixed(2)}</div>
+               <p className="text-xs text-muted-foreground">Promedio por pedido.</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Variación Diaria</CardTitle>
+              <TrendingUp className="h-5 w-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className={`text-4xl font-bold ${dailyVariation > 0 ? "text-green-500" : dailyVariation < 0 ? "text-red-500" : ""}`}>
+                    {dailyVariation > 0 ? "+" : ""}
+                    {dailyVariation.toFixed(1)}%
+                </div>
+                <p className="text-xs text-muted-foreground">vs. el día anterior.</p>
             </CardContent>
           </Card>
       </div>
@@ -353,15 +382,18 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {storeMetrics.map(store => (
                   <Card key={store.name}>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                          <CardTitle className="text-xl font-bold flex items-center gap-2">
-                            <Store className="h-5 w-5 text-primary" />
-                            {store.name}
-                          </CardTitle>
-                          <div className="text-right">
-                             <p className="text-2xl font-bold">{store.confirmationRate.toFixed(1)}%</p>
-                             <p className="text-xs text-muted-foreground">Confirmación</p>
+                      <CardHeader className="flex flex-col items-start space-y-1 pb-4">
+                          <div className="w-full flex items-center justify-between">
+                            <CardTitle className="text-xl font-bold flex items-center gap-2">
+                                <Store className="h-5 w-5 text-primary" />
+                                {store.name}
+                            </CardTitle>
+                            <div className="text-right">
+                                <p className="text-2xl font-bold">{store.confirmationRate.toFixed(1)}%</p>
+                                <p className="text-xs text-muted-foreground">Confirmación</p>
+                            </div>
                           </div>
+                          {store.sevenDayTrend !== undefined && <TrendIndicator value={store.sevenDayTrend} />}
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="grid grid-cols-3 gap-4 text-center">

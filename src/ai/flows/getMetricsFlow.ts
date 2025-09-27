@@ -30,6 +30,16 @@ const getMetricsFlow = ai.defineFlow(
     // --- CONSULTAS A FIRESTORE ---
     let ordersQuery = db.collection('shopify_orders');
     let inventoryQuery = db.collection('inventory_movements');
+    
+    // Período de 14 días para cálculo de tendencias
+    const trendEndDate = input?.endDate ? new Date(input.endDate) : new Date();
+    const trendStartDate = new Date(trendEndDate);
+    trendStartDate.setDate(trendEndDate.getDate() - 14);
+    
+    let trendOrdersQuery = db.collection('shopify_orders')
+        .where('createdAt', '>=', trendStartDate)
+        .where('createdAt', '<=', trendEndDate);
+
 
     // Aplicar filtro de fecha si se proporciona
     if (input && input.startDate && input.endDate) {
@@ -45,14 +55,16 @@ const getMetricsFlow = ai.defineFlow(
       inventoryQuery = inventoryQuery.where('timestamp', '>=', sixMonthsAgo);
     }
     
-    const [ordersSnapshot, inventorySnapshot] = await Promise.all([
+    const [ordersSnapshot, inventorySnapshot, trendOrdersSnapshot] = await Promise.all([
       ordersQuery.get(),
-      inventoryQuery.get()
+      inventoryQuery.get(),
+      trendOrdersQuery.get()
     ]);
     
     // --- INICIALIZACIÓN DE DATOS AGREGADOS ---
     const orders: any[] = ordersSnapshot.docs.map(doc => doc.data());
     const inventoryMovements: any[] = inventorySnapshot.docs.map(doc => doc.data());
+    const trendOrders: any[] = trendOrdersSnapshot.docs.map(doc => doc.data());
 
     let totalConfirmed = 0;
     let totalUnconfirmed = 0;
@@ -184,6 +196,26 @@ const getMetricsFlow = ai.defineFlow(
             inventoryPersonnelData[user].exits += Math.abs(quantity);
         }
     });
+
+    // --- CÁLCULO DE TENDENCIAS ---
+    const storeTrendData: { [key: string]: { currentWeek: number, previousWeek: number } } = {};
+    const sevenDaysAgo = new Date(trendEndDate);
+    sevenDaysAgo.setDate(trendEndDate.getDate() - 7);
+
+    trendOrders.forEach(order => {
+        const storeName = order.storeId || 'Desconocida';
+        if (order.isConfirmed) {
+            const orderDate = order.createdAt.toDate();
+            if (!storeTrendData[storeName]) {
+                storeTrendData[storeName] = { currentWeek: 0, previousWeek: 0 };
+            }
+            if (orderDate >= sevenDaysAgo) {
+                storeTrendData[storeName].currentWeek++;
+            } else {
+                storeTrendData[storeName].previousWeek++;
+            }
+        }
+    });
     
     // --- PREPARACIÓN DE DATOS PARA EL UI ---
     const aggregatedDailyMetrics: any[] = Object.entries(dailyData).map(([date, data]) => ({ 
@@ -210,6 +242,14 @@ const getMetricsFlow = ai.defineFlow(
         .slice(0, 2)
         .map(([productName, count]) => ({ name: productName, count: count }));
 
+      const trend = storeTrendData[name];
+      let sevenDayTrend = 0;
+      if (trend && trend.previousWeek > 0) {
+        sevenDayTrend = ((trend.currentWeek - trend.previousWeek) / trend.previousWeek) * 100;
+      } else if (trend && trend.currentWeek > 0) {
+        sevenDayTrend = 100; // Crecimiento "infinito" si antes era 0
+      }
+
       return {
           name,
           totalOrders: data.totalOrders,
@@ -217,7 +257,8 @@ const getMetricsFlow = ai.defineFlow(
           totalSpent: data.totalSpent,
           confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0,
           averageTicket: data.totalOrders > 0 ? data.totalSpent / data.totalOrders : 0,
-          topProducts
+          topProducts,
+          sevenDayTrend
       };
     });
 
@@ -227,8 +268,23 @@ const getMetricsFlow = ai.defineFlow(
     
     const aggregatedInventoryPersonnel: any[] = Object.entries(inventoryPersonnelData).map(([name, data]) => ({ name, ...data })).sort((a,b) => (b.entries + b.exits) - (a.entries + a.exits));
 
+    // Cálculo de variación diaria
+    let dailyOrderVariation = 0;
+    if (aggregatedDailyMetrics.length >= 2) {
+        const todayOrders = aggregatedDailyMetrics[0].totalOrders;
+        const yesterdayOrders = aggregatedDailyMetrics[1].totalOrders;
+        if (yesterdayOrders > 0) {
+            dailyOrderVariation = ((todayOrders - yesterdayOrders) / yesterdayOrders) * 100;
+        } else if (todayOrders > 0) {
+            dailyOrderVariation = 100;
+        }
+    }
 
-    const miscMetrics = { globalConfirmed: totalConfirmed, globalUnconfirmed: totalUnconfirmed };
+    const miscMetrics = { 
+      globalConfirmed: totalConfirmed, 
+      globalUnconfirmed: totalUnconfirmed,
+      dailyOrderVariation: dailyOrderVariation
+    };
 
     return {
       dailyMetrics: aggregatedDailyMetrics,

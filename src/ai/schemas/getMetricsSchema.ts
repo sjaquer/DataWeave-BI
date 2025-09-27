@@ -51,6 +51,7 @@ export type PersonnelMetric = z.infer<typeof PersonnelMetricSchema>;
 export const MiscMetricsSchema = z.object({
   globalConfirmed: z.number(),
   globalUnconfirmed: z.number(),
+  dailyOrderVariation: z.number().optional(),
 });
 export type MiscMetrics = z.infer<typeof MiscMetricsSchema>;
 
@@ -64,7 +65,8 @@ export const StoreMetricSchema = z.object({
   topProducts: z.array(z.object({
     name: z.string(),
     count: z.number()
-  }))
+  })),
+  sevenDayTrend: z.number().optional(),
 });
 export type StoreMetric = z.infer<typeof StoreMetricSchema>;
 

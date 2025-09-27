@@ -89,10 +89,20 @@ export default function ProvincesDetailPage() {
     }
 
     try {
-      const input: GetMetricsInput = date?.from && date?.to ? {
-        startDate: date.from.toISOString(),
-        endDate: date.to.toISOString()
-      } : {};
+      let input: GetMetricsInput = {};
+      if (date?.from) {
+        const startDate = new Date(date.from);
+        startDate.setHours(0, 0, 0, 0);
+
+        const endDate = date.to ? new Date(date.to) : new Date(date.from);
+        endDate.setHours(23, 59, 59, 999);
+        
+        input = {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        };
+      }
+      
       const metricsData = await getMetrics(input);
 
       try {
@@ -115,9 +125,7 @@ export default function ProvincesDetailPage() {
   }, [date, processAndSetMetrics, toast]);
 
   useEffect(() => {
-    if (date?.from && date?.to) {
-      fetchMetrics(false);
-    }
+    fetchMetrics(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 

@@ -6,10 +6,10 @@ import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, CheckCircle, XCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight } from "lucide-react";
+import { Loader, CheckCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight, Package2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LabelList, LineChart, Line } from "recharts";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -18,8 +18,9 @@ import { useToast } from "@/hooks/use-toast";
 import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { DailyMetric, ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, InventoryOutflowTrend, MostMovedProducts } from "@/ai/schemas/getMetricsSchema";
+import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, InventoryOutflowTrend, MostMovedProducts } from "@/ai/schemas/getMetricsSchema";
 import DashboardNav from "@/components/DashboardNav";
+import { Separator } from "@/components/ui/separator";
 
 const CACHE_KEY = 'dashboardMetricsCache';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000; // 15 minutos
@@ -98,7 +99,7 @@ export default function Dashboard() {
       const capitalizedStoreMetrics = (data.storeMetrics || []).map(s => ({
         ...s,
         name: capitalize(s.name)
-      }));
+      })).sort((a,b) => (MAIN_STORES.indexOf(a.name.toLowerCase()) > -1 ? MAIN_STORES.indexOf(a.name.toLowerCase()) : 99) - (MAIN_STORES.indexOf(b.name.toLowerCase()) > -1 ? MAIN_STORES.indexOf(b.name.toLowerCase()) : 99));
 
       setMiscMetrics(data.miscMetrics || null);
       setMostRequestedProducts(data.mostRequestedProducts || []);
@@ -133,10 +134,21 @@ export default function Dashboard() {
 
     try {
       toast({ title: "Actualizando métricas...", description: "Obteniendo datos para el período seleccionado." });
-      const input: GetMetricsInput = date?.from && date?.to ? {
-        startDate: date.from.toISOString(),
-        endDate: date.to.toISOString()
-      } : {};
+      
+      let input: GetMetricsInput = {};
+      if (date?.from) {
+        const startDate = new Date(date.from);
+        startDate.setHours(0, 0, 0, 0);
+
+        const endDate = date.to ? new Date(date.to) : new Date(date.from);
+        endDate.setHours(23, 59, 59, 999);
+        
+        input = {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        };
+      }
+
       const metricsData = await getMetrics(input);
 
       try {
@@ -161,9 +173,7 @@ export default function Dashboard() {
   }, [date, processAndSetMetrics, toast]);
 
   useEffect(() => {
-    if (date?.from && date?.to) {
-      fetchMetrics(false);
-    }
+    fetchMetrics(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
@@ -183,8 +193,7 @@ export default function Dashboard() {
   const globalRate = globalTotal > 0 ? ((miscMetrics?.globalConfirmed ?? 0) / globalTotal) * 100 : 0;
   const totalSpentAllProvinces = provinceMetrics.reduce((acc, curr) => acc + curr.totalSpent, 0);
   const averageSpentPerOrder = globalTotal > 0 ? totalSpentAllProvinces / globalTotal : 0;
-  const otherStores = storeMetrics.filter(s => !MAIN_STORES.includes(s.name.toLowerCase()));
-
+  
   const renderProductList = (products: ProductMetric[]) => (
     <ul className="space-y-3">
       {products.length > 0 ? (
@@ -262,22 +271,32 @@ export default function Dashboard() {
        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Pedidos Totales</CardTitle>
+              <Package2 className="h-5 w-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold">{globalTotal.toLocaleString()}</div>
+              <p className="text-xs text-muted-foreground">Confirmados y no confirmados.</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Gasto Promedio por Pedido</CardTitle>
+              <Banknote className="h-5 w-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold">S/ {averageSpentPerOrder.toFixed(2)}</div>
+               <p className="text-xs text-muted-foreground">Promedio en todos los pedidos.</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pedidos Confirmados</CardTitle>
               <CheckCircle className="h-5 w-5 text-green-500" />
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-bold">{(miscMetrics?.globalConfirmed ?? 0).toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">Total de pedidos marcados como confirmados.</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pedidos Sin Confirmar</CardTitle>
-              <XCircle className="h-5 w-5 text-red-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold">{(miscMetrics?.globalUnconfirmed ?? 0).toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">Total de pedidos pendientes o sin confirmar.</p>
+              <p className="text-xs text-muted-foreground">Total de pedidos completados.</p>
             </CardContent>
           </Card>
           <Card>
@@ -287,60 +306,60 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-bold">{globalRate.toFixed(2)}%</div>
-               <p className="text-xs text-muted-foreground">Porcentaje global de pedidos confirmados.</p>
-            </CardContent>
-          </Card>
-           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Gasto Promedio por Pedido</CardTitle>
-              <Banknote className="h-5 w-5 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold">S/ {averageSpentPerOrder.toFixed(2)}</div>
-               <p className="text-xs text-muted-foreground">Promedio gastado en todos los pedidos.</p>
+               <p className="text-xs text-muted-foreground">Porcentaje global de confirmados.</p>
             </CardContent>
           </Card>
       </div>
       
-       <div className="space-y-4">
-          <h3 className="text-xl md:text-2xl font-bold tracking-tight">Análisis por Tienda</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {MAIN_STORES.map(storeName => {
-                  const storeData = storeMetrics.find(s => s.name.toLowerCase() === storeName.toLowerCase());
-                  const rate = storeData ? storeData.confirmationRate : 0;
-                  return (
-                      <Card key={storeName}>
-                          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                              <CardTitle className="text-sm font-medium">{capitalize(storeName)}</CardTitle>
-                              <Store className="h-5 w-5 text-muted-foreground" />
-                          </CardHeader>
-                          <CardContent>
-                              <div className="text-2xl lg:text-3xl font-bold">{rate.toFixed(2)}%</div>
-                              <p className="text-xs text-muted-foreground">Confirmación</p>
-                          </CardContent>
-                      </Card>
-                  );
-              })}
-              {otherStores.length > 0 && (
-                  <Card>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium">Otras</CardTitle>
-                          <Store className="h-5 w-5 text-muted-foreground" />
-                      </CardHeader>
-                      <CardContent>
-                          <div className="text-2xl lg:text-3xl font-bold">
-                            {
-                              (() => {
-                                const total = otherStores.reduce((acc, s) => acc + s.totalOrders, 0);
-                                const confirmed = otherStores.reduce((acc, s) => acc + s.confirmedOrders, 0);
-                                return total > 0 ? ((confirmed/total) * 100).toFixed(2) : '0.00'
-                              })()
-                            }%
+       <div className="space-y-4 pt-6">
+          <h3 className="text-2xl font-bold tracking-tight">Análisis por Tienda</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {storeMetrics.map(store => (
+                  <Card key={store.name}>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                          <CardTitle className="text-xl font-bold flex items-center gap-2">
+                            <Store className="h-5 w-5 text-primary" />
+                            {store.name}
+                          </CardTitle>
+                          <div className="text-right">
+                             <p className="text-2xl font-bold">{store.confirmationRate.toFixed(1)}%</p>
+                             <p className="text-xs text-muted-foreground">Confirmación</p>
                           </div>
-                          <p className="text-xs text-muted-foreground">Confirmación</p>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                            <div>
+                                <p className="text-sm font-medium">Totales</p>
+                                <p className="text-lg font-bold">{store.totalOrders}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium">Confirmados</p>
+                                <p className="text-lg font-bold text-green-500">{store.confirmedOrders}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium">Ticket Prom.</p>
+                                <p className="text-lg font-bold">S/ {store.averageTicket.toFixed(2)}</p>
+                            </div>
+                        </div>
+                        <Separator />
+                         <div>
+                            <p className="text-sm font-medium mb-2">Top 2 Productos Comprados</p>
+                            {store.topProducts.length > 0 ? (
+                                <ul className="space-y-1 text-xs text-muted-foreground">
+                                    {store.topProducts.map(p => (
+                                        <li key={p.name} className="flex justify-between items-center">
+                                            <span className="truncate pr-2">{p.name}</span>
+                                            <span className="font-semibold text-foreground">{p.count}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p className="text-xs text-center text-muted-foreground py-2">No hay datos de productos.</p>
+                            )}
+                        </div>
                       </CardContent>
                   </Card>
-              )}
+              ))}
           </div>
       </div>
 
@@ -357,7 +376,7 @@ export default function Dashboard() {
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={storeMetrics.filter(s => s.totalOrders > 0)} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" height={60} />
+                        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
                         <YAxis fontSize={12} />
                         <Tooltip content={<ChartTooltipContent />} />
                         <Legend verticalAlign="top" />
@@ -378,7 +397,7 @@ export default function Dashboard() {
       </Card>
 
       <div className="space-y-4 pt-6">
-          <h3 className="text-xl md:text-2xl font-bold tracking-tight">Análisis de Inventario</h3>
+          <h3 className="text-2xl font-bold tracking-tight">Análisis de Inventario</h3>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-8">
               <Card className="lg:col-span-2">
                 <CardHeader>

@@ -59,6 +59,12 @@ export const StoreMetricSchema = z.object({
   totalOrders: z.number(),
   confirmedOrders: z.number(),
   confirmationRate: z.number(),
+  totalSpent: z.number(),
+  averageTicket: z.number(),
+  topProducts: z.array(z.object({
+    name: z.string(),
+    count: z.number()
+  }))
 });
 export type StoreMetric = z.infer<typeof StoreMetricSchema>;
 

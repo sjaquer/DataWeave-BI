@@ -60,7 +60,7 @@ const getMetricsFlow = ai.defineFlow(
     const provinceData: { [key: string]: { totalOrders: number; confirmedOrders: number; totalSpent: number; } } = {};
     const requestedProductData: { [key: string]: number } = {};
     const purchasedProductData: { [key: string]: number } = {};
-    const storeData: { [key: string]: { totalOrders: number, confirmedOrders: number } } = {};
+    const storeData: { [key: string]: { totalOrders: number, confirmedOrders: number, totalSpent: number, topProducts: {[key: string]: number} } } = {};
     const personnelData: { [key: string]: number } = {}; // Para Rendimiento del Personal (Pedidos)
     const inventoryOutflowData: { [key: string]: number } = {}; // Para Tendencia de Salida
     const mostMovedProductsData: { [key: string]: number } = {}; // Para Productos con más rotación
@@ -114,6 +114,11 @@ const getMetricsFlow = ai.defineFlow(
               requestedProductData[cleanedProduct] = (requestedProductData[cleanedProduct] || 0) + 1;
               if (isOrderConfirmed) {
                   purchasedProductData[cleanedProduct] = (purchasedProductData[cleanedProduct] || 0) + 1;
+
+                  // Store-specific top products
+                  if (storeData[storeName]) {
+                    storeData[storeName].topProducts[cleanedProduct] = (storeData[storeName].topProducts[cleanedProduct] || 0) + 1;
+                  }
               }
           });
       }
@@ -126,9 +131,10 @@ const getMetricsFlow = ai.defineFlow(
 
       // Store Metrics
       if (!storeData[storeName]) {
-          storeData[storeName] = { totalOrders: 0, confirmedOrders: 0 };
+          storeData[storeName] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0, topProducts: {} };
       }
       storeData[storeName].totalOrders++;
+      storeData[storeName].totalSpent += order.totalPrice || 0;
       if (isOrderConfirmed) {
           storeData[storeName].confirmedOrders++;
       }
@@ -173,9 +179,22 @@ const getMetricsFlow = ai.defineFlow(
     
     const aggregatedPersonnelMetrics: any[] = Object.entries(personnelData).map(([name, confirmedOrders]) => ({ name, confirmedOrders })).sort((a, b) => b.confirmedOrders - a.confirmedOrders);
     
-    const aggregatedStoreMetrics: any[] = Object.entries(storeData).map(([name, data]) => ({
-        name, ...data, confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0,
-    }));
+    const aggregatedStoreMetrics = Object.entries(storeData).map(([name, data]) => {
+      const topProducts = Object.entries(data.topProducts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 2)
+        .map(([productName, count]) => ({ name: productName, count: count }));
+
+      return {
+          name,
+          totalOrders: data.totalOrders,
+          confirmedOrders: data.confirmedOrders,
+          totalSpent: data.totalSpent,
+          confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0,
+          averageTicket: data.totalOrders > 0 ? data.totalSpent / data.totalOrders : 0,
+          topProducts
+      };
+    });
 
     const aggregatedInventoryOutflow: any[] = Object.entries(inventoryOutflowData).map(([date, units]) => ({ date, units })).sort((a, b) => new Date(a.date.split('-').reverse().join('-')).getTime() - new Date(b.date.split('-').reverse().join('-')).getTime());
     

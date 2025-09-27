@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
@@ -32,6 +33,34 @@ export default function ProvincesDetailPage() {
     return { from: startDate, to: endDate };
   });
   const { toast } = useToast();
+
+  const handleDatePreset = (preset: string) => {
+    const to = new Date();
+    let from: Date | undefined;
+
+    switch (preset) {
+      case 'today':
+        from = new Date();
+        break;
+      case '7days':
+        from = new Date();
+        from.setDate(from.getDate() - 6);
+        break;
+      case '30days':
+        from = new Date();
+        from.setDate(from.getDate() - 29);
+        break;
+      case '6months':
+        from = new Date();
+        from.setMonth(from.getMonth() - 6);
+        break;
+      case 'all':
+        from = undefined; // o una fecha muy antigua
+        break;
+    }
+    setDate({ from, to });
+  };
+
 
   const processAndSetMetrics = useCallback((data: GetMetricsOutput | null) => {
     if (!data) {
@@ -137,6 +166,18 @@ export default function ProvincesDetailPage() {
           <p className="text-muted-foreground">Desglose completo de pedidos, gasto y tasas de confirmación por provincia.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Select onValueChange={handleDatePreset}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Filtro Rápido" />
+              </SelectTrigger>
+              <SelectContent>
+                  <SelectItem value="today">Hoy</SelectItem>
+                  <SelectItem value="7days">Últimos 7 días</SelectItem>
+                  <SelectItem value="30days">Últimos 30 días</SelectItem>
+                  <SelectItem value="6months">Últimos 6 meses</SelectItem>
+                  <SelectItem value="all">Ver todo</SelectItem>
+              </SelectContent>
+          </Select>
           <Popover>
             <PopoverTrigger asChild>
               <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>

@@ -14,6 +14,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
@@ -57,6 +58,34 @@ export default function Dashboard() {
   });
   
   const { toast } = useToast();
+
+  const handleDatePreset = (preset: string) => {
+    const to = new Date();
+    let from: Date | undefined;
+
+    switch (preset) {
+      case 'today':
+        from = new Date();
+        break;
+      case '7days':
+        from = new Date();
+        from.setDate(from.getDate() - 6);
+        break;
+      case '30days':
+        from = new Date();
+        from.setDate(from.getDate() - 29);
+        break;
+      case '6months':
+        from = new Date();
+        from.setMonth(from.getMonth() - 6);
+        break;
+      case 'all':
+        from = undefined; // o una fecha muy antigua
+        break;
+    }
+    setDate({ from, to });
+  };
+
 
   const processAndSetMetrics = useCallback((data: GetMetricsOutput | null) => {
       if (!data) {
@@ -217,6 +246,18 @@ export default function Dashboard() {
           <p className="text-muted-foreground">Una vista general de las métricas clave de tu negocio.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Select onValueChange={handleDatePreset}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Filtro Rápido" />
+              </SelectTrigger>
+              <SelectContent>
+                  <SelectItem value="today">Hoy</SelectItem>
+                  <SelectItem value="7days">Últimos 7 días</SelectItem>
+                  <SelectItem value="30days">Últimos 30 días</SelectItem>
+                  <SelectItem value="6months">Últimos 6 meses</SelectItem>
+                  <SelectItem value="all">Ver todo</SelectItem>
+              </SelectContent>
+          </Select>
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -425,8 +466,8 @@ export default function Dashboard() {
                     <CardDescription>Productos con mayor cantidad de movimientos de salida.</CardDescription>
                 </CardHeader>
                 <CardContent className="h-[350px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <ChartContainer config={{ movements: { label: "Movimientos", color: "hsl(var(--chart-2))" } }}>
+                    <ChartContainer config={{ movements: { label: "Movimientos", color: "hsl(var(--chart-2))" } }}>
+                        <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={mostMovedProducts.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 100, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis type="number" />
@@ -435,8 +476,8 @@ export default function Dashboard() {
                                 <Legend />
                                 <Bar dataKey="movements" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
                             </BarChart>
-                        </ChartContainer>
-                    </ResponsiveContainer>
+                        </ResponsiveContainer>
+                    </ChartContainer>
                 </CardContent>
             </Card>
              <Card>
@@ -445,8 +486,8 @@ export default function Dashboard() {
                     <CardDescription>Movimientos de salida procesados por cada miembro del equipo.</CardDescription>
                 </CardHeader>
                 <CardContent className="h-[350px]">
-                   <ResponsiveContainer width="100%" height="100%">
-                     <ChartContainer config={{ confirmedOrders: { label: "Movimientos", color: "hsl(var(--chart-1))" } }}>
+                   <ChartContainer config={{ confirmedOrders: { label: "Movimientos", color: "hsl(var(--chart-1))" } }}>
+                     <ResponsiveContainer width="100%" height="100%">
                        <BarChart data={personnelMetrics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis type="number" />
@@ -455,8 +496,8 @@ export default function Dashboard() {
                           <Legend />
                           <Bar dataKey="confirmedOrders" name="Movimientos" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
                        </BarChart>
-                     </ChartContainer>
-                   </ResponsiveContainer>
+                     </ResponsiveContainer>
+                   </ChartContainer>
                 </CardContent>
             </Card>
           </div>

@@ -20,7 +20,10 @@ const adjustToLocalTimezone = (date: Date): Date => {
 
 // Función para formatear fecha de YYYY-MM-DD a DD-MM-YYYY
 const formatChartDate = (dateStr: string) => {
-    const [year, month, day] = dateStr.split('-');
+    if (!dateStr || typeof dateStr !== 'string') return '';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const [year, month, day] = parts;
     return `${day}-${month}-${year}`;
 }
 
@@ -86,6 +89,7 @@ const getMetricsFlow = ai.defineFlow(
     const mostMovedProductsData: { [key: string]: number } = {};
     const inventoryPersonnelData: { [key: string]: { entries: number; exits: number } } = {};
     const customerReturnsData: any[] = [];
+    const mostReturnedProductsData: { [key: string]: number } = {};
 
 
     // --- PROCESAMIENTO DE PEDIDOS (Orders) ---
@@ -214,6 +218,11 @@ const getMetricsFlow = ai.defineFlow(
                 orderNumber: mov.orderNumber || 'N/A',
                 store: mov.store || 'N/A'
             });
+
+            // Agregar a la métrica de productos más devueltos
+            if (mov.productName && quantity > 0) { // Solo contamos devoluciones como entradas positivas
+                mostReturnedProductsData[mov.productName] = (mostReturnedProductsData[mov.productName] || 0) + quantity;
+            }
         }
     });
 
@@ -291,6 +300,8 @@ const getMetricsFlow = ai.defineFlow(
 
     const aggregatedCustomerReturns = customerReturnsData.sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
 
+    const aggregatedMostReturnedProducts: any[] = Object.entries(mostReturnedProductsData).map(([name, returns]) => ({ name, returns })).sort((a, b) => b.returns - a.returns);
+
     // Cálculo de variación diaria
     let dailyOrderVariation = 0;
     if (aggregatedDailyMetrics.length >= 2) {
@@ -332,6 +343,7 @@ const getMetricsFlow = ai.defineFlow(
       inventoryPersonnelMetrics: aggregatedInventoryPersonnel,
       dailyStorePerformance: storePerformanceData,
       customerReturns: aggregatedCustomerReturns,
+      mostReturnedProducts: aggregatedMostReturnedProducts,
     };
   }
 );

@@ -7,6 +7,7 @@ import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
 import { Loader, Calendar as CalendarIcon, RefreshCw, Undo2 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -15,8 +16,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { CustomerReturn, GetMetricsOutput, GetMetricsInput } from "@/ai/schemas/getMetricsSchema";
+import type { CustomerReturn, GetMetricsOutput, GetMetricsInput, MostReturnedProducts } from "@/ai/schemas/getMetricsSchema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import DashboardNav from "@/components/DashboardNav";
 
 const CACHE_KEY = 'dashboardMetricsCache_returns';
@@ -25,6 +27,7 @@ const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
 export default function ReturnsDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [returnsData, setReturnsData] = useState<CustomerReturn[]>([]);
+  const [mostReturnedProducts, setMostReturnedProducts] = useState<MostReturnedProducts[]>([]);
   const [date, setDate] = useState<DateRange | undefined>(() => {
     const endDate = new Date();
     const startDate = new Date();
@@ -53,6 +56,7 @@ export default function ReturnsDetailPage() {
       return;
     }
     setReturnsData(data.customerReturns || []);
+    setMostReturnedProducts(data.mostReturnedProducts || []);
     setIsLoading(false);
   }, []);
 
@@ -144,51 +148,74 @@ export default function ReturnsDetailPage() {
       </div>
       
       <DashboardNav active="returns" />
+
+      {isLoading ? (
+        <div className="flex items-center justify-center h-96">
+            <Loader className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="space-y-4">
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center"><Undo2 className="mr-2 h-5 w-5" />Top 10 Productos Más Devueltos</CardTitle>
+                    <CardDescription>Productos con la mayor cantidad de unidades devueltas por clientes.</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[400px]">
+                    <ChartContainer config={{ returns: { label: "Devoluciones", color: "hsl(var(--chart-2))" } }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={mostReturnedProducts.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 100, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis type="number" />
+                                <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+                                <Tooltip content={<ChartTooltipContent />} />
+                                <Legend />
+                                <Bar dataKey="returns" name="Devoluciones" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </ChartContainer>
+                </CardContent>
+            </Card>
       
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center"><Undo2 className="mr-2 h-5 w-5" />Devoluciones de Clientes</CardTitle>
-          <CardDescription>Listado de movimientos de inventario registrados como "DEVOLUCION DE CLIENTE".</CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-auto max-h-[70vh] p-2">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-                <Loader className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader className="sticky top-0 bg-card">
-                <TableRow>
-                  <TableHead>Fecha</TableHead>
-                  <TableHead>Producto Devuelto</TableHead>
-                  <TableHead className="text-center">Cantidad</TableHead>
-                  <TableHead>Usuario</TableHead>
-                  <TableHead>N° de Pedido</TableHead>
-                  <TableHead>Tienda</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {returnsData.length > 0 ? (
-                    returnsData.map((item, index) => (
-                    <TableRow key={`${item.date}-${item.productName}-${index}`}>
-                        <TableCell className="font-medium">{item.date}</TableCell>
-                        <TableCell>{item.productName}</TableCell>
-                        <TableCell className="text-center font-bold">{item.quantity}</TableCell>
-                        <TableCell>{item.user}</TableCell>
-                        <TableCell>{item.orderNumber}</TableCell>
-                        <TableCell className="font-medium">{item.store}</TableCell>
-                    </TableRow>
-                    ))
-                ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center"><Undo2 className="mr-2 h-5 w-5" />Detalle de Devoluciones de Clientes</CardTitle>
+                <CardDescription>Listado de movimientos de inventario registrados como "DEVOLUCION DE CLIENTE".</CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-auto max-h-[70vh] p-2">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-card">
                     <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center">No se encontraron devoluciones para el período seleccionado.</TableCell>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Producto Devuelto</TableHead>
+                      <TableHead className="text-center">Cantidad</TableHead>
+                      <TableHead>Usuario</TableHead>
+                      <TableHead>N° de Pedido</TableHead>
+                      <TableHead>Tienda</TableHead>
                     </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {returnsData.length > 0 ? (
+                        returnsData.map((item, index) => (
+                        <TableRow key={`${item.date}-${item.productName}-${index}`}>
+                            <TableCell className="font-medium">{item.date}</TableCell>
+                            <TableCell>{item.productName}</TableCell>
+                            <TableCell className="text-center font-bold">{item.quantity}</TableCell>
+                            <TableCell>{item.user}</TableCell>
+                            <TableCell>{item.orderNumber}</TableCell>
+                            <TableCell className="font-medium">{item.store}</TableCell>
+                        </TableRow>
+                        ))
+                    ) : (
+                        <TableRow>
+                            <TableCell colSpan={6} className="h-24 text-center">No se encontraron devoluciones para el período seleccionado.</TableCell>
+                        </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+        </div>
+        )}
     </div>
   );
 }

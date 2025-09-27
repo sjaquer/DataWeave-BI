@@ -45,9 +45,6 @@ export default function Dashboard() {
   const [mostPurchasedProducts, setMostPurchasedProducts] = useState<ProductMetric[]>([]);
   const [personnelMetrics, setPersonnelMetrics] = useState<PersonnelMetric[]>([]);
   const [storeMetrics, setStoreMetrics] = useState<StoreMetric[]>([]);
-  const [inventoryFlowTrend, setInventoryFlowTrend] = useState<InventoryFlowTrend[]>([]);
-  const [mostMovedProducts, setMostMovedProducts] = useState<MostMovedProducts[]>([]);
-  const [inventoryPersonnelMetrics, setInventoryPersonnelMetrics] = useState<InventoryPersonnelMetric[]>([]);
 
 
   // Estado para el filtro de fechas
@@ -136,9 +133,6 @@ export default function Dashboard() {
       setMostPurchasedProducts(data.mostPurchasedProducts || []);
       setPersonnelMetrics(data.personnelMetrics || []);
       setStoreMetrics(capitalizedStoreMetrics);
-      setInventoryFlowTrend(data.inventoryFlowTrend || []);
-      setMostMovedProducts(data.mostMovedProducts || []);
-      setInventoryPersonnelMetrics(data.inventoryPersonnelMetrics || []);
       setIsLoading(false);
   }, []);
 
@@ -439,81 +433,6 @@ export default function Dashboard() {
           </CardContent>
       </Card>
 
-      <div className="space-y-4 pt-6">
-          <h3 className="text-2xl font-bold tracking-tight">Análisis de Inventario</h3>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-8">
-            <Card className="lg:col-span-2">
-                <CardHeader>
-                    <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Flujo de Inventario (Entradas vs. Salidas)</CardTitle>
-                    <CardDescription>Unidades que entran y salen del inventario por día.</CardDescription>
-                </CardHeader>
-                <CardContent className="w-full aspect-video">
-                  <ChartContainer config={{
-                      Entradas: { label: "Entradas", color: "hsl(var(--chart-1))" },
-                      Salidas: { label: "Salidas", color: "hsl(var(--chart-2))" },
-                    }}>
-                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={inventoryFlowTrend} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                         <CartesianGrid strokeDasharray="3 3" />
-                         <XAxis dataKey="date" />
-                         <YAxis />
-                         <Tooltip content={<ChartTooltipContent />} />
-                         <Legend />
-                         <Line type="monotone" dataKey="Entradas" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
-                         <Line type="monotone" dataKey="Salidas" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
-                      </LineChart>
-                     </ResponsiveContainer>
-                   </ChartContainer>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5" />Top 10 Productos por Rotación (Salidas)</CardTitle>
-                    <CardDescription>Productos con mayor cantidad de movimientos de salida.</CardDescription>
-                </CardHeader>
-                <CardContent className="h-[400px] overflow-auto">
-                    <ChartContainer config={{ movements: { label: "Movimientos", color: "hsl(var(--chart-2))" } }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={mostMovedProducts.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 100, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis type="number" />
-                                <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
-                                <Tooltip content={<ChartTooltipContent />} />
-                                <Legend />
-                                <Bar dataKey="movements" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </ChartContainer>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Actividad del Equipo de Inventario</CardTitle>
-                    <CardDescription>Movimientos de entrada y salida procesados por cada miembro del equipo.</CardDescription>
-                </CardHeader>
-                <CardContent className="h-[400px] overflow-auto">
-                   <ChartContainer config={{
-                        entries: { label: "Entradas", color: "hsl(var(--chart-1))" },
-                        exits: { label: "Salidas", color: "hsl(var(--chart-2))" },
-                     }}>
-                     <ResponsiveContainer width="100%" height="100%">
-                       <BarChart data={inventoryPersonnelMetrics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis type="number" stacked />
-                          <YAxis dataKey="name" type="category" width={80} />
-                          <Tooltip content={<ChartTooltipContent />} />
-                          <Legend />
-                          <Bar dataKey="entries" name="Entradas" fill="hsl(var(--chart-1))" stackId="a" />
-                          <Bar dataKey="exits" name="Salidas" fill="hsl(var(--chart-2))" stackId="a" />
-                       </BarChart>
-                     </ResponsiveContainer>
-                   </ChartContainer>
-                </CardContent>
-            </Card>
-          </div>
-      </div>
-
-
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2 pt-6">
            <Card>
               <CardHeader>
@@ -605,6 +524,32 @@ export default function Dashboard() {
                 </CardContent>
             </Card>
       </div>
+
+      <Card>
+          <CardHeader>
+              <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5" />Resumen de Inventario</CardTitle>
+              <CardDescription>Una vista rápida del flujo de inventario y la actividad del equipo.</CardDescription>
+          </CardHeader>
+          <CardContent>
+              <div className="grid grid-cols-2 gap-4 text-center">
+                  <div>
+                      <p className="text-sm text-muted-foreground">Total Entradas</p>
+                      <p className="text-2xl font-bold text-green-500">{(0).toLocaleString()}</p>
+                  </div>
+                  <div>
+                      <p className="text-sm text-muted-foreground">Total Salidas</p>
+                      <p className="text-2xl font-bold text-red-500">{(0).toLocaleString()}</p>
+                  </div>
+              </div>
+          </CardContent>
+          <div className="p-4 pt-0 text-center">
+              <Link href="/dashboard/inventory" passHref>
+                  <Button variant="outline" className="w-full sm:w-auto">
+                      Ver Análisis de Inventario <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+              </Link>
+          </div>
+      </Card>
     </div>
   );
 }

@@ -10,7 +10,7 @@
     --card-foreground: 210 40% 98%;
     --popover: 224 71% 4%;
     --popover-foreground: 215 20.2% 65.1%;
-    --primary: 48 96% 58%; /* Bright yellow for accent */
+    --primary: 48 96% 58%; /* Default Bright yellow */
     --primary-foreground: 224 71% 4%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -22,12 +22,12 @@
     --destructive-foreground: 210 40% 98%;
     --border: 217.2 32.6% 22.5%; /* Darker border */
     --input: 217.2 32.6% 17.5%;
-    --ring: 48 96% 58%;
-    --chart-1: 110 83% 53%; /* Bright Green */
-    --chart-2: 48 96% 58%;  /* Bright Yellow */
-    --chart-3: 0 87% 67%;   /* Bright Red */
-    --chart-4: 262 83% 58%; /* Bright Purple */
-    --chart-5: 221 83% 53%; /* Bright Blue */
+    --ring: 48 96% 58%; /* Default Ring */
+    --chart-1: 110 83% 53%; /* Bright Green - Dearel */
+    --chart-2: 48 96% 58%;  /* Bright Yellow - Blumi */
+    --chart-3: 0 87% 67%;   /* Bright Red - Novi */
+    --chart-4: 262 83% 58%; /* Bright Purple - Trazto */
+    --chart-5: 221 83% 53%; /* Bright Blue - Cumbre */
     --radius: 0.8rem;
     --sidebar-background: 220 20% 10%;
     --sidebar-foreground: 210 40% 98%;
@@ -73,6 +73,17 @@
     --sidebar-border: 217.2 32.6% 17.5%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
+
+  /* Theme for Dearel */
+  .theme-dearel { --primary: var(--chart-1); --ring: var(--chart-1); }
+  /* Theme for Blumi */
+  .theme-blumi { --primary: var(--chart-2); --ring: var(--chart-2); }
+  /* Theme for Novi */
+  .theme-novi { --primary: var(--chart-3); --ring: var(--chart-3); }
+  /* Theme for Trazto */
+  .theme-trazto { --primary: var(--chart-4); --ring: var(--chart-4); }
+  /* Theme for Cumbre */
+  .theme-cumbre { --primary: var(--chart-5); --ring: var(--chart-5); }
 }
 
 @layer base {
@@ -83,3 +94,5 @@
     @apply bg-background text-foreground;
   }
 }
+
+    

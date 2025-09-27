@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Flujo para obtener y consolidar todas las métricas de Firestore.
@@ -229,7 +230,7 @@ const getMetricsFlow = ai.defineFlow(
         // Lógica para el estado de inventario actual
         const sku = mov.sku;
         if (sku) {
-            if (!latestMovements[sku] || movDate > latestMovements[sku].timestamp?.toDate()) {
+            if (!latestMovements[sku] || (movDate && latestMovements[sku].timestamp?.toDate() && movDate > latestMovements[sku].timestamp?.toDate())) {
                 latestMovements[sku] = mov;
             }
         }
@@ -313,10 +314,10 @@ const getMetricsFlow = ai.defineFlow(
     
     const aggregatedCurrentInventory: any[] = Object.values(latestMovements).map(mov => {
         const movDate = mov.timestamp?.toDate();
-        const localDate = adjustToLocalTimezone(movDate);
+        const localDate = movDate ? adjustToLocalTimezone(movDate) : new Date();
         return {
-            sku: mov.sku,
-            productName: mov.productName,
+            sku: String(mov.sku || 'N/A'),
+            productName: String(mov.productName || 'N/A'),
             store: mov.store || 'N/A',
             currentStock: mov.stockAfter,
             lastMovementDate: formatChartDate(`${localDate.getUTCFullYear()}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`),

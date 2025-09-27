@@ -321,7 +321,7 @@ const getMetricsFlow = ai.defineFlow(
             currentStock: mov.stockAfter,
             lastMovementDate: formatChartDate(`${localDate.getUTCFullYear()}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`),
         };
-    }).sort((a,b) => a.productName.localeCompare(b.productName));
+    }).sort((a,b) => (a.productName || '').localeCompare(b.productName || ''));
 
 
     // Cálculo de variación diaria

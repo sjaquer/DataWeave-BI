@@ -90,6 +90,7 @@ const getMetricsFlow = ai.defineFlow(
     const inventoryPersonnelData: { [key: string]: { entries: number; exits: number } } = {};
     const customerReturnsData: any[] = [];
     const mostReturnedProductsData: { [key: string]: number } = {};
+    const latestMovements: { [sku: string]: any } = {};
 
 
     // --- PROCESAMIENTO DE PEDIDOS (Orders) ---
@@ -224,6 +225,14 @@ const getMetricsFlow = ai.defineFlow(
                 mostReturnedProductsData[mov.productName] = (mostReturnedProductsData[mov.productName] || 0) + quantity;
             }
         }
+        
+        // Lógica para el estado de inventario actual
+        const sku = mov.sku;
+        if (sku) {
+            if (!latestMovements[sku] || movDate > latestMovements[sku].timestamp?.toDate()) {
+                latestMovements[sku] = mov;
+            }
+        }
     });
 
     // --- CÁLCULO DE TENDENCIAS ---
@@ -301,6 +310,19 @@ const getMetricsFlow = ai.defineFlow(
     const aggregatedCustomerReturns = customerReturnsData.sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
 
     const aggregatedMostReturnedProducts: any[] = Object.entries(mostReturnedProductsData).map(([name, returns]) => ({ name, returns })).sort((a, b) => b.returns - a.returns);
+    
+    const aggregatedCurrentInventory: any[] = Object.values(latestMovements).map(mov => {
+        const movDate = mov.timestamp?.toDate();
+        const localDate = adjustToLocalTimezone(movDate);
+        return {
+            sku: mov.sku,
+            productName: mov.productName,
+            store: mov.store || 'N/A',
+            currentStock: mov.stockAfter,
+            lastMovementDate: formatChartDate(`${localDate.getUTCFullYear()}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`),
+        };
+    }).sort((a,b) => a.productName.localeCompare(b.productName));
+
 
     // Cálculo de variación diaria
     let dailyOrderVariation = 0;
@@ -344,6 +366,7 @@ const getMetricsFlow = ai.defineFlow(
       dailyStorePerformance: storePerformanceData,
       customerReturns: aggregatedCustomerReturns,
       mostReturnedProducts: aggregatedMostReturnedProducts,
+      currentInventory: aggregatedCurrentInventory,
     };
   }
 );

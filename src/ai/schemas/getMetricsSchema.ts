@@ -110,6 +110,16 @@ export const MostReturnedProductsSchema = z.object({
 });
 export type MostReturnedProducts = z.infer<typeof MostReturnedProductsSchema>;
 
+// Nuevo esquema para estado de inventario actual
+export const CurrentInventoryItemSchema = z.object({
+  sku: z.string(),
+  productName: z.string(),
+  store: z.string(),
+  currentStock: z.number(),
+  lastMovementDate: z.string(),
+});
+export type CurrentInventoryItem = z.infer<typeof CurrentInventoryItemSchema>;
+
 // --- Esquema para el nuevo gráfico de rendimiento de tiendas ---
 export const DailyStorePerformanceSchema = z.record(z.union([z.string(), z.number()]));
 export type DailyStorePerformance = z.infer<typeof DailyStorePerformanceSchema>;
@@ -131,6 +141,7 @@ export const GetMetricsOutputSchema = z.object({
     dailyStorePerformance: z.array(DailyStorePerformanceSchema).optional(),
     customerReturns: z.array(CustomerReturnSchema).optional(),
     mostReturnedProducts: z.array(MostReturnedProductsSchema).optional(),
+    currentInventory: z.array(CurrentInventoryItemSchema).optional(),
 });
 
 export type GetMetricsOutput = z.infer<typeof GetMetricsOutputSchema>;

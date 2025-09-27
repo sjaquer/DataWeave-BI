@@ -409,7 +409,7 @@ export default function Dashboard() {
               <CardTitle className="flex items-center"><Store className="mr-2 h-5 w-5" />Pedidos vs Confirmados por Tienda</CardTitle>
               <CardDescription>Comparativa de pedidos totales vs. pedidos confirmados para cada tienda.</CardDescription>
           </CardHeader>
-          <CardContent className="h-[350px]">
+          <CardContent className="w-full aspect-[4/3]">
              <ChartContainer config={{
                   totalOrders: { label: "Pedidos", color: "hsl(var(--chart-1))" },
                   confirmedOrders: { label: "Confirmados", color: "hsl(var(--chart-2))" },
@@ -465,7 +465,7 @@ export default function Dashboard() {
                     <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5" />Top 10 Productos por Rotación (Salidas)</CardTitle>
                     <CardDescription>Productos con mayor cantidad de movimientos de salida.</CardDescription>
                 </CardHeader>
-                <CardContent className="h-[350px]">
+                <CardContent className="h-[400px] overflow-auto">
                     <ChartContainer config={{ movements: { label: "Movimientos", color: "hsl(var(--chart-2))" } }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={mostMovedProducts.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 100, bottom: 5 }}>
@@ -485,7 +485,7 @@ export default function Dashboard() {
                     <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Rendimiento del Equipo (Movimientos)</CardTitle>
                     <CardDescription>Movimientos de salida procesados por cada miembro del equipo.</CardDescription>
                 </CardHeader>
-                <CardContent className="h-[350px]">
+                <CardContent className="h-[400px] overflow-auto">
                    <ChartContainer config={{ confirmedOrders: { label: "Movimientos", color: "hsl(var(--chart-1))" } }}>
                      <ResponsiveContainer width="100%" height="100%">
                        <BarChart data={personnelMetrics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -510,12 +510,12 @@ export default function Dashboard() {
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
                   <CardDescription>Top 10 provincias con más pedidos y su gasto total.</CardDescription>
               </CardHeader>
-              <CardContent className="h-[350px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ChartContainer config={{
-                      totalOrders: { label: "Pedidos Totales", color: "hsl(var(--chart-1))" },
-                      totalSpent: { label: "Gasto Total", color: "hsl(var(--chart-2))" },
-                  }}>
+              <CardContent className="w-full aspect-[4/3]">
+                <ChartContainer config={{
+                    totalOrders: { label: "Pedidos Totales", color: "hsl(var(--chart-1))" },
+                    totalSpent: { label: "Gasto Total", color: "hsl(var(--chart-2))" },
+                }}>
+                  <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={provinceMetrics.slice(0, 10)} margin={{ top: 20, right: 20, left: 20, bottom: 60 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" />
@@ -535,8 +535,8 @@ export default function Dashboard() {
                         <Bar yAxisId="left" dataKey="totalOrders" name="Pedidos Totales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                         <Bar yAxisId="right" dataKey="totalSpent" name="Gasto Total (S/)" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
                       </BarChart>
-                  </ChartContainer>
-                </ResponsiveContainer>
+                  </ResponsiveContainer>
+                </ChartContainer>
               </CardContent>
                <div className="p-4 pt-0 text-center">
                   <Link href="/dashboard/provinces" passHref>

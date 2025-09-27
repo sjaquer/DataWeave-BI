@@ -61,9 +61,13 @@ const getMetricsFlow = ai.defineFlow(
     const requestedProductData: { [key: string]: number } = {};
     const purchasedProductData: { [key: string]: number } = {};
     const storeData: { [key: string]: { totalOrders: number, confirmedOrders: number, totalSpent: number, topProducts: {[key: string]: number} } } = {};
-    const personnelData: { [key: string]: number } = {}; // Para Rendimiento del Personal (Pedidos)
-    const inventoryOutflowData: { [key: string]: number } = {}; // Para Tendencia de Salida
-    const mostMovedProductsData: { [key: string]: number } = {}; // Para Productos con más rotación
+    const personnelData: { [key: string]: number } = {};
+    
+    // --- INVENTARIO ---
+    const inventoryFlowData: { [key: string]: { inflow: number; outflow: number } } = {};
+    const mostMovedProductsData: { [key: string]: number } = {};
+    const inventoryPersonnelData: { [key: string]: { entries: number; exits: number } } = {};
+
 
     // --- PROCESAMIENTO DE PEDIDOS (Orders) ---
     orders.forEach((order) => {
@@ -142,21 +146,38 @@ const getMetricsFlow = ai.defineFlow(
 
     // --- PROCESAMIENTO DE INVENTARIO (Inventory Movements) ---
     inventoryMovements.forEach((mov) => {
-        if (mov.type === 'SALIDA') {
-            const movDate = mov.timestamp?.toDate();
-            if (movDate) {
-                 const localDate = adjustToLocalTimezone(movDate);
-                 const dateStr = `${String(localDate.getUTCDate()).padStart(2, '0')}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${localDate.getUTCFullYear()}`;
-                 const quantity = Math.abs(mov.quantity || 0);
+        const movDate = mov.timestamp?.toDate();
+        const quantity = Math.abs(mov.quantity || 0);
+        const user = mov.user || 'No especificado';
 
-                // Tendencia de Salida
-                inventoryOutflowData[dateStr] = (inventoryOutflowData[dateStr] || 0) + quantity;
+        if (movDate) {
+             const localDate = adjustToLocalTimezone(movDate);
+             const dateStr = `${String(localDate.getUTCDate()).padStart(2, '0')}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${localDate.getUTCFullYear()}`;
+             
+            if (!inventoryFlowData[dateStr]) {
+                inventoryFlowData[dateStr] = { inflow: 0, outflow: 0 };
             }
 
-            // Productos más movidos
+            if (mov.type === 'ENTRADA') {
+                inventoryFlowData[dateStr].inflow += quantity;
+            } else if (mov.type === 'SALIDA') {
+                inventoryFlowData[dateStr].outflow += quantity;
+            }
+        }
+        
+        if (mov.type === 'SALIDA') {
             if (mov.productName) {
                 mostMovedProductsData[mov.productName] = (mostMovedProductsData[mov.productName] || 0) + 1;
             }
+        }
+
+        if (!inventoryPersonnelData[user]) {
+            inventoryPersonnelData[user] = { entries: 0, exits: 0 };
+        }
+        if (mov.type === 'ENTRADA') {
+            inventoryPersonnelData[user].entries++;
+        } else if (mov.type === 'SALIDA') {
+            inventoryPersonnelData[user].exits++;
         }
     });
     
@@ -196,9 +217,12 @@ const getMetricsFlow = ai.defineFlow(
       };
     });
 
-    const aggregatedInventoryOutflow: any[] = Object.entries(inventoryOutflowData).map(([date, units]) => ({ date, units })).sort((a, b) => new Date(a.date.split('-').reverse().join('-')).getTime() - new Date(b.date.split('-').reverse().join('-')).getTime());
+    const aggregatedInventoryFlow: any[] = Object.entries(inventoryFlowData).map(([date, {inflow, outflow}]) => ({ date, Entradas: inflow, Salidas: outflow })).sort((a, b) => new Date(a.date.split('-').reverse().join('-')).getTime() - new Date(b.date.split('-').reverse().join('-')).getTime());
     
     const aggregatedMostMovedProducts: any[] = Object.entries(mostMovedProductsData).map(([name, movements]) => ({ name, movements })).sort((a, b) => b.movements - a.movements);
+    
+    const aggregatedInventoryPersonnel: any[] = Object.entries(inventoryPersonnelData).map(([name, data]) => ({ name, ...data })).sort((a,b) => (b.entries + b.exits) - (a.entries + a.exits));
+
 
     const miscMetrics = { globalConfirmed: totalConfirmed, globalUnconfirmed: totalUnconfirmed };
 
@@ -210,8 +234,9 @@ const getMetricsFlow = ai.defineFlow(
       personnelMetrics: aggregatedPersonnelMetrics,
       storeMetrics: aggregatedStoreMetrics,
       miscMetrics: miscMetrics,
-      inventoryOutflowTrend: aggregatedInventoryOutflow,
+      inventoryFlowTrend: aggregatedInventoryFlow,
       mostMovedProducts: aggregatedMostMovedProducts,
+      inventoryPersonnelMetrics: aggregatedInventoryPersonnel,
     };
   }
 );

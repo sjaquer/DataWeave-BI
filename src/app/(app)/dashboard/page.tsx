@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, InventoryOutflowTrend, MostMovedProducts } from "@/ai/schemas/getMetricsSchema";
+import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, InventoryFlowTrend, MostMovedProducts, InventoryPersonnelMetric } from "@/ai/schemas/getMetricsSchema";
 import DashboardNav from "@/components/DashboardNav";
 import { Separator } from "@/components/ui/separator";
 
@@ -45,8 +45,9 @@ export default function Dashboard() {
   const [mostPurchasedProducts, setMostPurchasedProducts] = useState<ProductMetric[]>([]);
   const [personnelMetrics, setPersonnelMetrics] = useState<PersonnelMetric[]>([]);
   const [storeMetrics, setStoreMetrics] = useState<StoreMetric[]>([]);
-  const [inventoryOutflowTrend, setInventoryOutflowTrend] = useState<InventoryOutflowTrend[]>([]);
+  const [inventoryFlowTrend, setInventoryFlowTrend] = useState<InventoryFlowTrend[]>([]);
   const [mostMovedProducts, setMostMovedProducts] = useState<MostMovedProducts[]>([]);
+  const [inventoryPersonnelMetrics, setInventoryPersonnelMetrics] = useState<InventoryPersonnelMetric[]>([]);
 
 
   // Estado para el filtro de fechas
@@ -135,8 +136,9 @@ export default function Dashboard() {
       setMostPurchasedProducts(data.mostPurchasedProducts || []);
       setPersonnelMetrics(data.personnelMetrics || []);
       setStoreMetrics(capitalizedStoreMetrics);
-      setInventoryOutflowTrend(data.inventoryOutflowTrend || []);
+      setInventoryFlowTrend(data.inventoryFlowTrend || []);
       setMostMovedProducts(data.mostMovedProducts || []);
+      setInventoryPersonnelMetrics(data.inventoryPersonnelMetrics || []);
       setIsLoading(false);
   }, []);
 
@@ -440,21 +442,25 @@ export default function Dashboard() {
       <div className="space-y-4 pt-6">
           <h3 className="text-2xl font-bold tracking-tight">Análisis de Inventario</h3>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-8">
-              <Card className="lg:col-span-2">
+            <Card className="lg:col-span-2">
                 <CardHeader>
-                    <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Salida de Inventario</CardTitle>
-                    <CardDescription>Unidades totales que salen del inventario por día.</CardDescription>
+                    <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Flujo de Inventario (Entradas vs. Salidas)</CardTitle>
+                    <CardDescription>Unidades que entran y salen del inventario por día.</CardDescription>
                 </CardHeader>
                 <CardContent className="w-full aspect-video">
-                  <ChartContainer config={{ units: { label: "Unidades", color: "hsl(var(--chart-1))" } }}>
+                  <ChartContainer config={{
+                      Entradas: { label: "Entradas", color: "hsl(var(--chart-1))" },
+                      Salidas: { label: "Salidas", color: "hsl(var(--chart-2))" },
+                    }}>
                      <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={inventoryOutflowTrend} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      <LineChart data={inventoryFlowTrend} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                          <CartesianGrid strokeDasharray="3 3" />
                          <XAxis dataKey="date" />
                          <YAxis />
                          <Tooltip content={<ChartTooltipContent />} />
                          <Legend />
-                         <Line type="monotone" dataKey="units" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
+                         <Line type="monotone" dataKey="Entradas" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
+                         <Line type="monotone" dataKey="Salidas" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
                       </LineChart>
                      </ResponsiveContainer>
                    </ChartContainer>
@@ -480,21 +486,25 @@ export default function Dashboard() {
                     </ChartContainer>
                 </CardContent>
             </Card>
-             <Card>
+            <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Rendimiento del Equipo (Movimientos)</CardTitle>
-                    <CardDescription>Movimientos de salida procesados por cada miembro del equipo.</CardDescription>
+                    <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Actividad del Equipo de Inventario</CardTitle>
+                    <CardDescription>Movimientos de entrada y salida procesados por cada miembro del equipo.</CardDescription>
                 </CardHeader>
                 <CardContent className="h-[400px] overflow-auto">
-                   <ChartContainer config={{ confirmedOrders: { label: "Movimientos", color: "hsl(var(--chart-1))" } }}>
+                   <ChartContainer config={{
+                        entries: { label: "Entradas", color: "hsl(var(--chart-1))" },
+                        exits: { label: "Salidas", color: "hsl(var(--chart-2))" },
+                     }}>
                      <ResponsiveContainer width="100%" height="100%">
-                       <BarChart data={personnelMetrics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                       <BarChart data={inventoryPersonnelMetrics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis type="number" />
+                          <XAxis type="number" stacked />
                           <YAxis dataKey="name" type="category" width={80} />
                           <Tooltip content={<ChartTooltipContent />} />
                           <Legend />
-                          <Bar dataKey="confirmedOrders" name="Movimientos" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
+                          <Bar dataKey="entries" name="Entradas" fill="hsl(var(--chart-1))" stackId="a" />
+                          <Bar dataKey="exits" name="Salidas" fill="hsl(var(--chart-2))" stackId="a" />
                        </BarChart>
                      </ResponsiveContainer>
                    </ChartContainer>

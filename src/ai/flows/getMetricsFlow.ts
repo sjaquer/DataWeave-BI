@@ -147,7 +147,7 @@ const getMetricsFlow = ai.defineFlow(
     // --- PROCESAMIENTO DE INVENTARIO (Inventory Movements) ---
     inventoryMovements.forEach((mov) => {
         const movDate = mov.timestamp?.toDate();
-        const quantity = Math.abs(mov.quantity || 0);
+        const quantity = Number(mov.quantity || 0); // No usamos Math.abs() aquí
         const user = mov.user || 'No especificado';
 
         if (movDate) {
@@ -157,27 +157,31 @@ const getMetricsFlow = ai.defineFlow(
             if (!inventoryFlowData[dateStr]) {
                 inventoryFlowData[dateStr] = { inflow: 0, outflow: 0 };
             }
-
-            if (mov.type === 'ENTRADA') {
+            
+            // Lógica basada en el signo de la cantidad
+            if (quantity > 0) {
                 inventoryFlowData[dateStr].inflow += quantity;
-            } else if (mov.type === 'SALIDA') {
-                inventoryFlowData[dateStr].outflow += quantity;
+            } else if (quantity < 0) {
+                inventoryFlowData[dateStr].outflow += Math.abs(quantity); // Sumamos el valor absoluto para la salida
             }
         }
         
-        if (mov.type === 'SALIDA') {
+        // Top productos por rotación (salidas)
+        if (quantity < 0) {
             if (mov.productName) {
-                mostMovedProductsData[mov.productName] = (mostMovedProductsData[mov.productName] || 0) + 1;
+                mostMovedProductsData[mov.productName] = (mostMovedProductsData[mov.productName] || 0) + Math.abs(quantity);
             }
         }
 
         if (!inventoryPersonnelData[user]) {
             inventoryPersonnelData[user] = { entries: 0, exits: 0 };
         }
-        if (mov.type === 'ENTRADA') {
-            inventoryPersonnelData[user].entries++;
-        } else if (mov.type === 'SALIDA') {
-            inventoryPersonnelData[user].exits++;
+
+        // Lógica de personal basada en el signo de la cantidad
+        if (quantity > 0) {
+            inventoryPersonnelData[user].entries += quantity;
+        } else if (quantity < 0) {
+            inventoryPersonnelData[user].exits += Math.abs(quantity);
         }
     });
     

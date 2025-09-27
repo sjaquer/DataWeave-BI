@@ -4,12 +4,12 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 interface DashboardNavProps {
-  active: 'main' | 'provinces' | 'daily' | 'inventory';
+  active: 'main' | 'provinces' | 'daily' | 'inventory' | 'returns';
 }
 
 export default function DashboardNav({ active }: DashboardNavProps) {
   return (
-    <div className="grid grid-cols-2 sm:flex items-center gap-2 rounded-md bg-muted p-1 w-full sm:w-auto">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex items-center gap-2 rounded-md bg-muted p-1 w-full lg:w-auto">
       <Link href="/dashboard" passHref className="flex-1">
         <Button variant={active === 'main' ? "default" : "ghost"} size="sm" className="w-full">
           Dashboard Principal
@@ -28,6 +28,11 @@ export default function DashboardNav({ active }: DashboardNavProps) {
       <Link href="/dashboard/inventory" passHref className="flex-1">
         <Button variant={active === 'inventory' ? "default" : "ghost"} size="sm" className="w-full">
           Análisis de Inventario
+        </Button>
+      </Link>
+      <Link href="/dashboard/returns" passHref className="flex-1">
+        <Button variant={active === 'returns' ? "default" : "ghost"} size="sm" className="w-full">
+          Análisis de Devoluciones
         </Button>
       </Link>
     </div>

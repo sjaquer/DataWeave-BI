@@ -79,6 +79,7 @@ const getMetricsFlow = ai.defineFlow(
     const inventoryFlowData: { [key: string]: { inflow: number; outflow: number } } = {};
     const mostMovedProductsData: { [key: string]: number } = {};
     const inventoryPersonnelData: { [key: string]: { entries: number; exits: number } } = {};
+    const customerReturnsData: any[] = [];
 
 
     // --- PROCESAMIENTO DE PEDIDOS (Orders) ---
@@ -159,12 +160,13 @@ const getMetricsFlow = ai.defineFlow(
     // --- PROCESAMIENTO DE INVENTARIO (Inventory Movements) ---
     inventoryMovements.forEach((mov) => {
         const movDate = mov.timestamp?.toDate();
-        const quantity = Number(mov.quantity || 0); // No usamos Math.abs() aquí
+        const quantity = Number(mov.quantity || 0);
         const user = mov.user || 'No especificado';
+        let dateStr = "";
 
         if (movDate) {
              const localDate = adjustToLocalTimezone(movDate);
-             const dateStr = `${String(localDate.getUTCFullYear())}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`;
+             dateStr = `${String(localDate.getUTCFullYear())}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`;
              
             if (!inventoryFlowData[dateStr]) {
                 inventoryFlowData[dateStr] = { inflow: 0, outflow: 0 };
@@ -194,6 +196,18 @@ const getMetricsFlow = ai.defineFlow(
             inventoryPersonnelData[user].entries += quantity;
         } else if (quantity < 0) {
             inventoryPersonnelData[user].exits += Math.abs(quantity);
+        }
+
+        // Lógica para Devoluciones de Cliente
+        if (mov.reason === "DEVOLUCION DE CLIENTE") {
+            customerReturnsData.push({
+                date: dateStr ? formatChartDate(dateStr) : 'Fecha Desconocida',
+                productName: mov.productName || 'N/A',
+                quantity: quantity,
+                user: user,
+                orderNumber: mov.orderNumber || 'N/A',
+                store: mov.store || 'N/A'
+            });
         }
     });
 
@@ -275,6 +289,8 @@ const getMetricsFlow = ai.defineFlow(
     
     const aggregatedInventoryPersonnel: any[] = Object.entries(inventoryPersonnelData).map(([name, data]) => ({ name, ...data })).sort((a,b) => (b.entries + b.exits) - (a.entries + a.exits));
 
+    const aggregatedCustomerReturns = customerReturnsData.sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
+
     // Cálculo de variación diaria
     let dailyOrderVariation = 0;
     if (aggregatedDailyMetrics.length >= 2) {
@@ -315,6 +331,7 @@ const getMetricsFlow = ai.defineFlow(
       mostMovedProducts: aggregatedMostMovedProducts,
       inventoryPersonnelMetrics: aggregatedInventoryPersonnel,
       dailyStorePerformance: storePerformanceData,
+      customerReturns: aggregatedCustomerReturns,
     };
   }
 );

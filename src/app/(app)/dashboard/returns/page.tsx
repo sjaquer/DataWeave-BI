@@ -163,10 +163,10 @@ export default function ReturnsDetailPage() {
                 <CardContent className="h-[400px]">
                     <ChartContainer config={{ returns: { label: "Devoluciones", color: "hsl(var(--chart-2))" } }}>
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={mostReturnedProducts.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 100, bottom: 5 }}>
+                            <BarChart data={mostReturnedProducts.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis type="number" />
-                                <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+                                <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} interval={0} allowDataOverflow={false} />
                                 <Tooltip content={<ChartTooltipContent />} />
                                 <Legend />
                                 <Bar dataKey="returns" name="Devoluciones" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />

@@ -2,24 +2,19 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
-import { es } from "date-fns/locale";
 
-import { Loader, Calendar as CalendarIcon, RefreshCw, Truck, Users, LineChart as LineChartIcon, Undo2, ArrowDown, ArrowUp, ShoppingCart, HelpCircle, Store } from "lucide-react";
+import { Loader, RefreshCw, Truck, Users, LineChart as LineChartIcon, Undo2, ArrowDown, ArrowUp, ShoppingCart, HelpCircle } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LineChart, Line } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip as UiTooltip, TooltipContent as UiTooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { GetMetricsOutput, GetMetricsInput, InventoryFlowTrend, MostMovedProducts, InventoryPersonnelMetric, CustomerReturn, MostReturnedProducts, PurchaseForecastItem } from "@/ai/schemas/getMetricsSchema";
+import type { GetMetricsOutput, GetMetricsInput, CustomerReturn, PurchaseForecastItem } from "@/ai/schemas/getMetricsSchema";
 import DashboardNav from "@/components/DashboardNav";
 
 const CACHE_KEY = 'dashboardMetricsCache_inventory_consolidated';
@@ -59,7 +54,7 @@ export default function InventoryDetailPage() {
       case '6months': from = new Date(); from.setMonth(from.getMonth() - 6); break;
       case 'all': from = undefined; break;
     }
-    setDate({ from, to: preset === 'all' ? undefined : to });
+     setDate(preset === 'all' ? undefined : { from, to });
   };
   
     const availableStores = useMemo(() => {
@@ -517,7 +512,5 @@ export default function InventoryDetailPage() {
     </div>
   );
 }
-
-    
 
     

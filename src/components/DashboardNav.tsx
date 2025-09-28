@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 interface DashboardNavProps {
-  active: 'main' | 'provinces' | 'daily' | 'inventory' | 'returns' | 'inventory-status';
+  active: 'main' | 'provinces' | 'daily' | 'inventory' | 'inventory-status';
 }
 
 export default function DashboardNav({ active }: DashboardNavProps) {
@@ -30,11 +30,6 @@ export default function DashboardNav({ active }: DashboardNavProps) {
           Análisis de Inventario
         </Button>
       </Link>
-      <Link href="/dashboard/returns" passHref className="flex-1">
-        <Button variant={active === 'returns' ? "default" : "ghost"} size="sm" className="w-full">
-          Análisis de Devoluciones
-        </Button>
-      </Link>
       <Link href="/dashboard/inventory-status" passHref className="flex-1">
         <Button variant={active === 'inventory-status' ? "default" : "ghost"} size="sm" className="w-full">
           Estado de Inventario
@@ -43,3 +38,5 @@ export default function DashboardNav({ active }: DashboardNavProps) {
     </div>
   );
 }
+
+    

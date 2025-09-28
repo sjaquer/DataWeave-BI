@@ -88,6 +88,7 @@ const getMetricsFlow = ai.defineFlow(
     // --- INVENTARIO ---
     const inventoryFlowData: { [key: string]: { inflow: number; outflow: number } } = {};
     const mostMovedProductsData: { [key: string]: number } = {};
+    const mostIncomingProductsData: { [key: string]: number } = {}; // Nuevo
     const inventoryPersonnelData: { [key: string]: { entries: number; exits: number } } = {};
     const customerReturnsData: any[] = [];
     const mostReturnedProductsData: { [key: string]: number } = {};
@@ -198,6 +199,12 @@ const getMetricsFlow = ai.defineFlow(
                 mostMovedProductsData[mov.productName] = (mostMovedProductsData[mov.productName] || 0) + Math.abs(quantity);
             }
         }
+        // NUEVO: Top productos por entradas
+        if (quantity > 0) {
+            if (mov.productName) {
+                mostIncomingProductsData[mov.productName] = (mostIncomingProductsData[mov.productName] || 0) + quantity;
+            }
+        }
 
         if (!inventoryPersonnelData[user]) {
             inventoryPersonnelData[user] = { entries: 0, exits: 0 };
@@ -305,6 +312,7 @@ const getMetricsFlow = ai.defineFlow(
     const aggregatedInventoryFlow: any[] = Object.entries(inventoryFlowData).map(([date, {inflow, outflow}]) => ({ date: formatChartDate(date), Entradas: inflow, Salidas: outflow })).sort((a, b) => new Date(a.date.split('-').reverse().join('-')).getTime() - new Date(b.date.split('-').reverse().join('-')).getTime());
     
     const aggregatedMostMovedProducts: any[] = Object.entries(mostMovedProductsData).map(([name, movements]) => ({ name, movements })).sort((a, b) => b.movements - a.movements);
+    const aggregatedMostIncomingProducts: any[] = Object.entries(mostIncomingProductsData).map(([name, movements]) => ({ name, movements })).sort((a, b) => b.movements - a.movements);
     
     const aggregatedInventoryPersonnel: any[] = Object.entries(inventoryPersonnelData).map(([name, data]) => ({ name, ...data })).sort((a,b) => (b.entries + b.exits) - (a.entries + a.exits));
 
@@ -323,6 +331,33 @@ const getMetricsFlow = ai.defineFlow(
             lastMovementDate: formatChartDate(`${localDate.getUTCFullYear()}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`),
         };
     }).sort((a,b) => String(a.productName || '').localeCompare(String(b.productName || '')));
+
+    // --- NUEVA LOGICA: PREVISIÓN DE COMPRA ---
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const recentOutflows: { [productName: string]: number } = {};
+
+    inventoryMovements.forEach(mov => {
+        const movDate = mov.timestamp?.toDate();
+        if (movDate && movDate >= thirtyDaysAgo) {
+            if (Number(mov.quantity) < 0 && mov.productName) {
+                recentOutflows[mov.productName] = (recentOutflows[mov.productName] || 0) + Math.abs(Number(mov.quantity));
+            }
+        }
+    });
+    
+    const purchaseForecast: any[] = Object.entries(recentOutflows).map(([productName, last30dSales]) => {
+        const currentStockItem = aggregatedCurrentInventory.find(item => item.productName === productName);
+        const currentStock = currentStockItem ? currentStockItem.currentStock : 0;
+        const suggestedPurchase = Math.max(0, last30dSales - currentStock); // Sugerir comprar la diferencia para cubrir el próximo mes.
+
+        return {
+            productName,
+            last30dSales,
+            currentStock,
+            suggestedPurchase,
+        };
+    }).sort((a, b) => b.suggestedPurchase - a.suggestedPurchase);
 
 
     // Cálculo de variación diaria
@@ -363,11 +398,13 @@ const getMetricsFlow = ai.defineFlow(
       miscMetrics: miscMetrics,
       inventoryFlowTrend: aggregatedInventoryFlow,
       mostMovedProducts: aggregatedMostMovedProducts,
+      mostIncomingProducts: aggregatedMostIncomingProducts, // Devolver nuevo dato
       inventoryPersonnelMetrics: aggregatedInventoryPersonnel,
       dailyStorePerformance: storePerformanceData,
       customerReturns: aggregatedCustomerReturns,
       mostReturnedProducts: aggregatedMostReturnedProducts,
       currentInventory: aggregatedCurrentInventory,
+      purchaseForecast: purchaseForecast, // Devolver nuevo dato
     };
   }
 );
@@ -376,3 +413,5 @@ const getMetricsFlow = ai.defineFlow(
 export async function getMetrics(input: GetMetricsInput): Promise<GetMetricsOutput> {
     return getMetricsFlow(input);
 }
+
+    

@@ -1,12 +1,12 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, Calendar as CalendarIcon, RefreshCw, Truck, Users, LineChart as LineChartIcon } from "lucide-react";
+import { Loader, Calendar as CalendarIcon, RefreshCw, Truck, Users, LineChart as LineChartIcon, Undo2, ArrowDown, ArrowUp, ShoppingCart, HelpCircle } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LineChart, Line } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -14,24 +14,39 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip as UiTooltip, TooltipContent as UiTooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { GetMetricsOutput, GetMetricsInput, InventoryFlowTrend, MostMovedProducts, InventoryPersonnelMetric } from "@/ai/schemas/getMetricsSchema";
+import type { GetMetricsOutput, GetMetricsInput, InventoryFlowTrend, MostMovedProducts, InventoryPersonnelMetric, CustomerReturn, MostReturnedProducts, PurchaseForecastItem } from "@/ai/schemas/getMetricsSchema";
 import DashboardNav from "@/components/DashboardNav";
 
-const CACHE_KEY = 'dashboardMetricsCache_inventory';
+const CACHE_KEY = 'dashboardMetricsCache_inventory_consolidated';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
+
+type ReturnsSortConfig = {
+    key: keyof CustomerReturn;
+    direction: 'ascending' | 'descending';
+};
+
+type ForecastSortConfig = {
+    key: keyof PurchaseForecastItem;
+    direction: 'ascending' | 'descending';
+};
+
 
 export default function InventoryDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
-  const [inventoryFlowTrend, setInventoryFlowTrend] = useState<InventoryFlowTrend[]>([]);
-  const [mostMovedProducts, setMostMovedProducts] = useState<MostMovedProducts[]>([]);
-  const [inventoryPersonnelMetrics, setInventoryPersonnelMetrics] = useState<InventoryPersonnelMetric[]>([]);
+  const [metrics, setMetrics] = useState<GetMetricsOutput | null>(null);
   const [date, setDate] = useState<DateRange | undefined>(() => {
     const today = new Date();
     return { from: today, to: today };
   });
+  
+  const [returnsSortConfig, setReturnsSortConfig] = useState<ReturnsSortConfig | null>({ key: 'date', direction: 'descending' });
+  const [forecastSortConfig, setForecastSortConfig] = useState<ForecastSortConfig | null>({ key: 'suggestedPurchase', direction: 'descending' });
+
   const { toast } = useToast();
 
   const handleDatePreset = (preset: string) => {
@@ -49,13 +64,7 @@ export default function InventoryDetailPage() {
   };
 
   const processAndSetMetrics = useCallback((data: GetMetricsOutput | null) => {
-    if (!data) {
-      setIsLoading(false);
-      return;
-    }
-    setInventoryFlowTrend(data.inventoryFlowTrend || []);
-    setMostMovedProducts(data.mostMovedProducts || []);
-    setInventoryPersonnelMetrics(data.inventoryPersonnelMetrics || []);
+    setMetrics(data);
     setIsLoading(false);
   }, []);
 
@@ -108,12 +117,86 @@ export default function InventoryDetailPage() {
     fetchMetrics(false);
   }, [date, fetchMetrics]);
 
+
+  // --- Lógica de Ordenamiento para Tabla de Devoluciones ---
+  const handleReturnsSort = (key: ReturnsSortConfig['key']) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (returnsSortConfig?.key === key && returnsSortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setReturnsSortConfig({ key, direction });
+  };
+  
+  const sortedReturns = useMemo(() => {
+    let sortableItems = [...(metrics?.customerReturns || [])];
+    if (returnsSortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        const aValue = returnsSortConfig.key === 'date' ? new Date(a.date.split('-').reverse().join('-')).getTime() : a[returnsSortConfig.key];
+        const bValue = returnsSortConfig.key === 'date' ? new Date(b.date.split('-').reverse().join('-')).getTime() : b[returnsSortConfig.key];
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return returnsSortConfig.direction === 'ascending' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        if ((aValue as number) < (bValue as number)) {
+          return returnsSortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if ((aValue as number) > (bValue as number)) {
+          return returnsSortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [metrics?.customerReturns, returnsSortConfig]);
+
+  const renderReturnsSortArrow = (key: ReturnsSortConfig['key']) => {
+    if (returnsSortConfig?.key !== key) return null;
+    return returnsSortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
+  };
+
+  // --- Lógica de Ordenamiento para Tabla de Previsión ---
+  const handleForecastSort = (key: ForecastSortConfig['key']) => {
+      let direction: 'ascending' | 'descending' = 'ascending';
+      if (forecastSortConfig?.key === key && forecastSortConfig.direction === 'ascending') {
+          direction = 'descending';
+      }
+      setForecastSortConfig({ key, direction });
+  };
+
+  const sortedForecast = useMemo(() => {
+      let sortableItems = [...(metrics?.purchaseForecast || [])];
+      if (forecastSortConfig !== null) {
+          sortableItems.sort((a, b) => {
+              const aValue = a[forecastSortConfig.key];
+              const bValue = b[forecastSortConfig.key];
+              
+              if (typeof aValue === 'string' && typeof bValue === 'string') {
+                return forecastSortConfig.direction === 'ascending' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+              }
+              if ((aValue as number) < (bValue as number)) {
+                return forecastSortConfig.direction === 'ascending' ? -1 : 1;
+              }
+              if ((aValue as number) > (bValue as number)) {
+                return forecastSortConfig.direction === 'ascending' ? 1 : -1;
+              }
+              return 0;
+          });
+      }
+      return sortableItems;
+  }, [metrics?.purchaseForecast, forecastSortConfig]);
+
+  const renderForecastSortArrow = (key: ForecastSortConfig['key']) => {
+      if (forecastSortConfig?.key !== key) return null;
+      return forecastSortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
+  };
+
+
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Análisis de Inventario</h2>
-          <p className="text-muted-foreground">Flujo, rotación y actividad del personal de inventario.</p>
+          <p className="text-muted-foreground">Flujo, rotación, devoluciones y previsión de compras.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Select onValueChange={handleDatePreset}>
@@ -153,7 +236,7 @@ export default function InventoryDetailPage() {
             <Loader className="h-8 w-8 animate-spin text-primary" />
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-8">
             <Card className="lg:col-span-2">
                 <CardHeader>
                     <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Flujo de Inventario (Entradas vs. Salidas)</CardTitle>
@@ -165,7 +248,7 @@ export default function InventoryDetailPage() {
                       Salidas: { label: "Salidas", color: "hsl(var(--chart-2))" },
                     }}>
                      <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={inventoryFlowTrend} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      <LineChart data={metrics?.inventoryFlowTrend || []} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                          <CartesianGrid strokeDasharray="3 3" />
                          <XAxis dataKey="date" />
                          <YAxis />
@@ -178,22 +261,108 @@ export default function InventoryDetailPage() {
                    </ChartContainer>
                 </CardContent>
             </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center">
+                        <ShoppingCart className="mr-2 h-5 w-5" /> Previsión de Compra Mensual
+                    </CardTitle>
+                    <CardDescription className="flex items-center gap-2">
+                        Sugerencias de compra basadas en las salidas de los últimos 30 días para reponer stock.
+                        <TooltipProvider>
+                            <UiTooltip>
+                                <TooltipTrigger>
+                                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                                </TooltipTrigger>
+                                <UiTooltipContent>
+                                    <p className="max-w-xs">La sugerencia se calcula como: (Salidas de los últimos 30 días) - (Stock Actual). Si el resultado es negativo, se muestra 0.</p>
+                                </UiTooltipContent>
+                            </UiTooltip>
+                        </TooltipProvider>
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="overflow-auto max-h-[70vh] p-2">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead><Button variant="ghost" onClick={() => handleForecastSort('productName')}>Producto {renderForecastSortArrow('productName')}</Button></TableHead>
+                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleForecastSort('last30dSales')}>Salidas (30d) {renderForecastSortArrow('last30dSales')}</Button></TableHead>
+                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleForecastSort('currentStock')}>Stock Actual {renderForecastSortArrow('currentStock')}</Button></TableHead>
+                                <TableHead className="text-right"><Button variant="ghost" onClick={() => handleForecastSort('suggestedPurchase')}>Compra Sugerida {renderForecastSortArrow('suggestedPurchase')}</Button></TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {sortedForecast.filter(item => item.suggestedPurchase > 0).map(item => (
+                                <TableRow key={item.productName}>
+                                    <TableCell className="font-medium">{item.productName}</TableCell>
+                                    <TableCell className="text-center">{item.last30dSales}</TableCell>
+                                    <TableCell className="text-center">{item.currentStock}</TableCell>
+                                    <TableCell className="text-right font-bold text-primary">{item.suggestedPurchase}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-8">
                 <Card>
                     <CardHeader>
-                        <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5" />Top 10 Productos por Rotación (Salidas)</CardTitle>
-                        <CardDescription>Productos con mayor cantidad de movimientos de salida.</CardDescription>
+                        <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5 text-green-500" />Top 10 Productos por Entradas</CardTitle>
+                        <CardDescription>Productos con mayor cantidad de unidades ingresadas.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[400px]">
-                        <ChartContainer config={{ movements: { label: "Movimientos", color: "hsl(var(--chart-2))" } }}>
+                        <ChartContainer config={{ movements: { label: "Entradas", color: "hsl(var(--chart-1))" } }}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={mostMovedProducts.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
+                                <BarChart data={(metrics?.mostIncomingProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
                                     <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} interval={0} allowDataOverflow={false} />
                                     <Tooltip content={<ChartTooltipContent />} />
                                     <Legend />
-                                    <Bar dataKey="movements" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
+                                    <Bar dataKey="movements" name="Entradas" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5 text-red-500" />Top 10 Productos por Rotación (Salidas)</CardTitle>
+                        <CardDescription>Productos con mayor cantidad de movimientos de salida.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-[400px]">
+                        <ChartContainer config={{ movements: { label: "Salidas", color: "hsl(var(--chart-2))" } }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={(metrics?.mostMovedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis type="number" />
+                                    <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} interval={0} allowDataOverflow={false} />
+                                    <Tooltip content={<ChartTooltipContent />} />
+                                    <Legend />
+                                    <Bar dataKey="movements" name="Salidas" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                    </CardContent>
+                </Card>
+            </div>
+             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-8">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center"><Undo2 className="mr-2 h-5 w-5" />Top 10 Productos Más Devueltos</CardTitle>
+                        <CardDescription>Productos con la mayor cantidad de unidades devueltas por clientes.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-[400px]">
+                        <ChartContainer config={{ returns: { label: "Devoluciones", color: "hsl(var(--chart-5))" } }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={(metrics?.mostReturnedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis type="number" />
+                                    <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} interval={0} allowDataOverflow={false} />
+                                    <Tooltip content={<ChartTooltipContent />} />
+                                    <Legend />
+                                    <Bar dataKey="returns" name="Devoluciones" fill="hsl(var(--chart-5))" radius={[0, 4, 4, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </ChartContainer>
@@ -210,7 +379,7 @@ export default function InventoryDetailPage() {
                             exits: { label: "Salidas", color: "hsl(var(--chart-2))" },
                          }}>
                          <ResponsiveContainer width="100%" height="100%">
-                           <BarChart data={inventoryPersonnelMetrics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                           <BarChart data={metrics?.inventoryPersonnelMetrics || []} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                               <CartesianGrid strokeDasharray="3 3" />
                               <XAxis type="number" stacked />
                               <YAxis dataKey="name" type="category" width={80} />
@@ -224,8 +393,72 @@ export default function InventoryDetailPage() {
                     </CardContent>
                 </Card>
             </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center"><Undo2 className="mr-2 h-5 w-5" />Detalle de Devoluciones de Clientes</CardTitle>
+                <CardDescription>Listado de movimientos de inventario registrados como "DEVOLUCION DE CLIENTE".</CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-auto max-h-[70vh] p-2">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-card">
+                    <TableRow>
+                      <TableHead>
+                        <Button variant="ghost" onClick={() => handleReturnsSort('date')}>
+                            Fecha {renderReturnsSortArrow('date')}
+                        </Button>
+                      </TableHead>
+                      <TableHead>
+                        <Button variant="ghost" onClick={() => handleReturnsSort('productName')}>
+                            Producto Devuelto {renderReturnsSortArrow('productName')}
+                        </Button>
+                      </TableHead>
+                      <TableHead className="text-center">
+                        <Button variant="ghost" onClick={() => handleReturnsSort('quantity')}>
+                            Cantidad {renderReturnsSortArrow('quantity')}
+                        </Button>
+                      </TableHead>
+                      <TableHead>
+                        <Button variant="ghost" onClick={() => handleReturnsSort('user')}>
+                            Usuario {renderReturnsSortArrow('user')}
+                        </Button>
+                      </TableHead>
+                      <TableHead>
+                        <Button variant="ghost" onClick={() => handleReturnsSort('orderNumber')}>
+                            N° de Pedido {renderReturnsSortArrow('orderNumber')}
+                        </Button>
+                      </TableHead>
+                      <TableHead>
+                        <Button variant="ghost" onClick={() => handleReturnsSort('store')}>
+                            Tienda {renderReturnsSortArrow('store')}
+                        </Button>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedReturns.length > 0 ? (
+                        sortedReturns.map((item, index) => (
+                        <TableRow key={`${item.date}-${item.productName}-${index}`}>
+                            <TableCell className="font-medium">{item.date}</TableCell>
+                            <TableCell>{item.productName}</TableCell>
+                            <TableCell className="text-center font-bold">{item.quantity}</TableCell>
+                            <TableCell>{item.user}</TableCell>
+                            <TableCell>{item.orderNumber}</TableCell>
+                            <TableCell className="font-medium">{item.store}</TableCell>
+                        </TableRow>
+                        ))
+                    ) : (
+                        <TableRow>
+                            <TableCell colSpan={6} className="h-24 text-center">No se encontraron devoluciones para el período seleccionado.</TableCell>
+                        </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
         </div>
       )}
     </div>
   );
 }
+
+    

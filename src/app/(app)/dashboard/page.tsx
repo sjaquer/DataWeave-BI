@@ -488,7 +488,7 @@ export default function Dashboard() {
                 <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Rendimiento Comparativo de Tiendas (Pedidos Confirmados)</CardTitle>
                 <CardDescription>Evolución de los pedidos confirmados por día para las tiendas principales.</CardDescription>
             </CardHeader>
-            <CardContent className="w-full aspect-[4/3]">
+            <CardContent className="h-96">
                 <ChartContainer
                     config={{
                         dearel: { label: "Dearel", color: "hsl(var(--chart-1))" },
@@ -557,7 +557,7 @@ export default function Dashboard() {
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
                   <CardDescription>{selectedStore === 'all' ? 'Top 10 provincias con más pedidos y su gasto total.' : `Este gráfico muestra datos globales.`}</CardDescription>
               </CardHeader>
-              <CardContent className="w-full aspect-[4/3]">
+              <CardContent className="h-96">
                 <ChartContainer config={{
                     totalOrders: { label: "Pedidos Totales", color: "hsl(var(--chart-1))" },
                     totalSpent: { label: "Gasto Total", color: "hsl(var(--chart-2))" },

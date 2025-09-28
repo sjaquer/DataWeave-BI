@@ -159,7 +159,7 @@ export default function InventoryDetailPage() {
                     <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Flujo de Inventario (Entradas vs. Salidas)</CardTitle>
                     <CardDescription>Unidades que entran y salen del inventario por día.</CardDescription>
                 </CardHeader>
-                <CardContent className="w-full aspect-video">
+                <CardContent className="h-80">
                   <ChartContainer config={{
                       Entradas: { label: "Entradas", color: "hsl(var(--chart-1))" },
                       Salidas: { label: "Salidas", color: "hsl(var(--chart-2))" },
@@ -184,7 +184,7 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5" />Top 10 Productos por Rotación (Salidas)</CardTitle>
                         <CardDescription>Productos con mayor cantidad de movimientos de salida.</CardDescription>
                     </CardHeader>
-                    <CardContent className="h-[400px] overflow-auto">
+                    <CardContent className="h-[400px]">
                         <ChartContainer config={{ movements: { label: "Movimientos", color: "hsl(var(--chart-2))" } }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={mostMovedProducts.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
@@ -204,7 +204,7 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Actividad del Equipo de Inventario</CardTitle>
                         <CardDescription>Movimientos de entrada y salida procesados por cada miembro del equipo.</CardDescription>
                     </CardHeader>
-                    <CardContent className="h-[400px] overflow-auto">
+                    <CardContent className="h-[400px]">
                        <ChartContainer config={{
                             entries: { label: "Entradas", color: "hsl(var(--chart-1))" },
                             exits: { label: "Salidas", color: "hsl(var(--chart-2))" },

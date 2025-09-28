@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, Calendar as CalendarIcon, RefreshCw, AlertTriangle, PackageSearch, Store } from "lucide-react";
+import { Loader, Calendar as CalendarIcon, RefreshCw, AlertTriangle, PackageSearch, Store, ArrowUp, ArrowDown } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,11 +24,17 @@ const CACHE_KEY = 'dashboardMetricsCache_inventory_status';
 const CACHE_EXPIRATION_MS = 5 * 60 * 1000; // 5 minutos de caché
 const LOW_STOCK_THRESHOLD = 5;
 
+type SortConfig = {
+    key: keyof CurrentInventoryItem;
+    direction: 'ascending' | 'descending';
+};
+
 export default function InventoryStatusPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [inventoryData, setInventoryData] = useState<CurrentInventoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStore, setSelectedStore] = useState("all");
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'productName', direction: 'ascending' });
   
   const [date, setDate] = useState<DateRange | undefined>(() => {
     const today = new Date();
@@ -115,16 +121,46 @@ export default function InventoryStatusPage() {
     return Array.from(stores).sort();
   }, [inventoryData]);
 
-  const filteredInventory = useMemo(() => {
-    return inventoryData.filter(item => {
-      const storeMatch = selectedStore === 'all' || item.store.toLowerCase() === selectedStore.toLowerCase();
-      const searchMatch = searchQuery === '' || 
-                          item.productName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          item.sku.toLowerCase().includes(searchQuery.toLowerCase());
-      return storeMatch && searchMatch;
+  const filteredAndSortedInventory = useMemo(() => {
+    let filtered = inventoryData.filter(item => {
+        const storeMatch = selectedStore === 'all' || item.store.toLowerCase() === selectedStore.toLowerCase();
+        const searchMatch = searchQuery === '' || 
+                            item.productName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            item.sku.toLowerCase().includes(searchQuery.toLowerCase());
+        return storeMatch && searchMatch;
     });
-  }, [inventoryData, selectedStore, searchQuery]);
 
+    if (sortConfig !== null) {
+        filtered.sort((a, b) => {
+            const aValue = a[sortConfig.key];
+            const bValue = b[sortConfig.key];
+            
+            if (aValue < bValue) {
+                return sortConfig.direction === 'ascending' ? -1 : 1;
+            }
+            if (aValue > bValue) {
+                return sortConfig.direction === 'ascending' ? 1 : -1;
+            }
+            return 0;
+        });
+    }
+
+    return filtered;
+  }, [inventoryData, selectedStore, searchQuery, sortConfig]);
+
+  const handleSort = (key: SortConfig['key']) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig?.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const renderSortArrow = (key: SortConfig['key']) => {
+    if (sortConfig?.key !== key) return null;
+    if (sortConfig.direction === 'ascending') return <ArrowUp className="ml-2 h-4 w-4" />;
+    return <ArrowDown className="ml-2 h-4 w-4" />;
+  };
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
@@ -207,17 +243,37 @@ export default function InventoryStatusPage() {
                 <Table>
                     <TableHeader className="sticky top-0 bg-card">
                         <TableRow>
-                            <TableHead>SKU</TableHead>
-                            <TableHead>Producto</TableHead>
-                            <TableHead>Tienda</TableHead>
-                            <TableHead className="text-center">Stock Actual</TableHead>
-                            <TableHead className="text-right">Último Movimiento</TableHead>
+                            <TableHead>
+                                <Button variant="ghost" onClick={() => handleSort('sku')}>
+                                    SKU {renderSortArrow('sku')}
+                                </Button>
+                            </TableHead>
+                            <TableHead>
+                                <Button variant="ghost" onClick={() => handleSort('productName')}>
+                                    Producto {renderSortArrow('productName')}
+                                </Button>
+                            </TableHead>
+                            <TableHead>
+                                <Button variant="ghost" onClick={() => handleSort('store')}>
+                                    Tienda {renderSortArrow('store')}
+                                </Button>
+                            </TableHead>
+                            <TableHead className="text-center">
+                                <Button variant="ghost" onClick={() => handleSort('currentStock')}>
+                                    Stock Actual {renderSortArrow('currentStock')}
+                                </Button>
+                            </TableHead>
+                            <TableHead className="text-right">
+                                <Button variant="ghost" onClick={() => handleSort('lastMovementDate')}>
+                                    Último Movimiento {renderSortArrow('lastMovementDate')}
+                                </Button>
+                            </TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredInventory.length > 0 ? (
-                            filteredInventory.map(item => (
-                                <TableRow key={item.sku} className={cn(item.currentStock <= LOW_STOCK_THRESHOLD && "bg-destructive/10 hover:bg-destructive/20")}>
+                        {filteredAndSortedInventory.length > 0 ? (
+                            filteredAndSortedInventory.map(item => (
+                                <TableRow key={`${item.sku}-${item.store}`} className={cn(item.currentStock <= LOW_STOCK_THRESHOLD && "bg-destructive/10 hover:bg-destructive/20")}>
                                     <TableCell className="font-mono">{item.sku}</TableCell>
                                     <TableCell className="font-medium">{item.productName}</TableCell>
                                     <TableCell className="text-muted-foreground">{item.store}</TableCell>

@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, Calendar as CalendarIcon, RefreshCw, MapPin } from "lucide-react";
+import { Loader, Calendar as CalendarIcon, RefreshCw, MapPin, ArrowUp, ArrowDown } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,11 @@ import DashboardNav from "@/components/DashboardNav";
 const CACHE_KEY = 'dashboardMetricsCache_provinces';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
 
+type SortConfig = {
+  key: keyof ProvinceMetric;
+  direction: 'ascending' | 'descending';
+};
+
 export default function ProvincesDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [provinceMetrics, setProvinceMetrics] = useState<ProvinceMetric[]>([]);
@@ -30,6 +35,7 @@ export default function ProvincesDetailPage() {
     const today = new Date();
     return { from: today, to: today };
   });
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'totalOrders', direction: 'descending' });
   const { toast } = useToast();
 
   const handleDatePreset = (preset: string) => {
@@ -89,7 +95,7 @@ export default function ProvincesDetailPage() {
           acc[metric.name].confirmationRate = acc[metric.name].totalOrders > 0 ? (acc[metric.name].confirmedOrders / acc[metric.name].totalOrders) * 100 : 0;
           return acc;
         }, {})
-      ).sort((a, b) => b.totalOrders - a.totalOrders);
+      );
       setProvinceMetrics(aggregatedProvinceMetrics);
     }
     setIsLoading(false);
@@ -155,6 +161,42 @@ export default function ProvincesDetailPage() {
     fetchMetrics(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
+  
+  const handleSort = (key: keyof ProvinceMetric) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedMetrics = useMemo(() => {
+    let sortableItems = [...provinceMetrics];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortConfig.direction === 'ascending' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        
+        if ((aValue as number) < (bValue as number)) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if ((aValue as number) > (bValue as number)) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [provinceMetrics, sortConfig]);
+
+  const renderSortArrow = (key: keyof ProvinceMetric) => {
+    if (!sortConfig || sortConfig.key !== key) return null;
+    return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
+  };
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
@@ -210,15 +252,35 @@ export default function ProvincesDetailPage() {
             <Table>
               <TableHeader className="sticky top-0 bg-card">
                 <TableRow>
-                  <TableHead>Provincia</TableHead>
-                  <TableHead className="text-center">Pedidos Totales</TableHead>
-                  <TableHead className="text-center">Pedidos Confirmados</TableHead>
-                  <TableHead className="text-right">Gasto Total (S/)</TableHead>
-                  <TableHead className="w-[220px] text-right">Tasa de Confirmación</TableHead>
+                  <TableHead>
+                    <Button variant="ghost" onClick={() => handleSort('name')}>
+                      Provincia {renderSortArrow('name')}
+                    </Button>
+                  </TableHead>
+                  <TableHead className="text-center">
+                    <Button variant="ghost" onClick={() => handleSort('totalOrders')}>
+                      Pedidos Totales {renderSortArrow('totalOrders')}
+                    </Button>
+                  </TableHead>
+                  <TableHead className="text-center">
+                    <Button variant="ghost" onClick={() => handleSort('confirmedOrders')}>
+                      Pedidos Confirmados {renderSortArrow('confirmedOrders')}
+                    </Button>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <Button variant="ghost" onClick={() => handleSort('totalSpent')}>
+                      Gasto Total (S/) {renderSortArrow('totalSpent')}
+                    </Button>
+                  </TableHead>
+                  <TableHead className="w-[220px] text-right">
+                    <Button variant="ghost" onClick={() => handleSort('confirmationRate')}>
+                      Tasa de Confirmación {renderSortArrow('confirmationRate')}
+                    </Button>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {provinceMetrics.filter(p => p.totalOrders > 0).map((p) => (
+                {sortedMetrics.filter(p => p.totalOrders > 0).map((p) => (
                   <TableRow key={p.name}>
                     <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell className="text-center">{p.totalOrders}</TableCell>

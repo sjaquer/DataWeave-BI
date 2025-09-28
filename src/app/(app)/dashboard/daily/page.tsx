@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, Calendar as CalendarIcon, RefreshCw } from "lucide-react";
+import { Loader, Calendar as CalendarIcon, RefreshCw, ArrowDown, ArrowUp } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
@@ -24,6 +24,11 @@ const CACHE_KEY = 'dashboardMetricsCache_daily';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
 const MAIN_STORES = ["dearel", "blumi", "novi", "trazto", "cumbre"];
 
+type SortConfig = {
+    key: keyof DailyMetric | 'totalOrders';
+    direction: 'ascending' | 'descending';
+};
+
 const capitalize = (s: string) => {
   if (typeof s !== 'string' || !s) return s;
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -36,6 +41,7 @@ export default function DailyDetailPage() {
     const today = new Date();
     return { from: today, to: today };
   });
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'date', direction: 'descending' });
   const { toast } = useToast();
 
   const handleDatePreset = (preset: string) => {
@@ -136,6 +142,39 @@ export default function DailyDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
+  const handleSort = (key: SortConfig['key']) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig?.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedMetrics = useMemo(() => {
+    let sortableItems = [...dailyMetrics];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        const aValue = sortConfig.key === 'date' ? new Date(a.date.split('-').reverse().join('-')).getTime() : a[sortConfig.key as keyof DailyMetric] as number;
+        const bValue = sortConfig.key === 'date' ? new Date(b.date.split('-').reverse().join('-')).getTime() : b[sortConfig.key as keyof DailyMetric] as number;
+
+        if (aValue < bValue) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [dailyMetrics, sortConfig]);
+
+  const renderSortArrow = (key: SortConfig['key']) => {
+    if (sortConfig?.key !== key) return null;
+    if (sortConfig.direction === 'ascending') return <ArrowUp className="ml-2 h-4 w-4" />;
+    return <ArrowDown className="ml-2 h-4 w-4" />;
+  };
+
   const renderDailyMetricsTable = (metrics: DailyMetric[], storeId?: string) => {
     const dataToRender = storeId
       ? metrics.map(m => {
@@ -149,17 +188,37 @@ export default function DailyDetailPage() {
             confirmationRate: total > 0 ? (storeData.confirmed / total) * 100 : 0,
           };
         }).filter(m => m.totalOrders > 0)
-      : metrics;
+      : sortedMetrics;
 
     return (
       <Table>
         <TableHeader className="sticky top-0 bg-card">
           <TableRow>
-            <TableHead className="w-[120px]">Fecha</TableHead>
-            <TableHead className="text-center">Confirmados</TableHead>
-            <TableHead className="text-center">No Confirmados</TableHead>
-            <TableHead className="text-center">Pedidos Totales</TableHead>
-            <TableHead className="w-[220px] text-right">Tasa de Confirmación</TableHead>
+            <TableHead className="w-[120px]">
+              <Button variant="ghost" onClick={() => handleSort('date')}>
+                Fecha {renderSortArrow('date')}
+              </Button>
+            </TableHead>
+            <TableHead className="text-center">
+               <Button variant="ghost" onClick={() => handleSort('confirmed')}>
+                Confirmados {renderSortArrow('confirmed')}
+              </Button>
+            </TableHead>
+            <TableHead className="text-center">
+              <Button variant="ghost" onClick={() => handleSort('unconfirmed')}>
+                No Confirmados {renderSortArrow('unconfirmed')}
+              </Button>
+            </TableHead>
+            <TableHead className="text-center">
+              <Button variant="ghost" onClick={() => handleSort('totalOrders')}>
+                Pedidos Totales {renderSortArrow('totalOrders')}
+              </Button>
+            </TableHead>
+            <TableHead className="w-[220px] text-right">
+              <Button variant="ghost" onClick={() => handleSort('confirmationRate')}>
+                Tasa de Confirmación {renderSortArrow('confirmationRate')}
+              </Button>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -248,15 +307,15 @@ export default function DailyDetailPage() {
                         <TabsTrigger value="others">Otras</TabsTrigger>
                     </TabsList>
                     <TabsContent value="all" className="mt-4">
-                        {renderDailyMetricsTable(dailyMetrics)}
+                        {renderDailyMetricsTable(sortedMetrics)}
                     </TabsContent>
                     {MAIN_STORES.map(store => (
                         <TabsContent key={store} value={store} className="mt-4">
-                            {renderDailyMetricsTable(dailyMetrics, store)}
+                            {renderDailyMetricsTable(sortedMetrics, store)}
                         </TabsContent>
                     ))}
                     <TabsContent value="others" className="mt-4">
-                        {renderDailyMetricsTable(dailyMetrics.map(m => {
+                        {renderDailyMetricsTable(sortedMetrics.map(m => {
                             const otherStoresData = Object.keys(m.byStore || {}).filter(s => !MAIN_STORES.includes(s.toLowerCase())).reduce((acc, key) => {
                                 acc.confirmed += m.byStore![key].confirmed;
                                 acc.unconfirmed += m.byStore![key].unconfirmed;

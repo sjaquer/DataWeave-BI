@@ -1,12 +1,12 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, Calendar as CalendarIcon, RefreshCw, Undo2 } from "lucide-react";
+import { Loader, Calendar as CalendarIcon, RefreshCw, Undo2, ArrowUp, ArrowDown } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,11 @@ import DashboardNav from "@/components/DashboardNav";
 const CACHE_KEY = 'dashboardMetricsCache_returns';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
 
+type SortConfig = {
+    key: keyof CustomerReturn;
+    direction: 'ascending' | 'descending';
+};
+
 export default function ReturnsDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [returnsData, setReturnsData] = useState<CustomerReturn[]>([]);
@@ -32,6 +37,7 @@ export default function ReturnsDetailPage() {
     const today = new Date();
     return { from: today, to: today };
   });
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'date', direction: 'descending' });
   const { toast } = useToast();
 
   const handleDatePreset = (preset: string) => {
@@ -106,6 +112,41 @@ export default function ReturnsDetailPage() {
   useEffect(() => {
     fetchMetrics(false);
   }, [date, fetchMetrics]);
+  
+  const handleSort = (key: SortConfig['key']) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig?.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+  
+  const sortedReturns = useMemo(() => {
+    let sortableItems = [...returnsData];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        const aValue = sortConfig.key === 'date' ? new Date(a.date.split('-').reverse().join('-')).getTime() : a[sortConfig.key];
+        const bValue = sortConfig.key === 'date' ? new Date(b.date.split('-').reverse().join('-')).getTime() : b[sortConfig.key];
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortConfig.direction === 'ascending' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        if ((aValue as number) < (bValue as number)) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if ((aValue as number) > (bValue as number)) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [returnsData, sortConfig]);
+
+  const renderSortArrow = (key: SortConfig['key']) => {
+    if (sortConfig?.key !== key) return null;
+    return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
+  };
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
@@ -183,17 +224,41 @@ export default function ReturnsDetailPage() {
                 <Table>
                   <TableHeader className="sticky top-0 bg-card">
                     <TableRow>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Producto Devuelto</TableHead>
-                      <TableHead className="text-center">Cantidad</TableHead>
-                      <TableHead>Usuario</TableHead>
-                      <TableHead>N° de Pedido</TableHead>
-                      <TableHead>Tienda</TableHead>
+                      <TableHead>
+                        <Button variant="ghost" onClick={() => handleSort('date')}>
+                            Fecha {renderSortArrow('date')}
+                        </Button>
+                      </TableHead>
+                      <TableHead>
+                        <Button variant="ghost" onClick={() => handleSort('productName')}>
+                            Producto Devuelto {renderSortArrow('productName')}
+                        </Button>
+                      </TableHead>
+                      <TableHead className="text-center">
+                        <Button variant="ghost" onClick={() => handleSort('quantity')}>
+                            Cantidad {renderSortArrow('quantity')}
+                        </Button>
+                      </TableHead>
+                      <TableHead>
+                        <Button variant="ghost" onClick={() => handleSort('user')}>
+                            Usuario {renderSortArrow('user')}
+                        </Button>
+                      </TableHead>
+                      <TableHead>
+                        <Button variant="ghost" onClick={() => handleSort('orderNumber')}>
+                            N° de Pedido {renderSortArrow('orderNumber')}
+                        </Button>
+                      </TableHead>
+                      <TableHead>
+                        <Button variant="ghost" onClick={() => handleSort('store')}>
+                            Tienda {renderSortArrow('store')}
+                        </Button>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {returnsData.length > 0 ? (
-                        returnsData.map((item, index) => (
+                    {sortedReturns.length > 0 ? (
+                        sortedReturns.map((item, index) => (
                         <TableRow key={`${item.date}-${item.productName}-${index}`}>
                             <TableCell className="font-medium">{item.date}</TableCell>
                             <TableCell>{item.productName}</TableCell>

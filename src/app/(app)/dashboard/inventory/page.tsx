@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, Calendar as CalendarIcon, RefreshCw, Truck, Users, LineChart as LineChartIcon, Undo2, ArrowDown, ArrowUp, ShoppingCart, HelpCircle } from "lucide-react";
+import { Loader, Calendar as CalendarIcon, RefreshCw, Truck, Users, LineChart as LineChartIcon, Undo2, ArrowDown, ArrowUp, ShoppingCart, HelpCircle, Store } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LineChart, Line } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -38,11 +38,13 @@ type ForecastSortConfig = {
 
 export default function InventoryDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
-  const [metrics, setMetrics] = useState<GetMetricsOutput | null>(null);
+  const [fullMetrics, setFullMetrics] = useState<GetMetricsOutput | null>(null);
+  const [displayMetrics, setDisplayMetrics] = useState<GetMetricsOutput | null>(null);
   const [date, setDate] = useState<DateRange | undefined>(() => {
     const today = new Date();
     return { from: today, to: today };
   });
+  const [selectedStore, setSelectedStore] = useState('all');
   
   const [returnsSortConfig, setReturnsSortConfig] = useState<ReturnsSortConfig | null>({ key: 'date', direction: 'descending' });
   const [forecastSortConfig, setForecastSortConfig] = useState<ForecastSortConfig | null>({ key: 'suggestedPurchase', direction: 'descending' });
@@ -62,9 +64,17 @@ export default function InventoryDetailPage() {
     }
     setDate({ from, to });
   };
+  
+    const availableStores = useMemo(() => {
+        if (!fullMetrics?.currentInventory) return [];
+        const stores = new Set(fullMetrics.currentInventory.map(item => item.store).filter(s => s !== 'N/A'));
+        return Array.from(stores).sort();
+    }, [fullMetrics?.currentInventory]);
+
 
   const processAndSetMetrics = useCallback((data: GetMetricsOutput | null) => {
-    setMetrics(data);
+    setFullMetrics(data);
+    setDisplayMetrics(data); // Initially display all data
     setIsLoading(false);
   }, []);
 
@@ -118,6 +128,54 @@ export default function InventoryDetailPage() {
   }, [date, fetchMetrics]);
 
 
+    // --- Lógica de Filtro por Tienda ---
+    const filterMetricsByStore = useCallback((storeName: string) => {
+        if (!fullMetrics) return;
+
+        if (storeName === 'all') {
+            setDisplayMetrics(fullMetrics);
+            return;
+        }
+
+        const lowerCaseStoreName = storeName.toLowerCase();
+
+        const filterByStore = <T extends { store?: string }>(items: T[] | undefined) => {
+            return items?.filter(item => item.store?.toLowerCase() === lowerCaseStoreName) || [];
+        }
+
+        // Recalcular métricas dependientes
+        const filteredCurrentInventory = filterByStore(fullMetrics.currentInventory);
+
+        const filteredPurchaseForecast = (fullMetrics.purchaseForecast || []).filter(item => {
+            const inventoryItem = filteredCurrentInventory.find(inv => inv.productName === item.productName);
+            return !!inventoryItem; // Solo incluir si el producto existe en el inventario de la tienda
+        }).map(item => {
+            const inventoryItem = filteredCurrentInventory.find(inv => inv.productName === item.productName);
+            const currentStock = inventoryItem ? inventoryItem.currentStock : 0;
+            return { ...item, currentStock };
+        });
+
+        const newDisplayMetrics: GetMetricsOutput = {
+            ...fullMetrics,
+            inventoryFlowTrend: fullMetrics.inventoryFlowTrend?.filter(d => d.store?.toLowerCase() === lowerCaseStoreName),
+            mostIncomingProducts: fullMetrics.mostIncomingProducts?.filter(p => p.store?.toLowerCase() === lowerCaseStoreName),
+            mostMovedProducts: fullMetrics.mostMovedProducts?.filter(p => p.store?.toLowerCase() === lowerCaseStoreName),
+            inventoryPersonnelMetrics: fullMetrics.inventoryPersonnelMetrics, // El personal es global
+            customerReturns: filterByStore(fullMetrics.customerReturns),
+            mostReturnedProducts: fullMetrics.mostReturnedProducts?.filter(p => p.store?.toLowerCase() === lowerCaseStoreName),
+            currentInventory: filteredCurrentInventory,
+            purchaseForecast: filteredPurchaseForecast,
+        };
+
+        setDisplayMetrics(newDisplayMetrics);
+
+    }, [fullMetrics]);
+
+    useEffect(() => {
+        filterMetricsByStore(selectedStore);
+    }, [selectedStore, filterMetricsByStore]);
+
+
   // --- Lógica de Ordenamiento para Tabla de Devoluciones ---
   const handleReturnsSort = (key: ReturnsSortConfig['key']) => {
     let direction: 'ascending' | 'descending' = 'ascending';
@@ -128,7 +186,7 @@ export default function InventoryDetailPage() {
   };
   
   const sortedReturns = useMemo(() => {
-    let sortableItems = [...(metrics?.customerReturns || [])];
+    let sortableItems = [...(displayMetrics?.customerReturns || [])];
     if (returnsSortConfig !== null) {
       sortableItems.sort((a, b) => {
         const aValue = returnsSortConfig.key === 'date' ? new Date(a.date.split('-').reverse().join('-')).getTime() : a[returnsSortConfig.key];
@@ -147,7 +205,7 @@ export default function InventoryDetailPage() {
       });
     }
     return sortableItems;
-  }, [metrics?.customerReturns, returnsSortConfig]);
+  }, [displayMetrics?.customerReturns, returnsSortConfig]);
 
   const renderReturnsSortArrow = (key: ReturnsSortConfig['key']) => {
     if (returnsSortConfig?.key !== key) return null;
@@ -164,7 +222,7 @@ export default function InventoryDetailPage() {
   };
 
   const sortedForecast = useMemo(() => {
-      let sortableItems = [...(metrics?.purchaseForecast || [])];
+      let sortableItems = [...(displayMetrics?.purchaseForecast || [])];
       if (forecastSortConfig !== null) {
           sortableItems.sort((a, b) => {
               const aValue = a[forecastSortConfig.key];
@@ -183,7 +241,7 @@ export default function InventoryDetailPage() {
           });
       }
       return sortableItems;
-  }, [metrics?.purchaseForecast, forecastSortConfig]);
+  }, [displayMetrics?.purchaseForecast, forecastSortConfig]);
 
   const renderForecastSortArrow = (key: ForecastSortConfig['key']) => {
       if (forecastSortConfig?.key !== key) return null;
@@ -222,6 +280,17 @@ export default function InventoryDetailPage() {
               <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
             </PopoverContent>
           </Popover>
+            <Select value={selectedStore} onValueChange={setSelectedStore}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="Filtrar por Tienda" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Todas las Tiendas</SelectItem>
+                    {availableStores.map(store => (
+                        <SelectItem key={store} value={store}>{store}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
           <Button className="flex-1 sm:flex-initial" variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>
             {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Actualizar
@@ -240,7 +309,7 @@ export default function InventoryDetailPage() {
             <Card className="lg:col-span-2">
                 <CardHeader>
                     <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Flujo de Inventario (Entradas vs. Salidas)</CardTitle>
-                    <CardDescription>Unidades que entran y salen del inventario por día.</CardDescription>
+                    <CardDescription>Unidades que entran y salen del inventario por día para {selectedStore === 'all' ? 'todas las tiendas' : `la tienda ${selectedStore}`}.</CardDescription>
                 </CardHeader>
                 <CardContent className="h-80">
                   <ChartContainer config={{
@@ -248,7 +317,7 @@ export default function InventoryDetailPage() {
                       Salidas: { label: "Salidas", color: "hsl(var(--chart-2))" },
                     }}>
                      <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={metrics?.inventoryFlowTrend || []} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      <LineChart data={displayMetrics?.inventoryFlowTrend || []} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                          <CartesianGrid strokeDasharray="3 3" />
                          <XAxis dataKey="date" />
                          <YAxis />
@@ -268,7 +337,7 @@ export default function InventoryDetailPage() {
                         <ShoppingCart className="mr-2 h-5 w-5" /> Previsión de Compra Mensual
                     </CardTitle>
                     <CardDescription className="flex items-center gap-2">
-                        Sugerencias de compra basadas en las salidas de los últimos 30 días para reponer stock.
+                        Sugerencias de compra basadas en las salidas de los últimos 30 días para reponer stock en {selectedStore === 'all' ? 'todas las tiendas' : `la tienda ${selectedStore}`}.
                         <TooltipProvider>
                             <UiTooltip>
                                 <TooltipTrigger>
@@ -314,7 +383,7 @@ export default function InventoryDetailPage() {
                     <CardContent className="h-[400px]">
                         <ChartContainer config={{ movements: { label: "Entradas", color: "hsl(var(--chart-1))" } }}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={(metrics?.mostIncomingProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
+                                <BarChart data={(displayMetrics?.mostIncomingProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
                                     <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} interval={0} allowDataOverflow={false} />
@@ -334,7 +403,7 @@ export default function InventoryDetailPage() {
                     <CardContent className="h-[400px]">
                         <ChartContainer config={{ movements: { label: "Salidas", color: "hsl(var(--chart-2))" } }}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={(metrics?.mostMovedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
+                                <BarChart data={(displayMetrics?.mostMovedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
                                     <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} interval={0} allowDataOverflow={false} />
@@ -356,7 +425,7 @@ export default function InventoryDetailPage() {
                     <CardContent className="h-[400px]">
                         <ChartContainer config={{ returns: { label: "Devoluciones", color: "hsl(var(--chart-5))" } }}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={(metrics?.mostReturnedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
+                                <BarChart data={(displayMetrics?.mostReturnedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
                                     <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} interval={0} allowDataOverflow={false} />
@@ -371,7 +440,7 @@ export default function InventoryDetailPage() {
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Actividad del Equipo de Inventario</CardTitle>
-                        <CardDescription>Movimientos de entrada y salida procesados por cada miembro del equipo.</CardDescription>
+                        <CardDescription>Movimientos de entrada y salida procesados por cada miembro del equipo (Global).</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[400px]">
                        <ChartContainer config={{
@@ -379,7 +448,7 @@ export default function InventoryDetailPage() {
                             exits: { label: "Salidas", color: "hsl(var(--chart-2))" },
                          }}>
                          <ResponsiveContainer width="100%" height="100%">
-                           <BarChart data={metrics?.inventoryPersonnelMetrics || []} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                           <BarChart data={displayMetrics?.inventoryPersonnelMetrics || []} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                               <CartesianGrid strokeDasharray="3 3" />
                               <XAxis type="number" stacked />
                               <YAxis dataKey="name" type="category" width={80} />

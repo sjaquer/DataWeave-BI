@@ -76,12 +76,14 @@ export const InventoryFlowTrendSchema = z.object({
   date: z.string(),
   Entradas: z.number(),
   Salidas: z.number(),
+  store: z.string().optional(),
 });
 export type InventoryFlowTrend = z.infer<typeof InventoryFlowTrendSchema>;
 
 export const MostMovedProductsSchema = z.object({
   name: z.string(),
   movements: z.number(),
+  store: z.string().optional(),
 });
 export type MostMovedProducts = z.infer<typeof MostMovedProductsSchema>;
 
@@ -107,6 +109,7 @@ export type CustomerReturn = z.infer<typeof CustomerReturnSchema>;
 export const MostReturnedProductsSchema = z.object({
   name: z.string(),
   returns: z.number(),
+  store: z.string().optional(),
 });
 export type MostReturnedProducts = z.infer<typeof MostReturnedProductsSchema>;
 

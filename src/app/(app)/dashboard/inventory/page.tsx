@@ -40,10 +40,7 @@ export default function InventoryDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [fullMetrics, setFullMetrics] = useState<GetMetricsOutput | null>(null);
   const [displayMetrics, setDisplayMetrics] = useState<GetMetricsOutput | null>(null);
-  const [date, setDate] = useState<DateRange | undefined>(() => {
-    const today = new Date();
-    return { from: today, to: today };
-  });
+  const [date, setDate] = useState<DateRange | undefined>(undefined);
   const [selectedStore, setSelectedStore] = useState('all');
   
   const [returnsSortConfig, setReturnsSortConfig] = useState<ReturnsSortConfig | null>({ key: 'date', direction: 'descending' });
@@ -62,7 +59,7 @@ export default function InventoryDetailPage() {
       case '6months': from = new Date(); from.setMonth(from.getMonth() - 6); break;
       case 'all': from = undefined; break;
     }
-    setDate({ from, to });
+    setDate({ from, to: preset === 'all' ? undefined : to });
   };
   
     const availableStores = useMemo(() => {
@@ -80,7 +77,9 @@ export default function InventoryDetailPage() {
 
   const fetchMetrics = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
-    const cacheKeyWithDate = `${CACHE_KEY}_${date?.from?.toISOString()}_${date?.to?.toISOString()}`;
+    // Use a more stable cache key if the default is 'all time'
+    const dateCacheKey = date?.from ? `${date.from.toISOString()}_${date.to?.toISOString()}` : 'all';
+    const cacheKeyWithDate = `${CACHE_KEY}_${dateCacheKey}`;
 
     if (!forceRefresh) {
       try {
@@ -100,7 +99,7 @@ export default function InventoryDetailPage() {
 
     try {
       let input: GetMetricsInput = {};
-      if (date?.from) {
+       if (date?.from) {
         const startDate = new Date(date.from);
         startDate.setHours(0, 0, 0, 0);
         const endDate = date.to ? new Date(date.to) : new Date(date.from);
@@ -257,29 +256,18 @@ export default function InventoryDetailPage() {
           <p className="text-muted-foreground">Flujo, rotación, devoluciones y previsión de compras.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Select onValueChange={handleDatePreset}>
+          <Select onValueChange={handleDatePreset} defaultValue="all">
               <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="Filtro Rápido" />
               </SelectTrigger>
               <SelectContent>
+                  <SelectItem value="all">Ver todo</SelectItem>
                   <SelectItem value="today">Hoy</SelectItem>
                   <SelectItem value="7days">Últimos 7 días</SelectItem>
                   <SelectItem value="30days">Últimos 30 días</SelectItem>
                   <SelectItem value="6months">Últimos 6 meses</SelectItem>
-                  <SelectItem value="all">Ver todo</SelectItem>
               </SelectContent>
           </Select>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {date?.from ? (date.to ? (<>{format(date.from, "LLL dd, y", { locale: es })} - {format(date.to, "LLL dd, y", { locale: es })}</>) : (format(date.from, "LLL dd, y", { locale: es }))) : (<span>Selecciona un rango</span>)}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
-            </PopoverContent>
-          </Popover>
             <Select value={selectedStore} onValueChange={setSelectedStore}>
                 <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue placeholder="Filtrar por Tienda" />
@@ -529,5 +517,7 @@ export default function InventoryDetailPage() {
     </div>
   );
 }
+
+    
 
     

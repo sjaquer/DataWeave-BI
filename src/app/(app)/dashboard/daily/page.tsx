@@ -5,7 +5,8 @@ import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, Calendar as CalendarIcon, RefreshCw, ArrowDown, ArrowUp } from "lucide-react";
+import { Loader, Calendar as CalendarIcon, RefreshCw, ArrowDown, ArrowUp, LineChart as LineChartIcon, CheckCircle, XCircle, Percent } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { DailyMetric, GetMetricsOutput, GetMetricsInput } from "@/ai/schemas/getMetricsSchema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import DashboardNav from "@/components/DashboardNav";
 
 const CACHE_KEY = 'dashboardMetricsCache_daily';
@@ -168,6 +170,11 @@ export default function DailyDetailPage() {
     }
     return sortableItems;
   }, [dailyMetrics, sortConfig]);
+  
+  const chartData = useMemo(() => {
+    return [...sortedMetrics].reverse();
+  }, [sortedMetrics]);
+
 
   const renderSortArrow = (key: SortConfig['key']) => {
     if (sortConfig?.key !== key) return null;
@@ -287,54 +294,124 @@ export default function DailyDetailPage() {
 
       <DashboardNav active="daily" />
 
-      <Card>
-        <CardHeader>
-            <CardTitle>Desglose Diario por Tienda</CardTitle>
-            <CardDescription>Usa las pestañas para filtrar los datos por una tienda específica o ver el total.</CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-auto max-h-[70vh] p-2">
-            {isLoading ? (
-                 <div className="flex items-center justify-center h-64">
-                    <Loader className="h-8 w-8 animate-spin text-primary" />
-                 </div>
-            ) : (
-                <Tabs defaultValue="all" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 sticky top-0 bg-card z-10 p-1 h-auto">
-                        <TabsTrigger value="all">General</TabsTrigger>
-                        {MAIN_STORES.map(store => (
-                            <TabsTrigger key={store} value={store} className="capitalize">{capitalize(store)}</TabsTrigger>
-                        ))}
-                        <TabsTrigger value="others">Otras</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="all" className="mt-4">
-                        {renderDailyMetricsTable(sortedMetrics)}
-                    </TabsContent>
-                    {MAIN_STORES.map(store => (
-                        <TabsContent key={store} value={store} className="mt-4">
-                            {renderDailyMetricsTable(sortedMetrics, store)}
+      {isLoading ? (
+            <div className="flex items-center justify-center h-96">
+                <Loader className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        ) : (
+        <>
+            <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-3">
+                <Card className="lg:col-span-1">
+                    <CardHeader>
+                        <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Pedidos Totales</CardTitle>
+                        <CardDescription>Evolución del total de pedidos (confirmados y no confirmados) en el período.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-64">
+                         <ChartContainer config={{ totalOrders: { label: "Pedidos Totales", color: "hsl(var(--primary))" } }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                                    <YAxis />
+                                    <Tooltip content={<ChartTooltipContent />} />
+                                    <Legend />
+                                    <Line type="monotone" dataKey="totalOrders" name="Pedidos Totales" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                    </CardContent>
+                </Card>
+                <Card className="lg:col-span-1">
+                     <CardHeader>
+                        <CardTitle className="flex items-center"><CheckCircle className="mr-2 h-5 w-5 text-green-500" /> <XCircle className="mr-2 h-5 w-5 text-red-500" />Composición de Pedidos</CardTitle>
+                        <CardDescription>Desglose de pedidos confirmados vs. no confirmados por día.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-64">
+                        <ChartContainer config={{ 
+                            confirmed: { label: "Confirmados", color: "hsl(var(--chart-1))" },
+                            unconfirmed: { label: "No Confirmados", color: "hsl(var(--chart-3))" }
+                        }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                                    <YAxis />
+                                    <Tooltip content={<ChartTooltipContent />} />
+                                    <Legend />
+                                    <Line type="monotone" dataKey="confirmed" name="Confirmados" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
+                                    <Line type="monotone" dataKey="unconfirmed" name="No Confirmados" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                    </CardContent>
+                </Card>
+                 <Card className="lg:col-span-1">
+                     <CardHeader>
+                        <CardTitle className="flex items-center"><Percent className="mr-2 h-5 w-5" />Tendencia de Tasa de Confirmación</CardTitle>
+                        <CardDescription>Evolución del porcentaje de pedidos confirmados sobre el total.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-64">
+                        <ChartContainer config={{ confirmationRate: { label: "Tasa de Confirmación", color: "hsl(var(--chart-2))" } }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                                    <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                                    <Tooltip content={<ChartTooltipContent formatter={(value) => `${(value as number).toFixed(2)}%`} />} />
+                                    <Legend />
+                                    <Line type="monotone" dataKey="confirmationRate" name="Tasa de Confirmación" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                    </CardContent>
+                </Card>
+            </div>
+
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Desglose Diario por Tienda</CardTitle>
+                    <CardDescription>Usa las pestañas para filtrar los datos por una tienda específica o ver el total.</CardDescription>
+                </CardHeader>
+                <CardContent className="overflow-auto max-h-[70vh] p-2">
+                    <Tabs defaultValue="all" className="w-full">
+                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 sticky top-0 bg-card z-10 p-1 h-auto">
+                            <TabsTrigger value="all">General</TabsTrigger>
+                            {MAIN_STORES.map(store => (
+                                <TabsTrigger key={store} value={store} className="capitalize">{capitalize(store)}</TabsTrigger>
+                            ))}
+                            <TabsTrigger value="others">Otras</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="all" className="mt-4">
+                            {renderDailyMetricsTable(sortedMetrics)}
                         </TabsContent>
-                    ))}
-                    <TabsContent value="others" className="mt-4">
-                        {renderDailyMetricsTable(sortedMetrics.map(m => {
-                            const otherStoresData = Object.keys(m.byStore || {}).filter(s => !MAIN_STORES.includes(s.toLowerCase())).reduce((acc, key) => {
-                                acc.confirmed += m.byStore![key].confirmed;
-                                acc.unconfirmed += m.byStore![key].unconfirmed;
-                                return acc;
-                            }, { confirmed: 0, unconfirmed: 0 });
-                            const total = otherStoresData.confirmed + otherStoresData.unconfirmed;
-                            return {
-                                ...m,
-                                confirmed: otherStoresData.confirmed,
-                                unconfirmed: otherStoresData.unconfirmed,
-                                totalOrders: total,
-                                confirmationRate: total > 0 ? (otherStoresData.confirmed / total) * 100 : 0
-                            };
-                        }).filter(m => m.totalOrders > 0))}
-                    </TabsContent>
-                </Tabs>
-            )}
-        </CardContent>
-      </Card>
+                        {MAIN_STORES.map(store => (
+                            <TabsContent key={store} value={store} className="mt-4">
+                                {renderDailyMetricsTable(sortedMetrics, store)}
+                            </TabsContent>
+                        ))}
+                        <TabsContent value="others" className="mt-4">
+                            {renderDailyMetricsTable(sortedMetrics.map(m => {
+                                const otherStoresData = Object.keys(m.byStore || {}).filter(s => !MAIN_STORES.includes(s.toLowerCase())).reduce((acc, key) => {
+                                    acc.confirmed += m.byStore![key].confirmed;
+                                    acc.unconfirmed += m.byStore![key].unconfirmed;
+                                    return acc;
+                                }, { confirmed: 0, unconfirmed: 0 });
+                                const total = otherStoresData.confirmed + otherStoresData.unconfirmed;
+                                return {
+                                    ...m,
+                                    confirmed: otherStoresData.confirmed,
+                                    unconfirmed: otherStoresData.unconfirmed,
+                                    totalOrders: total,
+                                    confirmationRate: total > 0 ? (otherStoresData.confirmed / total) * 100 : 0
+                                };
+                            }).filter(m => m.totalOrders > 0))}
+                        </TabsContent>
+                    </Tabs>
+                </CardContent>
+            </Card>
+        </>
+      )}
     </div>
   );
 }

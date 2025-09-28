@@ -333,16 +333,19 @@ const getMetricsFlow = ai.defineFlow(
     }).sort((a,b) => String(a.productName || '').localeCompare(String(b.productName || '')));
 
     // --- NUEVA LOGICA: PREVISIÓN DE COMPRA ---
+    // Esta sección ahora consulta directamente a la DB para no ser afectada por el filtro de fecha principal
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const recentOutflows: { [productName: string]: number } = {};
 
-    inventoryMovements.forEach(mov => {
-        const movDate = mov.timestamp?.toDate();
-        if (movDate && movDate >= thirtyDaysAgo) {
-            if (Number(mov.quantity) < 0 && mov.productName) {
-                recentOutflows[mov.productName] = (recentOutflows[mov.productName] || 0) + Math.abs(Number(mov.quantity));
-            }
+    const recentMovementsSnapshot = await db.collection('inventory_movements')
+        .where('timestamp', '>=', thirtyDaysAgo)
+        .get();
+        
+    recentMovementsSnapshot.docs.forEach(doc => {
+        const mov = doc.data();
+        if (Number(mov.quantity) < 0 && mov.productName) {
+            recentOutflows[mov.productName] = (recentOutflows[mov.productName] || 0) + Math.abs(Number(mov.quantity));
         }
     });
     
@@ -413,5 +416,7 @@ const getMetricsFlow = ai.defineFlow(
 export async function getMetrics(input: GetMetricsInput): Promise<GetMetricsOutput> {
     return getMetricsFlow(input);
 }
+
+    
 
     

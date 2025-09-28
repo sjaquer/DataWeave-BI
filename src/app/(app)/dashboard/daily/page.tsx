@@ -200,6 +200,11 @@ export default function DailyDetailPage() {
               </Button>
             </TableHead>
             <TableHead className="text-center">
+              <Button variant="ghost" onClick={() => handleSort('totalOrders')}>
+                Pedidos Totales {renderSortArrow('totalOrders')}
+              </Button>
+            </TableHead>
+            <TableHead className="text-center">
                <Button variant="ghost" onClick={() => handleSort('confirmed')}>
                 Confirmados {renderSortArrow('confirmed')}
               </Button>
@@ -207,11 +212,6 @@ export default function DailyDetailPage() {
             <TableHead className="text-center">
               <Button variant="ghost" onClick={() => handleSort('unconfirmed')}>
                 No Confirmados {renderSortArrow('unconfirmed')}
-              </Button>
-            </TableHead>
-            <TableHead className="text-center">
-              <Button variant="ghost" onClick={() => handleSort('totalOrders')}>
-                Pedidos Totales {renderSortArrow('totalOrders')}
               </Button>
             </TableHead>
             <TableHead className="w-[220px] text-right">
@@ -226,9 +226,9 @@ export default function DailyDetailPage() {
             dataToRender.map((metric) => (
               <TableRow key={metric.date}>
                 <TableCell className="font-medium">{metric.date}</TableCell>
+                <TableCell className="text-center">{metric.totalOrders}</TableCell>
                 <TableCell className="text-center text-green-500 font-semibold">{metric.confirmed}</TableCell>
                 <TableCell className="text-center text-red-500 font-semibold">{metric.unconfirmed}</TableCell>
-                <TableCell className="text-center">{metric.totalOrders}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-3">
                     <span className="font-medium text-sm w-16">{metric.confirmationRate.toFixed(2)}%</span>

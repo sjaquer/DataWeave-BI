@@ -2,25 +2,19 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { format } from "date-fns";
-import { DateRange } from "react-day-picker";
-import { es } from "date-fns/locale";
-
-import { Loader, Calendar as CalendarIcon, RefreshCw, AlertTriangle, PackageSearch, Store, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader, RefreshCw, AlertTriangle, PackageSearch, Store, ArrowUp, ArrowDown } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { CurrentInventoryItem, GetMetricsOutput, GetMetricsInput } from "@/ai/schemas/getMetricsSchema";
+import type { CurrentInventoryItem, GetMetricsOutput } from "@/ai/schemas/getMetricsSchema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import DashboardNav from "@/components/DashboardNav";
 
-const CACHE_KEY = 'dashboardMetricsCache_inventory_status';
+const CACHE_KEY = 'dashboardMetricsCache_inventory_status_global';
 const CACHE_EXPIRATION_MS = 5 * 60 * 1000; // 5 minutos de caché
 const LOW_STOCK_THRESHOLD = 5;
 
@@ -36,43 +30,30 @@ export default function InventoryStatusPage() {
   const [selectedStore, setSelectedStore] = useState("all");
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'productName', direction: 'ascending' });
   
-  const [date, setDate] = useState<DateRange | undefined>(() => {
-    const today = new Date();
-    return { from: today, to: today };
-  });
   const { toast } = useToast();
-
-  const handleDatePreset = (preset: string) => {
-    const to = new Date();
-    let from: Date | undefined;
-
-    switch (preset) {
-      case 'today': from = new Date(); break;
-      case '7days': from = new Date(); from.setDate(from.getDate() - 6); break;
-      case '30days': from = new Date(); from.setDate(from.getDate() - 29); break;
-      case '6months': from = new Date(); from.setMonth(from.getMonth() - 6); break;
-      case 'all': from = undefined; break;
-    }
-    setDate({ from, to });
-  };
 
   const processAndSetMetrics = useCallback((data: GetMetricsOutput | null) => {
     if (!data) {
       setIsLoading(false);
       return;
     }
-    setInventoryData(data.currentInventory || []);
+    // Asegurarse de que productName sea siempre un string para evitar errores
+    const sanitizedInventory = (data.currentInventory || []).map(item => ({
+        ...item,
+        productName: String(item.productName || 'N/A'),
+        sku: String(item.sku || 'N/A'),
+    }));
+    setInventoryData(sanitizedInventory);
     setIsLoading(false);
   }, []);
 
   const fetchMetrics = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
     toast({ title: "Actualizando estado de inventario..." });
-    const cacheKeyWithDate = `${CACHE_KEY}_${date?.from?.toISOString()}_${date?.to?.toISOString()}`;
 
     if (!forceRefresh) {
       try {
-        const cachedData = localStorage.getItem(cacheKeyWithDate);
+        const cachedData = localStorage.getItem(CACHE_KEY);
         if (cachedData) {
           const { data, timestamp } = JSON.parse(cachedData);
           if (Date.now() - timestamp < CACHE_EXPIRATION_MS) {
@@ -82,25 +63,17 @@ export default function InventoryStatusPage() {
         }
       } catch (e) {
         console.error("Error al leer la caché:", e);
-        localStorage.removeItem(cacheKeyWithDate);
+        localStorage.removeItem(CACHE_KEY);
       }
     }
 
     try {
-      let input: GetMetricsInput = {};
-      if (date?.from) {
-        const startDate = new Date(date.from);
-        startDate.setHours(0, 0, 0, 0);
-        const endDate = date.to ? new Date(date.to) : new Date(date.from);
-        endDate.setHours(23, 59, 59, 999);
-        input = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
-      }
-      
-      const metricsData = await getMetrics(input);
+      // No se envían fechas para obtener el estado de inventario global
+      const metricsData = await getMetrics({});
 
       try {
         const cachePayload = { data: metricsData, timestamp: Date.now() };
-        localStorage.setItem(cacheKeyWithDate, JSON.stringify(cachePayload));
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
       } catch (e) { console.error("Error al guardar en la caché:", e); }
 
       processAndSetMetrics(metricsData);
@@ -110,11 +83,12 @@ export default function InventoryStatusPage() {
       toast({ variant: "destructive", title: "Error de Conexión", description: "No se pudo cargar el estado del inventario." });
       setIsLoading(false);
     }
-  }, [date, processAndSetMetrics, toast]);
+  }, [processAndSetMetrics, toast]);
 
   useEffect(() => {
     fetchMetrics(false);
-  }, [date, fetchMetrics]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   const availableStores = useMemo(() => {
     const stores = new Set(inventoryData.map(item => item.store));
@@ -170,29 +144,6 @@ export default function InventoryStatusPage() {
           <p className="text-muted-foreground">Consulta el stock en tiempo real de tus productos.</p>
         </div>
          <div className="flex items-center gap-2 flex-wrap">
-          <Select onValueChange={handleDatePreset}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Filtro Rápido (Fecha)" />
-              </SelectTrigger>
-              <SelectContent>
-                  <SelectItem value="today">Hoy</SelectItem>
-                  <SelectItem value="7days">Últimos 7 días</SelectItem>
-                  <SelectItem value="30days">Últimos 30 días</SelectItem>
-                  <SelectItem value="6months">Últimos 6 meses</SelectItem>
-                  <SelectItem value="all">Ver todo</SelectItem>
-              </SelectContent>
-          </Select>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {date?.from ? (date.to ? (<>{format(date.from, "LLL dd, y", { locale: es })} - {format(date.to, "LLL dd, y", { locale: es })}</>) : (format(date.from, "LLL dd, y", { locale: es }))) : (<span>Selecciona un rango</span>)}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
-            </PopoverContent>
-          </Popover>
           <Button className="flex-1 sm:flex-initial" variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>
             {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Actualizar

@@ -429,6 +429,60 @@ export default function Dashboard() {
       
        {selectedStore === 'all' && (
         <>
+          <div className="space-y-4 pt-6">
+              <h3 className="text-2xl font-bold tracking-tight">Resumen por Tienda</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {(storeMetrics || []).map(store => (
+                      <Card key={store.name}>
+                          <CardHeader className="flex flex-col items-start space-y-1 pb-4">
+                              <div className="w-full flex items-center justify-between">
+                                <CardTitle className="text-xl font-bold flex items-center gap-2">
+                                    <Store className="h-5 w-5 text-primary" />
+                                    {store.name}
+                                </CardTitle>
+                                <div className="text-right">
+                                    <p className="text-2xl font-bold">{store.confirmationRate.toFixed(1)}%</p>
+                                    <p className="text-xs text-muted-foreground">Confirmación</p>
+                                </div>
+                              </div>
+                              {store.sevenDayTrend !== undefined && <TrendIndicator value={store.sevenDayTrend} />}
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="grid grid-cols-3 gap-4 text-center">
+                                <div>
+                                    <p className="text-sm font-medium">Totales</p>
+                                    <p className="text-lg font-bold">{store.totalOrders}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium">Confirmados</p>
+                                    <p className="text-lg font-bold text-green-500">{store.confirmedOrders}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium">Ticket Prom.</p>
+                                    <p className="text-lg font-bold">S/ {store.averageTicket.toFixed(2)}</p>
+                                </div>
+                            </div>
+                            <Separator />
+                             <div>
+                                <p className="text-sm font-medium mb-2">Top 2 Productos Comprados</p>
+                                {store.topProducts.length > 0 ? (
+                                    <ul className="space-y-1 text-xs text-muted-foreground">
+                                        {store.topProducts.map(p => (
+                                            <li key={p.name} className="flex justify-between items-center">
+                                                <span className="truncate pr-2">{p.name}</span>
+                                                <span className="font-semibold text-foreground">{p.count}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <p className="text-xs text-center text-muted-foreground py-2">No hay datos de productos.</p>
+                                )}
+                            </div>
+                          </CardContent>
+                      </Card>
+                  ))}
+              </div>
+          </div>
           <Card>
             <CardHeader>
                 <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Rendimiento Comparativo de Tiendas (Pedidos Confirmados)</CardTitle>
@@ -494,99 +548,6 @@ export default function Dashboard() {
                 </ChartContainer>
             </CardContent>
           </Card>
-
-           <Card>
-              <CardHeader>
-                  <CardTitle className="flex items-center"><Store className="mr-2 h-5 w-5" />Pedidos vs Confirmados por Tienda</CardTitle>
-                  <CardDescription>Comparativa de pedidos totales vs. pedidos confirmados para cada tienda.</CardDescription>
-              </CardHeader>
-              <CardContent className="w-full aspect-[4/3]">
-                 <ChartContainer config={{
-                      totalOrders: { label: "Pedidos", color: "hsl(var(--chart-1))" },
-                      confirmedOrders: { label: "Confirmados", color: "hsl(var(--chart-2))" },
-                  }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={(storeMetrics || []).filter(s => s.totalOrders > 0)} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                            <YAxis fontSize={12} />
-                            <Tooltip content={<ChartTooltipContent />} />
-                            <Legend verticalAlign="top" />
-                            <Bar dataKey="totalOrders" name="Pedidos" fill="hsl(var(--primary-foreground))" fillOpacity={0.3} radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="confirmedOrders" name="Confirmados" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]}>
-                               <LabelList
-                                  dataKey="confirmationRate"
-                                  position="top"
-                                  formatter={(value: number) => `${value.toFixed(1)}%`}
-                                  className="fill-foreground"
-                                  fontSize={12}
-                                />
-                            </Bar>
-                          </BarChart>
-                    </ResponsiveContainer>
-                  </ChartContainer>
-              </CardContent>
-               <CardFooter className="justify-center">
-                   <Button variant="outline" disabled>
-                        Ver Detalles por Tienda <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                </CardFooter>
-          </Card>
-
-           <div className="space-y-4 pt-6">
-              <h3 className="text-2xl font-bold tracking-tight">Resumen por Tienda</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {(storeMetrics || []).map(store => (
-                      <Card key={store.name}>
-                          <CardHeader className="flex flex-col items-start space-y-1 pb-4">
-                              <div className="w-full flex items-center justify-between">
-                                <CardTitle className="text-xl font-bold flex items-center gap-2">
-                                    <Store className="h-5 w-5 text-primary" />
-                                    {store.name}
-                                </CardTitle>
-                                <div className="text-right">
-                                    <p className="text-2xl font-bold">{store.confirmationRate.toFixed(1)}%</p>
-                                    <p className="text-xs text-muted-foreground">Confirmación</p>
-                                </div>
-                              </div>
-                              {store.sevenDayTrend !== undefined && <TrendIndicator value={store.sevenDayTrend} />}
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                            <div className="grid grid-cols-3 gap-4 text-center">
-                                <div>
-                                    <p className="text-sm font-medium">Totales</p>
-                                    <p className="text-lg font-bold">{store.totalOrders}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium">Confirmados</p>
-                                    <p className="text-lg font-bold text-green-500">{store.confirmedOrders}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium">Ticket Prom.</p>
-                                    <p className="text-lg font-bold">S/ {store.averageTicket.toFixed(2)}</p>
-                                </div>
-                            </div>
-                            <Separator />
-                             <div>
-                                <p className="text-sm font-medium mb-2">Top 2 Productos Comprados</p>
-                                {store.topProducts.length > 0 ? (
-                                    <ul className="space-y-1 text-xs text-muted-foreground">
-                                        {store.topProducts.map(p => (
-                                            <li key={p.name} className="flex justify-between items-center">
-                                                <span className="truncate pr-2">{p.name}</span>
-                                                <span className="font-semibold text-foreground">{p.count}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : (
-                                    <p className="text-xs text-center text-muted-foreground py-2">No hay datos de productos.</p>
-                                )}
-                            </div>
-                          </CardContent>
-                      </Card>
-                  ))}
-              </div>
-          </div>
         </>
        )}
 

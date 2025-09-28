@@ -33,10 +33,8 @@ export default function DailyDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
   const [date, setDate] = useState<DateRange | undefined>(() => {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - 6);
-    return { from: startDate, to: endDate };
+    const today = new Date();
+    return { from: today, to: today };
   });
   const { toast } = useToast();
 

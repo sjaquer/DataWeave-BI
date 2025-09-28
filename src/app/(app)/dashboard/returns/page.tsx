@@ -29,10 +29,8 @@ export default function ReturnsDetailPage() {
   const [returnsData, setReturnsData] = useState<CustomerReturn[]>([]);
   const [mostReturnedProducts, setMostReturnedProducts] = useState<MostReturnedProducts[]>([]);
   const [date, setDate] = useState<DateRange | undefined>(() => {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - 6);
-    return { from: startDate, to: endDate };
+    const today = new Date();
+    return { from: today, to: today };
   });
   const { toast } = useToast();
 

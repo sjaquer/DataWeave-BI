@@ -39,10 +39,8 @@ export default function Dashboard() {
   const [selectedStore, setSelectedStore] = useState('all');
 
   const [date, setDate] = useState<DateRange | undefined>(() => {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - 6);
-    return { from: startDate, to: endDate };
+    const today = new Date();
+    return { from: today, to: today };
   });
   
   const { toast } = useToast();
@@ -175,7 +173,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchMetrics(false);
-  }, [date]);
+  }, [date, fetchMetrics]);
 
 
   const filterMetricsByStore = useCallback((storeName: string) => {
@@ -431,8 +429,112 @@ export default function Dashboard() {
       
        {selectedStore === 'all' && (
         <>
-          <div className="space-y-4 pt-6">
-              <h3 className="text-2xl font-bold tracking-tight">Análisis por Tienda</h3>
+          <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Rendimiento Comparativo de Tiendas (Pedidos Confirmados)</CardTitle>
+                <CardDescription>Evolución de los pedidos confirmados por día para las tiendas principales.</CardDescription>
+            </CardHeader>
+            <CardContent className="w-full aspect-[4/3]">
+                <ChartContainer
+                    config={{
+                        dearel: { label: "Dearel", color: "hsl(var(--chart-1))" },
+                        blumi: { label: "Blumi", color: "hsl(var(--chart-2))" },
+                        novi: { label: "Novi", color: "hsl(var(--chart-3))" },
+                        trazto: { label: "Trazto", color: "hsl(var(--chart-4))" },
+                        cumbre: { label: "Cumbre", color: "hsl(var(--chart-5))" },
+                    }}
+                >
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={dailyStorePerformance} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="date" />
+                            <YAxis />
+                             <Tooltip
+                                content={({ active, payload, label }) => {
+                                    if (active && payload && payload.length && dailyStorePerformance) {
+                                        const currentIndex = dailyStorePerformance.findIndex(d => d.date === label);
+                                        const prevData = currentIndex > 0 ? dailyStorePerformance[currentIndex - 1] : null;
+
+                                        return (
+                                            <div className="p-2 text-xs bg-background border rounded-lg shadow-lg">
+                                                <p className="font-bold mb-2">{label}</p>
+                                                {payload.map((p, i) => {
+                                                    const storeName = p.dataKey as string;
+                                                    const currentValue = p.value as number;
+                                                    const prevValue = prevData ? (prevData[storeName] as number) : null;
+                                                    let variation = "N/A";
+                                                    if (prevValue !== null && prevValue !== 0) {
+                                                        const diff = ((currentValue - prevValue) / prevValue) * 100;
+                                                        variation = `${diff.toFixed(1)}%`;
+                                                    } else if (prevValue === 0 && currentValue > 0) {
+                                                        variation = "+100%";
+                                                    }
+                                                    
+                                                    const color = `hsl(var(--chart-${i + 1}))`;
+
+                                                    return (
+                                                        <div key={storeName} className="flex justify-between items-center gap-4">
+                                                            <span style={{ color }}>● {capitalize(storeName)}: {currentValue}</span>
+                                                            <span className={`font-mono text-right ${variation.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>{variation}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                }}
+                            />
+                            <Legend />
+                            {MAIN_STORES.map(store => (
+                                <Line key={store} type="monotone" dataKey={store} stroke={`var(--color-${store})`} strokeWidth={2} dot={false} />
+                            ))}
+                        </LineChart>
+                    </ResponsiveContainer>
+                </ChartContainer>
+            </CardContent>
+          </Card>
+
+           <Card>
+              <CardHeader>
+                  <CardTitle className="flex items-center"><Store className="mr-2 h-5 w-5" />Pedidos vs Confirmados por Tienda</CardTitle>
+                  <CardDescription>Comparativa de pedidos totales vs. pedidos confirmados para cada tienda.</CardDescription>
+              </CardHeader>
+              <CardContent className="w-full aspect-[4/3]">
+                 <ChartContainer config={{
+                      totalOrders: { label: "Pedidos", color: "hsl(var(--chart-1))" },
+                      confirmedOrders: { label: "Confirmados", color: "hsl(var(--chart-2))" },
+                  }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={(storeMetrics || []).filter(s => s.totalOrders > 0)} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
+                            <YAxis fontSize={12} />
+                            <Tooltip content={<ChartTooltipContent />} />
+                            <Legend verticalAlign="top" />
+                            <Bar dataKey="totalOrders" name="Pedidos" fill="hsl(var(--primary-foreground))" fillOpacity={0.3} radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="confirmedOrders" name="Confirmados" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]}>
+                               <LabelList
+                                  dataKey="confirmationRate"
+                                  position="top"
+                                  formatter={(value: number) => `${value.toFixed(1)}%`}
+                                  className="fill-foreground"
+                                  fontSize={12}
+                                />
+                            </Bar>
+                          </BarChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+              </CardContent>
+               <CardFooter className="justify-center">
+                   <Button variant="outline" disabled>
+                        Ver Detalles por Tienda <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                </CardFooter>
+          </Card>
+
+           <div className="space-y-4 pt-6">
+              <h3 className="text-2xl font-bold tracking-tight">Resumen por Tienda</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                   {(storeMetrics || []).map(store => (
                       <Card key={store.name}>
@@ -485,70 +587,6 @@ export default function Dashboard() {
                   ))}
               </div>
           </div>
-        
-           <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Rendimiento Comparativo de Tiendas (Pedidos Confirmados)</CardTitle>
-                <CardDescription>Evolución de los pedidos confirmados por día para las tiendas principales.</CardDescription>
-            </CardHeader>
-            <CardContent className="w-full aspect-video">
-                <ChartContainer
-                    config={{
-                        dearel: { label: "Dearel", color: "hsl(var(--chart-1))" },
-                        blumi: { label: "Blumi", color: "hsl(var(--chart-2))" },
-                        novi: { label: "Novi", color: "hsl(var(--chart-3))" },
-                        trazto: { label: "Trazto", color: "hsl(var(--chart-4))" },
-                        cumbre: { label: "Cumbre", color: "hsl(var(--chart-5))" },
-                    }}
-                >
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={dailyStorePerformance} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" />
-                            <YAxis />
-                            <Tooltip content={<ChartTooltipContent />} />
-                            <Legend />
-                            {MAIN_STORES.map(store => (
-                                <Line key={store} type="monotone" dataKey={store} stroke={`var(--color-${store})`} strokeWidth={2} dot={false} />
-                            ))}
-                        </LineChart>
-                    </ResponsiveContainer>
-                </ChartContainer>
-            </CardContent>
-        </Card>
-
-           <Card>
-              <CardHeader>
-                  <CardTitle className="flex items-center"><Store className="mr-2 h-5 w-5" />Pedidos vs Confirmados por Tienda</CardTitle>
-                  <CardDescription>Comparativa de pedidos totales vs. pedidos confirmados para cada tienda.</CardDescription>
-              </CardHeader>
-              <CardContent className="w-full aspect-[4/3]">
-                 <ChartContainer config={{
-                      totalOrders: { label: "Pedidos", color: "hsl(var(--chart-1))" },
-                      confirmedOrders: { label: "Confirmados", color: "hsl(var(--chart-2))" },
-                  }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={(storeMetrics || []).filter(s => s.totalOrders > 0)} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                            <YAxis fontSize={12} />
-                            <Tooltip content={<ChartTooltipContent />} />
-                            <Legend verticalAlign="top" />
-                            <Bar dataKey="totalOrders" name="Pedidos" fill="hsl(var(--primary-foreground))" fillOpacity={0.3} radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="confirmedOrders" name="Confirmados" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]}>
-                               <LabelList
-                                  dataKey="confirmationRate"
-                                  position="top"
-                                  formatter={(value: number) => `${value.toFixed(1)}%`}
-                                  className="fill-foreground"
-                                  fontSize={12}
-                                />
-                            </Bar>
-                          </BarChart>
-                    </ResponsiveContainer>
-                  </ChartContainer>
-              </CardContent>
-          </Card>
         </>
        )}
 

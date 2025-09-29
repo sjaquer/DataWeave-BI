@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -432,55 +433,64 @@ export default function Dashboard() {
           <div className="space-y-4 pt-6">
               <h3 className="text-2xl font-bold tracking-tight">Resumen por Tienda</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {(storeMetrics || []).map(store => (
-                      <Card key={store.name}>
-                          <CardHeader className="flex flex-col items-start space-y-1 pb-4">
-                              <div className="w-full flex items-center justify-between">
-                                <CardTitle className="text-xl font-bold flex items-center gap-2">
-                                    <Store className="h-5 w-5 text-primary" />
-                                    {store.name}
-                                </CardTitle>
-                                <div className="text-right">
-                                    <p className="text-2xl font-bold">{store.confirmationRate.toFixed(1)}%</p>
-                                    <p className="text-xs text-muted-foreground">Confirmación</p>
+                  {(storeMetrics || []).map(store => {
+                      const confirmationRateColor =
+                          store.confirmationRate < 30
+                              ? 'text-red-500'
+                              : store.confirmationRate < 50
+                              ? 'text-yellow-500'
+                              : 'text-green-500';
+
+                      return (
+                          <Card key={store.name}>
+                              <CardHeader className="flex flex-col items-start space-y-1 pb-4">
+                                  <div className="w-full flex items-center justify-between">
+                                    <CardTitle className="text-xl font-bold flex items-center gap-2">
+                                        <Store className="h-5 w-5 text-primary" />
+                                        {store.name}
+                                    </CardTitle>
+                                    <div className="text-right">
+                                        <p className={`text-2xl font-bold ${confirmationRateColor}`}>{store.confirmationRate.toFixed(1)}%</p>
+                                        <p className="text-xs text-muted-foreground">Confirmación</p>
+                                    </div>
+                                  </div>
+                                  {store.sevenDayTrend !== undefined && <TrendIndicator value={store.sevenDayTrend} />}
+                              </CardHeader>
+                              <CardContent className="space-y-4">
+                                <div className="grid grid-cols-3 gap-4 text-center">
+                                    <div>
+                                        <p className="text-sm font-medium">Totales</p>
+                                        <p className="text-lg font-bold">{store.totalOrders}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium">Confirmados</p>
+                                        <p className="text-lg font-bold text-green-500">{store.confirmedOrders}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium">Ticket Prom.</p>
+                                        <p className="text-lg font-bold">S/ {store.averageTicket.toFixed(2)}</p>
+                                    </div>
                                 </div>
-                              </div>
-                              {store.sevenDayTrend !== undefined && <TrendIndicator value={store.sevenDayTrend} />}
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                            <div className="grid grid-cols-3 gap-4 text-center">
-                                <div>
-                                    <p className="text-sm font-medium">Totales</p>
-                                    <p className="text-lg font-bold">{store.totalOrders}</p>
+                                <Separator />
+                                 <div>
+                                    <p className="text-sm font-medium mb-2">Top 2 Productos Comprados</p>
+                                    {store.topProducts.length > 0 ? (
+                                        <ul className="space-y-1 text-xs text-muted-foreground">
+                                            {store.topProducts.map(p => (
+                                                <li key={p.name} className="flex justify-between items-center">
+                                                    <span className="truncate pr-2">{p.name}</span>
+                                                    <span className="font-semibold text-foreground">{p.count}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="text-xs text-center text-muted-foreground py-2">No hay datos de productos.</p>
+                                    )}
                                 </div>
-                                <div>
-                                    <p className="text-sm font-medium">Confirmados</p>
-                                    <p className="text-lg font-bold text-green-500">{store.confirmedOrders}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium">Ticket Prom.</p>
-                                    <p className="text-lg font-bold">S/ {store.averageTicket.toFixed(2)}</p>
-                                </div>
-                            </div>
-                            <Separator />
-                             <div>
-                                <p className="text-sm font-medium mb-2">Top 2 Productos Comprados</p>
-                                {store.topProducts.length > 0 ? (
-                                    <ul className="space-y-1 text-xs text-muted-foreground">
-                                        {store.topProducts.map(p => (
-                                            <li key={p.name} className="flex justify-between items-center">
-                                                <span className="truncate pr-2">{p.name}</span>
-                                                <span className="font-semibold text-foreground">{p.count}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : (
-                                    <p className="text-xs text-center text-muted-foreground py-2">No hay datos de productos.</p>
-                                )}
-                            </div>
-                          </CardContent>
-                      </Card>
-                  ))}
+                              </CardContent>
+                          </Card>
+                      )
+                  })}
               </div>
           </div>
           <Card>

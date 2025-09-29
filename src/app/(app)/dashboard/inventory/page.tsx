@@ -17,7 +17,7 @@ import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { GetMetricsOutput, GetMetricsInput, CustomerReturn, PurchaseForecastItem } from "@/ai/schemas/getMetricsSchema";
 import DashboardNav from "@/components/DashboardNav";
 
-const CACHE_KEY = 'dashboardMetricsCache_inventory_consolidated';
+const CACHE_KEY = 'dashboardMetricsCache_inventory';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
 
 type ReturnsSortConfig = {
@@ -513,4 +513,3 @@ export default function InventoryDetailPage() {
   );
 }
 
-    

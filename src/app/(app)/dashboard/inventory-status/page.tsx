@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import DashboardNav from "@/components/DashboardNav";
 
-const CACHE_KEY = 'dashboardMetricsCache_inventory_status_global';
+const CACHE_KEY = 'dashboardMetricsCache_inventory_status';
 const CACHE_EXPIRATION_MS = 5 * 60 * 1000; // 5 minutos de caché
 const LOW_STOCK_THRESHOLD = 5;
 const ITEMS_PER_PAGE = 15;
@@ -53,7 +53,6 @@ export default function InventoryStatusPage() {
 
   const fetchMetrics = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
-    toast({ title: "Actualizando estado de inventario..." });
 
     if (!forceRefresh) {
       try {
@@ -62,6 +61,7 @@ export default function InventoryStatusPage() {
           const { data, timestamp } = JSON.parse(cachedData);
           if (Date.now() - timestamp < CACHE_EXPIRATION_MS) {
             processAndSetMetrics(data);
+            toast({ title: "Inventario cargado desde la caché" });
             return;
           }
         }
@@ -72,6 +72,7 @@ export default function InventoryStatusPage() {
     }
 
     try {
+      toast({ title: "Actualizando estado de inventario..." });
       const metricsData = await getMetrics({});
 
       try {
@@ -314,4 +315,3 @@ export default function InventoryStatusPage() {
     </div>
   );
 }
-

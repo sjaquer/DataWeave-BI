@@ -23,7 +23,7 @@ import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMe
 import DashboardNav from "@/components/DashboardNav";
 import { Separator } from "@/components/ui/separator";
 
-const CACHE_KEY = 'dashboardMetricsCache';
+const CACHE_KEY = 'dashboardMetricsCache_main';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
 const MAIN_STORES = ["dearel", "blumi", "novi", "trazto", "cumbre"];
 
@@ -519,17 +519,17 @@ export default function Dashboard() {
                                                     let variation = "N/A";
                                                     if (prevValue !== null && prevValue !== 0) {
                                                         const diff = ((currentValue - prevValue) / prevValue) * 100;
-                                                        variation = `${diff.toFixed(1)}%`;
+                                                        variation = `${diff > 0 ? '+' : ''}${diff.toFixed(1)}%`;
                                                     } else if (prevValue === 0 && currentValue > 0) {
                                                         variation = "+100%";
                                                     }
                                                     
-                                                    const color = `hsl(var(--chart-${i + 1}))`;
+                                                    const color = p.color || `hsl(var(--chart-${i + 1}))`;
 
                                                     return (
                                                         <div key={storeName} className="flex justify-between items-center gap-4">
                                                             <span style={{ color }}>● {capitalize(storeName)}: {currentValue}</span>
-                                                            <span className={`font-mono text-right ${variation.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>{variation}</span>
+                                                            <span className={`font-mono text-right ${variation.startsWith('+') ? 'text-green-500' : variation.startsWith('-') ? 'text-red-500' : 'text-muted-foreground'}`}>{variation}</span>
                                                         </div>
                                                     );
                                                 })}
@@ -671,5 +671,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-    

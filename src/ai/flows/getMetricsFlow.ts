@@ -83,7 +83,7 @@ const getMetricsFlow = ai.defineFlow(
     const provinceDataByStore: { [store: string]: { [province: string]: { totalOrders: number, confirmedOrders: number, totalSpent: number } } } = {};
     const requestedProductData: { [key: string]: number } = {};
     const purchasedProductData: { [key: string]: number } = {};
-    const storeData: { [key: string]: { totalOrders: number, confirmedOrders: number, totalSpent: number, topProducts: {[key: string]: number} } } = {};
+    const storeData: { [key: string]: { totalOrders: number, confirmedOrders: number, totalSpent: number, topProducts: {[key: string]: number}, dailyConfirmed: {[date: string]: number} } } = {};
     const personnelData: { [key: string]: number } = {};
     
     // --- INVENTARIO ---
@@ -173,12 +173,18 @@ const getMetricsFlow = ai.defineFlow(
 
       // Store Metrics
       if (!storeData[storeName]) {
-          storeData[storeName] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0, topProducts: {} };
+          storeData[storeName] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0, topProducts: {}, dailyConfirmed: {} };
       }
       storeData[storeName].totalOrders++;
       storeData[storeName].totalSpent += order.totalPrice || 0;
       if (isOrderConfirmed) {
           storeData[storeName].confirmedOrders++;
+          if (order.createdAt && typeof order.createdAt.toDate === 'function') {
+             const utcDate = order.createdAt.toDate();
+             const localDate = adjustToLocalTimezone(utcDate);
+             const dateStr = `${String(localDate.getUTCFullYear())}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`;
+             storeData[storeName].dailyConfirmed[dateStr] = (storeData[storeName].dailyConfirmed[dateStr] || 0) + 1;
+          }
       }
     });
 
@@ -302,12 +308,16 @@ const getMetricsFlow = ai.defineFlow(
         .slice(0, 2)
         .map(([productName, count]) => ({ name: productName, count: count }));
 
-      const trend = storeTrendData[name];
-      let sevenDayTrend = 0;
-      if (trend && trend.previousWeek > 0) {
-        sevenDayTrend = ((trend.currentWeek - trend.previousWeek) / trend.previousWeek) * 100;
-      } else if (trend && trend.currentWeek > 0) {
-        sevenDayTrend = 100; // Crecimiento "infinito" si antes era 0
+      const sortedDailyKeys = Object.keys(data.dailyConfirmed).sort((a,b) => new Date(b).getTime() - new Date(a).getTime());
+      let dailyOrderVariation = 0;
+      if (sortedDailyKeys.length >= 2) {
+          const todayOrders = data.dailyConfirmed[sortedDailyKeys[0]] || 0;
+          const yesterdayOrders = data.dailyConfirmed[sortedDailyKeys[1]] || 0;
+          if (yesterdayOrders > 0) {
+              dailyOrderVariation = ((todayOrders - yesterdayOrders) / yesterdayOrders) * 100;
+          } else if (todayOrders > 0) {
+              dailyOrderVariation = 100;
+          }
       }
 
       return {
@@ -318,7 +328,7 @@ const getMetricsFlow = ai.defineFlow(
           confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0,
           averageTicket: data.totalOrders > 0 ? data.totalSpent / data.totalOrders : 0,
           topProducts,
-          sevenDayTrend
+          dailyOrderVariation,
       };
     });
 
@@ -370,7 +380,7 @@ const getMetricsFlow = ai.defineFlow(
         };
     }).sort((a,b) => String(a.productName || '').localeCompare(String(b.productName || '')));
 
-    // --- NUEVA LOGICA: PREVISIÓN DE COMPRA ---
+    // --- NUEVA LOGICA: PREVISIÓN DE COMPRA (MODELO PREDICTIVO) ---
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const recentOutflows: { [productName: string]: number } = {};
@@ -386,18 +396,34 @@ const getMetricsFlow = ai.defineFlow(
         }
     });
     
-    const purchaseForecast: any[] = Object.entries(recentOutflows).map(([productName, last30dSales]) => {
-        const currentStockItem = aggregatedCurrentInventory.find(item => item.productName === productName);
-        const currentStock = currentStockItem ? currentStockItem.currentStock : 0;
-        const suggestedPurchase = Math.max(0, last30dSales - currentStock);
+    const purchaseForecast: any[] = Object.values(aggregatedCurrentInventory).map(item => {
+        const productName = item.productName;
+        const last30dSales = recentOutflows[productName] || 0;
+        const currentStock = item.currentStock || 0;
+        const dailyVelocity = last30dSales / 30;
+        const daysLeft = dailyVelocity > 0 ? Math.floor(currentStock / dailyVelocity) : Infinity;
 
+        let urgency;
+        if (daysLeft <= 7) {
+            urgency = 'Urgente (Comprar Ya)';
+        } else if (daysLeft <= 15) {
+            urgency = 'Pronto (Próxima Semana)';
+        } else if (daysLeft <= 30) {
+            urgency = 'Revisar (Próximo Mes)';
+        } else {
+            urgency = 'Stock Saludable';
+        }
+        
         return {
             productName,
             last30dSales,
             currentStock,
-            suggestedPurchase,
+            daysLeft,
+            urgency,
+            suggestedPurchase: Math.max(0, last30dSales - currentStock),
         };
-    }).sort((a, b) => b.suggestedPurchase - a.suggestedPurchase);
+    }).sort((a, b) => a.daysLeft - b.daysLeft);
+
 
     // --- NUEVA LÓGICA: TASA DE CONFIRMACIÓN POR PRODUCTO ---
     const aggregatedProductConfirmationRates = Object.keys(requestedProductData).map(name => {
@@ -408,7 +434,7 @@ const getMetricsFlow = ai.defineFlow(
     }).sort((a, b) => b.requested - a.requested); // Ordenar por los más pedidos
 
 
-    // Cálculo de variación diaria
+    // Cálculo de variación diaria global
     let dailyOrderVariation = 0;
     if (aggregatedDailyMetrics.length >= 2) {
         const todayOrders = aggregatedDailyMetrics[0].totalOrders;

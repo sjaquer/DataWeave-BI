@@ -76,7 +76,7 @@ export const StoreMetricSchema = z.object({
     name: z.string(),
     count: z.number()
   })),
-  sevenDayTrend: z.number().optional(),
+  dailyOrderVariation: z.number().optional(),
 });
 export type StoreMetric = z.infer<typeof StoreMetricSchema>;
 
@@ -139,6 +139,8 @@ export const PurchaseForecastItemSchema = z.object({
     last30dSales: z.number(),
     currentStock: z.number(),
     suggestedPurchase: z.number(),
+    daysLeft: z.number(),
+    urgency: z.string(),
 });
 export type PurchaseForecastItem = z.infer<typeof PurchaseForecastItemSchema>;
 

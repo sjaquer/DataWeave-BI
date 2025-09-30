@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { DateRange } from "react-day-picker";
 import { subDays } from "date-fns";
 
-import { Loader, RefreshCw, Truck, Users, LineChart as LineChartIcon, Undo2, ArrowDown, ArrowUp, ShoppingCart, HelpCircle } from "lucide-react";
+import { Loader, RefreshCw, Truck, Users, LineChart as LineChartIcon, Undo2, ArrowDown, ArrowUp, HelpCircle, Lightbulb } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LineChart, Line } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -26,9 +26,10 @@ type ReturnsSortConfig = {
     direction: 'ascending' | 'descending';
 };
 
-type ForecastSortConfig = {
-    key: keyof PurchaseForecastItem;
-    direction: 'ascending' | 'descending';
+const URGENCY_COLORS: { [key: string]: string } = {
+  "Urgente (Comprar Ya)": "hsl(var(--destructive))",
+  "Pronto (Próxima Semana)": "hsl(var(--chart-2))",
+  "Revisar (Próximo Mes)": "hsl(var(--chart-5))",
 };
 
 
@@ -40,7 +41,6 @@ export default function InventoryDetailPage() {
   const [selectedStore, setSelectedStore] = useState('all');
   
   const [returnsSortConfig, setReturnsSortConfig] = useState<ReturnsSortConfig | null>({ key: 'date', direction: 'descending' });
-  const [forecastSortConfig, setForecastSortConfig] = useState<ForecastSortConfig | null>({ key: 'suggestedPurchase', direction: 'descending' });
 
   const { toast } = useToast();
 
@@ -224,41 +224,20 @@ export default function InventoryDetailPage() {
     return returnsSortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
   };
 
-  // --- Lógica de Ordenamiento para Tabla de Previsión ---
-  const handleForecastSort = (key: ForecastSortConfig['key']) => {
-      let direction: 'ascending' | 'descending' = 'ascending';
-      if (forecastSortConfig?.key === key && forecastSortConfig.direction === 'ascending') {
-          direction = 'descending';
-      }
-      setForecastSortConfig({ key, direction });
-  };
-
-  const sortedForecast = useMemo(() => {
-      let sortableItems = [...(displayMetrics?.purchaseForecast || [])];
-      if (forecastSortConfig !== null) {
-          sortableItems.sort((a, b) => {
-              const aValue = a[forecastSortConfig.key];
-              const bValue = b[forecastSortConfig.key];
-              
-              if (typeof aValue === 'string' && typeof bValue === 'string') {
-                return forecastSortConfig.direction === 'ascending' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
-              }
-              if ((aValue as number) < (bValue as number)) {
-                return forecastSortConfig.direction === 'ascending' ? -1 : 1;
-              }
-              if ((aValue as number) > (bValue as number)) {
-                return forecastSortConfig.direction === 'ascending' ? 1 : -1;
-              }
-              return 0;
-          });
-      }
-      return sortableItems;
-  }, [displayMetrics?.purchaseForecast, forecastSortConfig]);
-
-  const renderForecastSortArrow = (key: ForecastSortConfig['key']) => {
-      if (forecastSortConfig?.key !== key) return null;
-      return forecastSortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
-  };
+  const forecastDataByUrgency = useMemo(() => {
+      const data = displayMetrics?.purchaseForecast?.filter(p => p.urgency !== 'Stock Saludable') || [];
+      const grouped: { [key: string]: PurchaseForecastItem[] } = {
+        "Urgente (Comprar Ya)": [],
+        "Pronto (Próxima Semana)": [],
+        "Revisar (Próximo Mes)": [],
+      };
+      data.forEach(item => {
+        if (grouped[item.urgency]) {
+            grouped[item.urgency].push(item);
+        }
+      });
+      return grouped;
+  }, [displayMetrics?.purchaseForecast]);
 
 
   return (
@@ -336,43 +315,59 @@ export default function InventoryDetailPage() {
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center">
-                        <ShoppingCart className="mr-2 h-5 w-5" /> Previsión de Compra Mensual
+                        <Lightbulb className="mr-2 h-5 w-5 text-yellow-400" /> Pronóstico de Reabastecimiento de Stock
                     </CardTitle>
                     <CardDescription className="flex items-center gap-2">
-                        Sugerencias de compra basadas en las salidas de los últimos 30 días para reponer stock en {selectedStore === 'all' ? 'todas las tiendas' : `la tienda ${selectedStore}`}.
+                        Productos que requieren atención, agrupados por urgencia de compra y basados en la velocidad de ventas de los últimos 30 días.
                         <TooltipProvider>
                             <UiTooltip>
                                 <TooltipTrigger>
                                     <HelpCircle className="h-4 w-4 text-muted-foreground" />
                                 </TooltipTrigger>
                                 <UiTooltipContent>
-                                    <p className="max-w-xs">La sugerencia se calcula como: (Salidas de los últimos 30 días) - (Stock Actual). Si el resultado es negativo, se muestra 0.</p>
+                                    <p className="max-w-xs">La "Urgencia" se calcula según los días de stock restantes. Pase el mouse sobre una barra para ver detalles como la compra sugerida.</p>
                                 </UiTooltipContent>
                             </UiTooltip>
                         </TooltipProvider>
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="overflow-auto max-h-[70vh] p-2">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead><Button variant="ghost" onClick={() => handleForecastSort('productName')}>Producto {renderForecastSortArrow('productName')}</Button></TableHead>
-                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleForecastSort('last30dSales')}>Salidas (30d) {renderForecastSortArrow('last30dSales')}</Button></TableHead>
-                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleForecastSort('currentStock')}>Stock Actual {renderForecastSortArrow('currentStock')}</Button></TableHead>
-                                <TableHead className="text-right"><Button variant="ghost" onClick={() => handleForecastSort('suggestedPurchase')}>Compra Sugerida {renderForecastSortArrow('suggestedPurchase')}</Button></TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {sortedForecast.filter(item => item.suggestedPurchase > 0).map(item => (
-                                <TableRow key={item.productName}>
-                                    <TableCell className="font-medium">{item.productName}</TableCell>
-                                    <TableCell className="text-center">{item.last30dSales}</TableCell>
-                                    <TableCell className="text-center">{item.currentStock}</TableCell>
-                                    <TableCell className="text-right font-bold text-primary">{item.suggestedPurchase}</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                <CardContent className="space-y-4">
+                  {Object.entries(forecastDataByUrgency).map(([urgency, items]) => {
+                    if (items.length === 0) return null;
+                    return (
+                        <div key={urgency}>
+                            <h3 className="font-semibold mb-2" style={{ color: URGENCY_COLORS[urgency] }}>{urgency} ({items.length} productos)</h3>
+                            <div className="h-[250px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={items} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis type="number" dataKey="daysLeft" />
+                                        <YAxis dataKey="productName" type="category" width={120} tick={{ fontSize: 12 }} interval={0} />
+                                        <Tooltip 
+                                            cursor={{ fill: 'hsl(var(--muted))' }}
+                                            content={({ active, payload }) => {
+                                                if (active && payload && payload.length) {
+                                                    const data: PurchaseForecastItem = payload[0].payload;
+                                                    return (
+                                                        <div className="p-2 text-xs bg-background border rounded-lg shadow-lg">
+                                                            <p className="font-bold mb-2">{data.productName}</p>
+                                                            <p><span className="font-semibold">Días de Stock Restantes:</span> {data.daysLeft === Infinity ? '∞' : data.daysLeft}</p>
+                                                            <p><span className="font-semibold">Stock Actual:</span> {data.currentStock}</p>
+                                                            <p><span className="font-semibold">Ventas (30d):</span> {data.last30dSales}</p>
+                                                            <p className="text-primary font-bold"><span className="font-semibold">Compra Sugerida:</span> {data.suggestedPurchase}</p>
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            }}
+                                        />
+                                        <Bar dataKey="daysLeft" name="Días de Stock Restantes" fill={URGENCY_COLORS[urgency]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )
+                  })}
                 </CardContent>
             </Card>
 

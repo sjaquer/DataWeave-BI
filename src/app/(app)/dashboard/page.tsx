@@ -319,30 +319,30 @@ export default function Dashboard() {
     }
 
     return (
-      <div className="h-96">
-        <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} layout="vertical" margin={{ top: 5, right: 50, left: 120, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
-                <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} interval={0} />
-                <Tooltip 
-                    content={<ChartTooltipContent 
-                        formatter={(value) => `${(value as number).toFixed(2)}%`} 
-                        nameKey="name"
-                    />} 
-                    cursor={{ fill: 'hsl(var(--primary) / 0.1)' }}
-                />
-                <Bar dataKey="confirmationRate" name="Tasa de Confirmación" fill="hsl(var(--primary))">
-                    <LabelList 
-                        dataKey="confirmationRate" 
-                        position="right" 
-                        formatter={(value: number) => `${value.toFixed(1)}%`}
-                        className="font-bold text-xs fill-foreground"
+        <ChartContainer config={{ confirmationRate: { label: "Tasa de Confirmación", color: "hsl(var(--primary))" } }} className="h-96">
+            <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data} layout="vertical" margin={{ top: 5, right: 50, left: 120, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                    <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} interval={0} />
+                    <Tooltip 
+                        content={<ChartTooltipContent 
+                            formatter={(value) => `${(value as number).toFixed(2)}%`} 
+                            nameKey="name"
+                        />} 
+                        cursor={{ fill: 'hsl(var(--primary) / 0.1)' }}
                     />
-                </Bar>
-            </BarChart>
-        </ResponsiveContainer>
-      </div>
+                    <Bar dataKey="confirmationRate" name="Tasa de Confirmación" fill="hsl(var(--primary))">
+                        <LabelList 
+                            dataKey="confirmationRate" 
+                            position="right" 
+                            formatter={(value: number) => `${value.toFixed(1)}%`}
+                            className="font-bold text-xs fill-foreground"
+                        />
+                    </Bar>
+                </BarChart>
+            </ResponsiveContainer>
+        </ChartContainer>
     );
 };
 

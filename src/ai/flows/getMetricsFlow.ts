@@ -401,7 +401,7 @@ const getMetricsFlow = ai.defineFlow(
         const last30dSales = recentOutflows[productName] || 0;
         const currentStock = item.currentStock || 0;
         const dailyVelocity = last30dSales / 30;
-        const daysLeft = dailyVelocity > 0 ? Math.floor(currentStock / dailyVelocity) : Infinity;
+        const daysLeft = dailyVelocity > 0 ? Math.floor(currentStock / dailyVelocity) : 365;
 
         let urgency;
         if (daysLeft <= 7) {

@@ -30,6 +30,7 @@ const URGENCY_COLORS: { [key: string]: string } = {
   "Urgente (Comprar Ya)": "hsl(var(--destructive))",
   "Pronto (Próxima Semana)": "hsl(var(--chart-2))",
   "Revisar (Próximo Mes)": "hsl(var(--chart-5))",
+  "Stock Saludable": "hsl(var(--chart-1))",
 };
 
 
@@ -225,11 +226,12 @@ export default function InventoryDetailPage() {
   };
 
   const forecastDataByUrgency = useMemo(() => {
-      const data = displayMetrics?.purchaseForecast?.filter(p => p.urgency !== 'Stock Saludable') || [];
+      const data = displayMetrics?.purchaseForecast || [];
       const grouped: { [key: string]: PurchaseForecastItem[] } = {
         "Urgente (Comprar Ya)": [],
         "Pronto (Próxima Semana)": [],
         "Revisar (Próximo Mes)": [],
+        "Stock Saludable": [],
       };
       data.forEach(item => {
         if (grouped[item.urgency]) {
@@ -332,11 +334,10 @@ export default function InventoryDetailPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {Object.entries(forecastDataByUrgency).map(([urgency, items]) => {
-                    if (items.length === 0) return null;
+                  {Object.entries(forecastDataByUrgency).filter(([, items]) => items.length > 0).map(([urgency, items]) => {
                     return (
                         <div key={urgency}>
-                            <h3 className="font-semibold mb-2" style={{ color: URGENCY_COLORS[urgency] }}>{urgency} ({items.length} productos)</h3>
+                            <h3 className="font-semibold mb-2" style={{ color: URGENCY_COLORS[urgency] || 'inherit' }}>{urgency} ({items.length} productos)</h3>
                             <div className="h-[250px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={items} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
@@ -351,7 +352,7 @@ export default function InventoryDetailPage() {
                                                     return (
                                                         <div className="p-2 text-xs bg-background border rounded-lg shadow-lg">
                                                             <p className="font-bold mb-2">{data.productName}</p>
-                                                            <p><span className="font-semibold">Días de Stock Restantes:</span> {data.daysLeft === Infinity ? '∞' : data.daysLeft}</p>
+                                                            <p><span className="font-semibold">Días de Stock Restantes:</span> {data.daysLeft}</p>
                                                             <p><span className="font-semibold">Stock Actual:</span> {data.currentStock}</p>
                                                             <p><span className="font-semibold">Ventas (30d):</span> {data.last30dSales}</p>
                                                             <p className="text-primary font-bold"><span className="font-semibold">Compra Sugerida:</span> {data.suggestedPurchase}</p>

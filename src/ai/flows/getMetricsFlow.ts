@@ -80,6 +80,7 @@ const getMetricsFlow = ai.defineFlow(
     let totalUnconfirmed = 0;
     const dailyData: { [key: string]: { confirmed: number; unconfirmed: number, byStore: { [store: string]: { confirmed: number, unconfirmed: number } } } } = {};
     const provinceData: { [key: string]: { totalOrders: number; confirmedOrders: number; totalSpent: number; } } = {};
+    const provinceDataByStore: { [store: string]: { [province: string]: { totalOrders: number, confirmedOrders: number, totalSpent: number } } } = {};
     const requestedProductData: { [key: string]: number } = {};
     const purchasedProductData: { [key: string]: number } = {};
     const storeData: { [key: string]: { totalOrders: number, confirmedOrders: number, totalSpent: number, topProducts: {[key: string]: number} } } = {};
@@ -133,6 +134,17 @@ const getMetricsFlow = ai.defineFlow(
       provinceData[rawProvince].totalOrders++;
       provinceData[rawProvince].totalSpent += order.totalPrice || 0;
       if (isOrderConfirmed) provinceData[rawProvince].confirmedOrders++;
+
+      // Province Metrics By Store
+      if (storeName !== 'Desconocida') {
+        if (!provinceDataByStore[storeName]) provinceDataByStore[storeName] = {};
+        if (!provinceDataByStore[storeName][rawProvince]) {
+          provinceDataByStore[storeName][rawProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
+        }
+        provinceDataByStore[storeName][rawProvince].totalOrders++;
+        provinceDataByStore[storeName][rawProvince].totalSpent += order.totalPrice || 0;
+        if (isOrderConfirmed) provinceDataByStore[storeName][rawProvince].confirmedOrders++;
+      }
       
       // Product Metrics
       if (order.products && Array.isArray(order.products)) {
@@ -271,6 +283,13 @@ const getMetricsFlow = ai.defineFlow(
     const aggregatedProvinceMetrics: any[] = Object.entries(provinceData).map(([name, data]) => ({
       name, ...data, confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0
     })).sort((a, b) => b.totalOrders - a.totalOrders);
+    
+    const aggregatedProvinceMetricsByStore: { [key: string]: any[] } = {};
+    Object.entries(provinceDataByStore).forEach(([store, provinces]) => {
+      aggregatedProvinceMetricsByStore[store] = Object.entries(provinces).map(([name, data]) => ({
+        name, ...data, confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0
+      })).sort((a,b) => b.totalOrders - a.totalOrders);
+    });
 
     const aggregatedRequestedProducts: any[] = Object.entries(requestedProductData).map(([name, totalOrders]) => ({ name, totalOrders })).sort((a, b) => b.totalOrders - a.totalOrders);
     const aggregatedPurchasedProducts: any[] = Object.entries(purchasedProductData).map(([name, totalOrders]) => ({ name, totalOrders })).sort((a, b) => b.totalOrders - a.totalOrders);
@@ -420,6 +439,7 @@ const getMetricsFlow = ai.defineFlow(
     return {
       dailyMetrics: aggregatedDailyMetrics,
       provinceMetrics: aggregatedProvinceMetrics,
+      provinceMetricsByStore: aggregatedProvinceMetricsByStore,
       mostRequestedProducts: aggregatedRequestedProducts,
       mostPurchasedProducts: aggregatedPurchasedProducts,
       productConfirmationRates: aggregatedProductConfirmationRates,
@@ -443,3 +463,5 @@ const getMetricsFlow = ai.defineFlow(
 export async function getMetrics(input: GetMetricsInput): Promise<GetMetricsOutput> {
     return getMetricsFlow(input);
 }
+
+    

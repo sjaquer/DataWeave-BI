@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 // --- Esquema de Entrada ---
@@ -152,6 +153,7 @@ export type DailyStorePerformance = z.infer<typeof DailyStorePerformanceSchema>;
 export const GetMetricsOutputSchema = z.object({
     dailyMetrics: z.array(DailyMetricSchema),
     provinceMetrics: z.array(ProvinceMetricSchema),
+    provinceMetricsByStore: z.record(z.array(ProvinceMetricSchema)).optional(),
     mostRequestedProducts: z.array(ProductMetricSchema),
     mostPurchasedProducts: z.array(ProductMetricSchema),
     productConfirmationRates: z.array(ProductConfirmationRateSchema).optional(),
@@ -170,3 +172,5 @@ export const GetMetricsOutputSchema = z.object({
 });
 
 export type GetMetricsOutput = z.infer<typeof GetMetricsOutputSchema>;
+
+    

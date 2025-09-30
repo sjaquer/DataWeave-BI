@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { ProvinceMetric, GetMetricsOutput, GetMetricsInput } from "@/ai/schemas/getMetricsSchema";
+import type { ProvinceMetric, GetMetricsOutput, GetMetricsInput, StoreMetric } from "@/ai/schemas/getMetricsSchema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import DashboardNav from "@/components/DashboardNav";
 
@@ -31,12 +31,15 @@ type SortConfig = {
 
 export default function ProvincesDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
-  const [provinceMetrics, setProvinceMetrics] = useState<ProvinceMetric[]>([]);
+  const [fullMetrics, setFullMetrics] = useState<GetMetricsOutput | null>(null);
+  const [displayMetrics, setDisplayMetrics] = useState<ProvinceMetric[]>([]);
   const [date, setDate] = useState<DateRange | undefined>(() => {
     const today = new Date();
     return { from: today, to: today };
   });
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'totalOrders', direction: 'descending' });
+  const [selectedStore, setSelectedStore] = useState('all');
+  const [availableStores, setAvailableStores] = useState<StoreMetric[]>([]);
   const { toast } = useToast();
 
   const handleDatePreset = (preset: string) => {
@@ -44,67 +47,76 @@ export default function ProvincesDetailPage() {
     let from: Date | undefined;
 
     switch (preset) {
-      case 'today':
-        from = new Date();
-        break;
-      case 'yesterday':
-        from = subDays(new Date(), 1);
-        setDate({ from, to: from });
-        return;
-      case '7days':
-        from = new Date();
-        from.setDate(from.getDate() - 6);
-        break;
-      case '30days':
-        from = new Date();
-        from.setDate(from.getDate() - 29);
-        break;
-      case '6months':
-        from = new Date();
-        from.setMonth(from.getMonth() - 6);
-        break;
-      case 'all':
-        from = undefined; // o una fecha muy antigua
-        break;
+      case 'today': from = new Date(); break;
+      case 'yesterday': from = subDays(new Date(), 1); setDate({ from, to: from }); return;
+      case '7days': from = new Date(); from.setDate(from.getDate() - 6); break;
+      case '30days': from = new Date(); from.setDate(from.getDate() - 29); break;
+      case '6months': from = new Date(); from.setMonth(from.getMonth() - 6); break;
+      case 'all': from = undefined; break;
     }
     setDate({ from, to });
   };
 
-
-  const processAndSetMetrics = useCallback((data: GetMetricsOutput | null) => {
+  const processAndSetMetrics = useCallback((data: GetMetricsOutput | null, store: string) => {
     if (!data) {
       setIsLoading(false);
       return;
     }
+
     const provinceCorrectionsCache: Record<string, string> = {};
-    if (data.provinceMetrics) {
-      const uniqueProvinces = [...new Set(data.provinceMetrics.map(p => p.name).filter(p => p !== 'Desconocida'))];
-      uniqueProvinces.forEach(provinceName => {
-        if (!provinceCorrectionsCache[provinceName]) {
-          const bestMatch = findBestProvinceMatch(provinceName, provinceList);
-          provinceCorrectionsCache[provinceName] = bestMatch || provinceName;
-        }
-      });
-      const correctedProvinceMetrics = data.provinceMetrics.map(metric => ({
-        ...metric,
-        name: provinceCorrectionsCache[metric.name] || metric.name,
-      }));
-      const aggregatedProvinceMetrics: ProvinceMetric[] = Object.values(
-        correctedProvinceMetrics.reduce((acc: Record<string, ProvinceMetric>, metric) => {
-          if (!acc[metric.name]) {
-            acc[metric.name] = { ...metric, totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
-          }
-          acc[metric.name].totalOrders += metric.totalOrders;
-          acc[metric.name].confirmedOrders += metric.confirmedOrders;
-          acc[metric.name].totalSpent += metric.totalSpent;
-          acc[metric.name].confirmationRate = acc[metric.name].totalOrders > 0 ? (acc[metric.name].confirmedOrders / acc[metric.name].totalOrders) * 100 : 0;
-          return acc;
-        }, {})
-      );
-      setProvinceMetrics(aggregatedProvinceMetrics);
+    const getBestMatch = (name: string) => {
+      if (!provinceCorrectionsCache[name]) {
+        provinceCorrectionsCache[name] = findBestProvinceMatch(name, provinceList);
+      }
+      return provinceCorrectionsCache[name];
+    };
+
+    let metricsToProcess: ProvinceMetric[];
+
+    if (store === 'all') {
+      metricsToProcess = data.provinceMetrics || [];
+    } else {
+      const lowerCaseStore = store.toLowerCase();
+      const storeData = data.provinceMetricsByStore?.[lowerCaseStore];
+      metricsToProcess = storeData || [];
     }
+
+    const aggregatedProvinces: Record<string, ProvinceMetric> = {};
+
+    for (const metric of metricsToProcess) {
+      const correctedName = getBestMatch(metric.name);
+      if (!aggregatedProvinces[correctedName]) {
+        aggregatedProvinces[correctedName] = {
+          name: correctedName,
+          totalOrders: 0,
+          confirmedOrders: 0,
+          totalSpent: 0,
+          confirmationRate: 0,
+        };
+      }
+      aggregatedProvinces[correctedName].totalOrders += metric.totalOrders;
+      aggregatedProvinces[correctedName].confirmedOrders += metric.confirmedOrders;
+      aggregatedProvinces[correctedName].totalSpent += metric.totalSpent;
+    }
+    
+    const finalMetrics = Object.values(aggregatedProvinces).map(p => ({
+        ...p,
+        confirmationRate: p.totalOrders > 0 ? (p.confirmedOrders / p.totalOrders) * 100 : 0
+    }));
+
+    setDisplayMetrics(finalMetrics);
+
+    if (fullMetrics === null) {
+      setFullMetrics(data);
+      const stores = (data.storeMetrics || []).map(s => ({
+        ...s,
+        name: s.name.charAt(0).toUpperCase() + s.name.slice(1)
+      }));
+      setAvailableStores(stores);
+    }
+    
     setIsLoading(false);
-  }, []);
+  }, [fullMetrics]);
 
   const fetchMetrics = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
@@ -116,7 +128,7 @@ export default function ProvincesDetailPage() {
         if (cachedData) {
           const { data, timestamp } = JSON.parse(cachedData);
           if (Date.now() - timestamp < CACHE_EXPIRATION_MS) {
-            processAndSetMetrics(data);
+            processAndSetMetrics(data, selectedStore);
             return;
           }
         }
@@ -131,14 +143,9 @@ export default function ProvincesDetailPage() {
       if (date?.from) {
         const startDate = new Date(date.from);
         startDate.setHours(0, 0, 0, 0);
-
         const endDate = date.to ? new Date(date.to) : new Date(date.from);
         endDate.setHours(23, 59, 59, 999);
-        
-        input = {
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-        };
+        input = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
       }
       
       const metricsData = await getMetrics(input);
@@ -150,23 +157,25 @@ export default function ProvincesDetailPage() {
         console.error("Error al guardar en la caché:", e);
       }
 
-      processAndSetMetrics(metricsData);
+      processAndSetMetrics(metricsData, selectedStore);
     } catch (error) {
       console.error("Error al obtener las métricas:", error);
-      toast({
-        variant: "destructive",
-        title: "Error de Conexión",
-        description: "No se pudieron cargar las métricas.",
-      });
+      toast({ variant: "destructive", title: "Error de Conexión", description: "No se pudieron cargar las métricas." });
       setIsLoading(false);
     }
-  }, [date, processAndSetMetrics, toast]);
-
+  }, [date, processAndSetMetrics, toast, selectedStore]);
+  
   useEffect(() => {
     fetchMetrics(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date]);
+  }, [date, fetchMetrics]);
   
+  useEffect(() => {
+      if (fullMetrics) {
+        processAndSetMetrics(fullMetrics, selectedStore);
+      }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStore]);
+
   const handleSort = (key: keyof ProvinceMetric) => {
     let direction: 'ascending' | 'descending' = 'ascending';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
@@ -176,7 +185,7 @@ export default function ProvincesDetailPage() {
   };
 
   const sortedMetrics = useMemo(() => {
-    let sortableItems = [...provinceMetrics];
+    let sortableItems = [...displayMetrics];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
         const aValue = a[sortConfig.key];
@@ -196,7 +205,7 @@ export default function ProvincesDetailPage() {
       });
     }
     return sortableItems;
-  }, [provinceMetrics, sortConfig]);
+  }, [displayMetrics, sortConfig]);
 
   const renderSortArrow = (key: keyof ProvinceMetric) => {
     if (!sortConfig || sortConfig.key !== key) return null;
@@ -235,6 +244,17 @@ export default function ProvincesDetailPage() {
               <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
             </PopoverContent>
           </Popover>
+          <Select value={selectedStore} onValueChange={setSelectedStore}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Filtrar por Tienda" />
+              </SelectTrigger>
+              <SelectContent>
+                  <SelectItem value="all">Todas las Tiendas</SelectItem>
+                  {availableStores.map(store => (
+                      <SelectItem key={store.name} value={store.name.toLowerCase()}>{store.name}</SelectItem>
+                  ))}
+              </SelectContent>
+          </Select>
           <Button className="flex-1 sm:flex-initial" variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>
             {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Actualizar
@@ -247,7 +267,7 @@ export default function ProvincesDetailPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Métricas por Provincia</CardTitle>
-          <CardDescription>Desglose completo de pedidos y gasto por cada provincia.</CardDescription>
+          <CardDescription>Desglose completo de pedidos y gasto para {selectedStore === 'all' ? 'todas las tiendas' : `la tienda ${selectedStore}`}.</CardDescription>
         </CardHeader>
         <CardContent className="overflow-auto max-h-[70vh] p-2">
           {isLoading ? (
@@ -286,20 +306,28 @@ export default function ProvincesDetailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedMetrics.filter(p => p.totalOrders > 0).map((p) => (
-                  <TableRow key={p.name}>
-                    <TableCell className="font-medium">{p.name}</TableCell>
-                    <TableCell className="text-center">{p.totalOrders}</TableCell>
-                    <TableCell className="text-center text-green-500 font-semibold">{p.confirmedOrders}</TableCell>
-                    <TableCell className="text-right font-medium">{p.totalSpent.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-3">
-                        <span className="font-medium text-sm w-16">{p.confirmationRate.toFixed(2)}%</span>
-                        <Progress value={p.confirmationRate} className="h-2 w-[100px]" />
-                      </div>
+                {sortedMetrics.length > 0 ? (
+                  sortedMetrics.filter(p => p.totalOrders > 0).map((p) => (
+                    <TableRow key={p.name}>
+                      <TableCell className="font-medium">{p.name}</TableCell>
+                      <TableCell className="text-center">{p.totalOrders}</TableCell>
+                      <TableCell className="text-center text-green-500 font-semibold">{p.confirmedOrders}</TableCell>
+                      <TableCell className="text-right font-medium">{p.totalSpent.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-3">
+                          <span className="font-medium text-sm w-16">{p.confirmationRate.toFixed(2)}%</span>
+                          <Progress value={p.confirmationRate} className="h-2 w-[100px]" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      No se encontraron datos para los filtros seleccionados.
                     </TableCell>
                   </TableRow>
-                ))}
+                )}
               </TableBody>
             </Table>
           )}
@@ -308,7 +336,5 @@ export default function ProvincesDetailPage() {
     </div>
   );
 }
-
-  
 
     

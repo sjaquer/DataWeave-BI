@@ -244,7 +244,7 @@ export default function Dashboard() {
       mostPurchasedProducts: filteredPurchasedProducts,
       // For simplicity, we keep some metrics global, as recalculating them client-side would be complex
       // For a full implementation, these would need to be recalculated or fetched again
-      provinceMetrics: fullMetrics.provinceMetrics, 
+      provinceMetrics: fullMetrics.provinceMetricsByStore?.[lowerCaseStoreName] || [],
       mostRequestedProducts: fullMetrics.mostRequestedProducts, // Requested is global, not store-specific
       personnelMetrics: fullMetrics.personnelMetrics, // This is global across stores
       storeMetrics: fullMetrics.storeMetrics.filter(sm => sm.name.toLowerCase() === lowerCaseStoreName),
@@ -627,7 +627,7 @@ export default function Dashboard() {
                             <Tooltip content={<ChartTooltipContent nameKey="name" />} />
                             <Legend />
                             <Pie
-                                data={storeMetrics}
+                                data={storeMetrics || []}
                                 dataKey="confirmedOrders"
                                 nameKey="name"
                                 cx="50%"
@@ -635,6 +635,7 @@ export default function Dashboard() {
                                 outerRadius={120}
                                 labelLine={false}
                                 label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                                  if (!percent) return null;
                                   const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
                                   const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
                                   const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
@@ -645,7 +646,7 @@ export default function Dashboard() {
                                   );
                                 }}
                             >
-                                {storeMetrics?.map((entry, index) => (
+                                {(storeMetrics || []).map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                             </Pie>
@@ -659,7 +660,7 @@ export default function Dashboard() {
             <Card className={selectedStore !== 'all' ? 'col-span-2' : ''}>
               <CardHeader>
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
-                  <CardDescription>{selectedStore === 'all' ? 'Top 10 provincias con más pedidos y su gasto total.' : `Este gráfico muestra datos globales.`}</CardDescription>
+                  <CardDescription>{selectedStore === 'all' ? 'Top 10 provincias con más pedidos y su gasto total.' : `Top 10 provincias para la tienda ${capitalize(selectedStore)}.`}</CardDescription>
               </CardHeader>
               <CardContent className="h-96">
                 <ChartContainer config={{
@@ -749,7 +750,5 @@ export default function Dashboard() {
     </div>
   );
 }
-
-  
 
     

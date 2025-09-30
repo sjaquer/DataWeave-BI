@@ -312,31 +312,39 @@ export default function Dashboard() {
     </ul>
   );
 
-  const renderProductConfirmationList = (products: ProductConfirmationRate[] | undefined) => (
-    <ul className="space-y-4">
-        {products && products.length > 0 ? (
-            products.slice(0, 10).map(product => {
-                const rateColorClass = product.confirmationRate < 30 ? "bg-red-500/20" : product.confirmationRate < 50 ? "bg-yellow-500/20" : "bg-green-500/20";
-                const rateTextColorClass = product.confirmationRate < 30 ? "text-red-500" : product.confirmationRate < 50 ? "text-yellow-500" : "text-green-500";
-                return (
-                    <li key={product.name} className="text-sm">
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="truncate pr-4 font-medium">{product.name}</span>
-                            <span className={`font-bold ${rateTextColorClass}`}>{product.confirmationRate.toFixed(1)}%</span>
-                        </div>
-                        <Progress value={product.confirmationRate} className={`h-2 ${rateColorClass}`} />
-                        <div className="flex justify-between items-center mt-1 text-xs text-muted-foreground">
-                            <span>Pedidos: {product.requested}</span>
-                            <span>Confirmados: {product.confirmed}</span>
-                        </div>
-                    </li>
-                )
-            })
-        ) : (
-             <li className="text-center text-muted-foreground">No hay datos.</li>
-        )}
-    </ul>
-);
+  const renderProductConfirmationList = (products: ProductConfirmationRate[] | undefined) => {
+    const data = products?.slice(0, 10) || [];
+    if (data.length === 0) {
+        return <p className="text-center text-muted-foreground">No hay datos para mostrar.</p>;
+    }
+
+    return (
+      <div className="h-96">
+        <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} layout="vertical" margin={{ top: 5, right: 50, left: 120, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} interval={0} />
+                <Tooltip 
+                    content={<ChartTooltipContent 
+                        formatter={(value) => `${(value as number).toFixed(2)}%`} 
+                        nameKey="name"
+                    />} 
+                    cursor={{ fill: 'hsl(var(--primary) / 0.1)' }}
+                />
+                <Bar dataKey="confirmationRate" name="Tasa de Confirmación" fill="hsl(var(--primary))">
+                    <LabelList 
+                        dataKey="confirmationRate" 
+                        position="right" 
+                        formatter={(value: number) => `${value.toFixed(1)}%`}
+                        className="font-bold text-xs fill-foreground"
+                    />
+                </Bar>
+            </BarChart>
+        </ResponsiveContainer>
+      </div>
+    );
+};
 
   
   const TrendIndicator = ({ value }: { value: number | undefined }) => {
@@ -616,43 +624,49 @@ export default function Dashboard() {
                     <CardDescription>Porcentaje de contribución de cada tienda al total de pedidos confirmados.</CardDescription>
                 </CardHeader>
                 <CardContent className="h-96">
-                   <ChartContainer config={{
-                      ...storeMetrics?.reduce((acc, store, index) => {
-                        acc[store.name] = { label: store.name, color: COLORS[index % COLORS.length] };
-                        return acc;
-                      }, {} as any)
-                   }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Tooltip content={<ChartTooltipContent nameKey="name" />} />
-                            <Legend />
-                            <Pie
-                                data={storeMetrics || []}
-                                dataKey="confirmedOrders"
-                                nameKey="name"
-                                cx="50%"
-                                cy="50%"
-                                outerRadius={120}
-                                labelLine={false}
-                                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                                  if (!percent) return null;
-                                  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                                  const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
-                                  const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
-                                  return (
-                                    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" className="text-xs font-bold">
-                                      {`${(percent * 100).toFixed(0)}%`}
-                                    </text>
-                                  );
-                                }}
-                            >
-                                {(storeMetrics || []).map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
-                            </Pie>
-                        </PieChart>
-                    </ResponsiveContainer>
-                   </ChartContainer>
+                   {storeMetrics && storeMetrics.length > 0 && storeMetrics.some(s => s.confirmedOrders > 0) ? (
+                     <ChartContainer config={{
+                        ...storeMetrics?.reduce((acc, store, index) => {
+                          acc[store.name] = { label: store.name, color: COLORS[index % COLORS.length] };
+                          return acc;
+                        }, {} as any)
+                     }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                              <Tooltip content={<ChartTooltipContent nameKey="name" />} />
+                              <Legend />
+                              <Pie
+                                  data={storeMetrics || []}
+                                  dataKey="confirmedOrders"
+                                  nameKey="name"
+                                  cx="50%"
+                                  cy="50%"
+                                  outerRadius={120}
+                                  labelLine={false}
+                                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                                    if (!percent || percent === 0) return null;
+                                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                                    const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
+                                    const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
+                                    return (
+                                      <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" className="text-xs font-bold">
+                                        {`${(percent * 100).toFixed(0)}%`}
+                                      </text>
+                                    );
+                                  }}
+                              >
+                                  {(storeMetrics || []).map((entry, index) => (
+                                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                  ))}
+                              </Pie>
+                          </PieChart>
+                      </ResponsiveContainer>
+                     </ChartContainer>
+                   ) : (
+                    <div className="flex items-center justify-center h-full">
+                        <p className="text-muted-foreground">No hay datos de pedidos confirmados para mostrar en el gráfico.</p>
+                    </div>
+                   )}
                 </CardContent>
               </Card>
             )}
@@ -706,7 +720,7 @@ export default function Dashboard() {
                 <CardTitle className="flex items-center"><Percent className="mr-2 h-5 w-5" />Tasa de Confirmación por Producto</CardTitle>
                 <CardDescription>Top 10 productos más pedidos y su tasa de confirmación.</CardDescription>
             </CardHeader>
-            <CardContent className="h-96 overflow-auto">
+            <CardContent>
                 {renderProductConfirmationList(productConfirmationRates)}
             </CardContent>
           </Card>
@@ -750,5 +764,6 @@ export default function Dashboard() {
     </div>
   );
 }
+
 
     

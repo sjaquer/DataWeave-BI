@@ -137,13 +137,14 @@ const getMetricsFlow = ai.defineFlow(
 
       // Province Metrics By Store
       if (storeName !== 'Desconocida') {
-        if (!provinceDataByStore[storeName]) provinceDataByStore[storeName] = {};
-        if (!provinceDataByStore[storeName][rawProvince]) {
-          provinceDataByStore[storeName][rawProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
+        const lowerCaseStoreName = storeName.toLowerCase();
+        if (!provinceDataByStore[lowerCaseStoreName]) provinceDataByStore[lowerCaseStoreName] = {};
+        if (!provinceDataByStore[lowerCaseStoreName][rawProvince]) {
+          provinceDataByStore[lowerCaseStoreName][rawProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
         }
-        provinceDataByStore[storeName][rawProvince].totalOrders++;
-        provinceDataByStore[storeName][rawProvince].totalSpent += order.totalPrice || 0;
-        if (isOrderConfirmed) provinceDataByStore[storeName][rawProvince].confirmedOrders++;
+        provinceDataByStore[lowerCaseStoreName][rawProvince].totalOrders++;
+        provinceDataByStore[lowerCaseStoreName][rawProvince].totalSpent += order.totalPrice || 0;
+        if (isOrderConfirmed) provinceDataByStore[lowerCaseStoreName][rawProvince].confirmedOrders++;
       }
       
       // Product Metrics
@@ -433,6 +434,53 @@ const getMetricsFlow = ai.defineFlow(
         return { name, requested, confirmed, confirmationRate };
     }).sort((a, b) => b.requested - a.requested); // Ordenar por los más pedidos
 
+    // --- NUEVA LÓGICA: REPORTE MENSUAL DE PRODUCTOS ---
+    const today = new Date();
+    const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const prevMonth = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+
+    const lastMonthStart = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
+    const lastMonthEnd = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0, 23, 59, 59);
+
+    const prevMonthStart = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), 1);
+    const prevMonthEnd = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0, 23, 59, 59);
+
+    const monthlySales: { [sku: string]: { lastMonth: number, prevMonth: number } } = {};
+
+    inventoryMovements.forEach(mov => {
+        const movDate = mov.timestamp?.toDate();
+        const quantity = Math.abs(Number(mov.quantity || 0));
+
+        if (mov.sku && quantity > 0 && mov.type === 'SALIDA' && movDate) {
+             if (!monthlySales[mov.sku]) {
+                monthlySales[mov.sku] = { lastMonth: 0, prevMonth: 0 };
+            }
+            if (movDate >= lastMonthStart && movDate <= lastMonthEnd) {
+                monthlySales[mov.sku].lastMonth += quantity;
+            }
+            if (movDate >= prevMonthStart && movDate <= prevMonthEnd) {
+                monthlySales[mov.sku].prevMonth += quantity;
+            }
+        }
+    });
+
+    const monthlyProductReport = aggregatedCurrentInventory.map(item => {
+        const sales = monthlySales[item.sku] || { lastMonth: 0, prevMonth: 0 };
+        const trend = sales.prevMonth > 0
+            ? ((sales.lastMonth - sales.prevMonth) / sales.prevMonth) * 100
+            : sales.lastMonth > 0 ? 100 : 0;
+        
+        return {
+            sku: item.sku,
+            productName: item.productName,
+            currentStock: item.currentStock,
+            monthlySales: sales.lastMonth,
+            previousMonthSales: sales.prevMonth,
+            salesTrend: trend,
+            suggestedPurchase: Math.max(0, sales.lastMonth - item.currentStock)
+        };
+    }).sort((a,b) => b.monthlySales - a.monthlySales);
+
 
     // Cálculo de variación diaria global
     let dailyOrderVariation = 0;
@@ -481,6 +529,7 @@ const getMetricsFlow = ai.defineFlow(
       mostReturnedProducts: aggregatedMostReturnedProducts,
       currentInventory: aggregatedCurrentInventory,
       purchaseForecast: purchaseForecast,
+      monthlyProductReport: monthlyProductReport,
     };
   }
 );

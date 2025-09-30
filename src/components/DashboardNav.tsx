@@ -1,10 +1,11 @@
+
 "use client";
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 interface DashboardNavProps {
-  active: 'main' | 'provinces' | 'daily' | 'inventory' | 'inventory-status';
+  active: 'main' | 'provinces' | 'daily' | 'inventory' | 'inventory-status' | 'returns';
 }
 
 export default function DashboardNav({ active }: DashboardNavProps) {
@@ -33,6 +34,11 @@ export default function DashboardNav({ active }: DashboardNavProps) {
       <Link href="/dashboard/inventory-status" passHref className="flex-1">
         <Button variant={active === 'inventory-status' ? "default" : "ghost"} size="sm" className="w-full">
           Estado de Inventario
+        </Button>
+      </Link>
+       <Link href="/dashboard/returns" passHref className="flex-1">
+        <Button variant={active === 'returns' ? "default" : "ghost"} size="sm" className="w-full">
+          Análisis Mensual
         </Button>
       </Link>
     </div>

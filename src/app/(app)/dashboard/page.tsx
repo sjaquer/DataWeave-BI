@@ -7,8 +7,8 @@ import { format, subDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, CheckCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight, Package2, ArrowDown, ArrowUp, BarChartHorizontal, PieChart } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LabelList, LineChart, Line, Pie, Cell } from "recharts";
+import { Loader, CheckCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight, Package2, ArrowDown, ArrowUp, BarChartHorizontal, PieChart as PieChartIcon } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LabelList, LineChart, Line, PieChart, Pie, Cell } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -357,7 +357,7 @@ export default function Dashboard() {
     return (
         <div className={`flex items-center text-xs font-semibold ${color}`}>
             <Icon className="h-3 w-3 mr-1" />
-            {value.toFixed(1)}% vs semana anterior
+            {value.toFixed(1)}% vs día anterior
         </div>
     );
   };
@@ -620,11 +620,11 @@ export default function Dashboard() {
            {selectedStore === 'all' && (
               <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center"><PieChart className="mr-2 h-5 w-5" />Distribución de Pedidos Confirmados por Tienda</CardTitle>
+                    <CardTitle className="flex items-center"><PieChartIcon className="mr-2 h-5 w-5" />Distribución de Pedidos Confirmados por Tienda</CardTitle>
                     <CardDescription>Porcentaje de contribución de cada tienda al total de pedidos confirmados.</CardDescription>
                 </CardHeader>
                 <CardContent className="h-96">
-                   {storeMetrics && storeMetrics.length > 0 && storeMetrics.some(s => s.confirmedOrders > 0) ? (
+                   {storeMetrics && storeMetrics.filter(s => s.confirmedOrders > 0).length > 0 ? (
                      <ChartContainer config={{
                         ...storeMetrics?.reduce((acc, store, index) => {
                           acc[store.name] = { label: store.name, color: COLORS[index % COLORS.length] };
@@ -636,7 +636,7 @@ export default function Dashboard() {
                               <Tooltip content={<ChartTooltipContent nameKey="name" />} />
                               <Legend />
                               <Pie
-                                  data={storeMetrics || []}
+                                  data={storeMetrics.filter(s => s.confirmedOrders > 0)}
                                   dataKey="confirmedOrders"
                                   nameKey="name"
                                   cx="50%"
@@ -655,7 +655,7 @@ export default function Dashboard() {
                                     );
                                   }}
                               >
-                                  {(storeMetrics || []).map((entry, index) => (
+                                  {(storeMetrics.filter(s => s.confirmedOrders > 0)).map((entry, index) => (
                                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                   ))}
                               </Pie>

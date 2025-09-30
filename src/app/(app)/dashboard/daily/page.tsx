@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
@@ -55,6 +55,10 @@ export default function DailyDetailPage() {
       case 'today':
         from = new Date();
         break;
+      case 'yesterday':
+        from = subDays(new Date(), 1);
+        setDate({ from, to: from });
+        return;
       case '7days':
         from = new Date();
         from.setDate(from.getDate() - 6);
@@ -269,6 +273,7 @@ export default function DailyDetailPage() {
               </SelectTrigger>
               <SelectContent>
                   <SelectItem value="today">Hoy</SelectItem>
+                  <SelectItem value="yesterday">Ayer</SelectItem>
                   <SelectItem value="7days">Últimos 7 días</SelectItem>
                   <SelectItem value="30days">Últimos 30 días</SelectItem>
                   <SelectItem value="6months">Últimos 6 meses</SelectItem>
@@ -416,3 +421,5 @@ export default function DailyDetailPage() {
     </div>
   );
 }
+
+  

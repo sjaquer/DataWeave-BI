@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { DateRange } from "react-day-picker";
+import { subDays } from "date-fns";
 
 import { Loader, RefreshCw, Truck, Users, LineChart as LineChartIcon, Undo2, ArrowDown, ArrowUp, ShoppingCart, HelpCircle } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LineChart, Line } from "recharts";
@@ -44,15 +45,32 @@ export default function InventoryDetailPage() {
   const { toast } = useToast();
 
   const handleDatePreset = (preset: string) => {
-    const to = new Date();
     let from: Date | undefined;
+    const to = new Date();
 
     switch (preset) {
-      case 'today': from = new Date(); break;
-      case '7days': from = new Date(); from.setDate(from.getDate() - 6); break;
-      case '30days': from = new Date(); from.setDate(from.getDate() - 29); break;
-      case '6months': from = new Date(); from.setMonth(from.getMonth() - 6); break;
-      case 'all': from = undefined; break;
+      case 'today': 
+        from = new Date();
+        break;
+      case 'yesterday':
+        from = subDays(new Date(), 1);
+        setDate({ from, to: from });
+        return;
+      case '7days': 
+        from = new Date(); 
+        from.setDate(from.getDate() - 6); 
+        break;
+      case '30days': 
+        from = new Date(); 
+        from.setDate(from.getDate() - 29); 
+        break;
+      case '6months': 
+        from = new Date(); 
+        from.setMonth(from.getMonth() - 6); 
+        break;
+      case 'all': 
+        from = undefined; 
+        break;
     }
      setDate(preset === 'all' ? undefined : { from, to });
   };
@@ -258,6 +276,7 @@ export default function InventoryDetailPage() {
               <SelectContent>
                   <SelectItem value="all">Ver todo</SelectItem>
                   <SelectItem value="today">Hoy</SelectItem>
+                  <SelectItem value="yesterday">Ayer</SelectItem>
                   <SelectItem value="7days">Últimos 7 días</SelectItem>
                   <SelectItem value="30days">Últimos 30 días</SelectItem>
                   <SelectItem value="6months">Últimos 6 meses</SelectItem>
@@ -512,3 +531,5 @@ export default function InventoryDetailPage() {
     </div>
   );
 }
+
+  

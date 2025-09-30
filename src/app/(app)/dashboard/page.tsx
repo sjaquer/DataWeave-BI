@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
@@ -53,6 +53,10 @@ export default function Dashboard() {
 
     switch (preset) {
       case 'today': from = new Date(); break;
+      case 'yesterday': 
+        from = subDays(new Date(), 1);
+        setDate({ from, to: from });
+        return;
       case '7days': from = new Date(); from.setDate(from.getDate() - 6); break;
       case '30days': from = new Date(); from.setDate(from.getDate() - 29); break;
       case '6months': from = new Date(); from.setMonth(from.getMonth() - 6); break;
@@ -284,9 +288,9 @@ export default function Dashboard() {
   
   const dailyVariation = miscMetrics?.dailyOrderVariation ?? 0;
   
-  const renderProductList = (products: ProductMetric[]) => (
+  const renderProductList = (products: ProductMetric[] | undefined) => (
     <ul className="space-y-3">
-      {products.length > 0 ? (
+      {products && products.length > 0 ? (
         products.slice(0, 5).map((product, index) => (
           <li key={product.name} className="flex justify-between items-center text-sm">
             <span className="truncate pr-4">{index + 1}. {product.name}</span>
@@ -299,19 +303,19 @@ export default function Dashboard() {
     </ul>
   );
 
-  const renderProductConfirmationList = (products: ProductConfirmationRate[]) => (
+  const renderProductConfirmationList = (products: ProductConfirmationRate[] | undefined) => (
     <ul className="space-y-4">
-        {products.length > 0 ? (
+        {products && products.length > 0 ? (
             products.slice(0, 10).map(product => {
-                const rateColor = product.confirmationRate < 30 ? "bg-red-500/20" : product.confirmationRate < 50 ? "bg-yellow-500/20" : "bg-green-500/20";
-                const rateTextColor = product.confirmationRate < 30 ? "text-red-500" : product.confirmationRate < 50 ? "text-yellow-500" : "text-green-500";
+                const rateColorClass = product.confirmationRate < 30 ? "bg-red-500/20" : product.confirmationRate < 50 ? "bg-yellow-500/20" : "bg-green-500/20";
+                const rateTextColorClass = product.confirmationRate < 30 ? "text-red-500" : product.confirmationRate < 50 ? "text-yellow-500" : "text-green-500";
                 return (
                     <li key={product.name} className="text-sm">
                         <div className="flex justify-between items-center mb-1">
                             <span className="truncate pr-4 font-medium">{product.name}</span>
-                            <span className={`font-bold ${rateTextColor}`}>{product.confirmationRate.toFixed(1)}%</span>
+                            <span className={`font-bold ${rateTextColorClass}`}>{product.confirmationRate.toFixed(1)}%</span>
                         </div>
-                        <Progress value={product.confirmationRate} className={`h-2 ${rateColor}`} />
+                        <Progress value={product.confirmationRate} className={`h-2 ${rateColorClass}`} />
                         <div className="flex justify-between items-center mt-1 text-xs text-muted-foreground">
                             <span>Pedidos: {product.requested}</span>
                             <span>Confirmados: {product.confirmed}</span>
@@ -326,7 +330,8 @@ export default function Dashboard() {
 );
 
   
-  const TrendIndicator = ({ value }: { value: number }) => {
+  const TrendIndicator = ({ value }: { value: number | undefined }) => {
+    if (value === undefined) return null;
     const isPositive = value > 0;
     const isNegative = value < 0;
     const color = isPositive ? 'text-green-500' : isNegative ? 'text-red-500' : 'text-muted-foreground';
@@ -357,6 +362,7 @@ export default function Dashboard() {
               </SelectTrigger>
               <SelectContent>
                   <SelectItem value="today">Hoy</SelectItem>
+                  <SelectItem value="yesterday">Ayer</SelectItem>
                   <SelectItem value="7days">Últimos 7 días</SelectItem>
                   <SelectItem value="30days">Últimos 30 días</SelectItem>
                   <SelectItem value="6months">Últimos 6 meses</SelectItem>
@@ -429,7 +435,9 @@ export default function Dashboard() {
               <Percent className="h-5 w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">{globalRate.toFixed(2)}%</div>
+              <div className={cn("text-4xl font-bold", globalRate < 30 ? "text-red-500" : globalRate < 50 ? "text-yellow-500" : "text-green-500")}>
+                {globalRate.toFixed(2)}%
+              </div>
                <p className="text-xs text-muted-foreground">Porcentaje de confirmados.</p>
             </CardContent>
           </Card>
@@ -484,7 +492,7 @@ export default function Dashboard() {
                                         <p className="text-xs text-muted-foreground">Confirmación</p>
                                     </div>
                                   </div>
-                                  {store.sevenDayTrend !== undefined && <TrendIndicator value={store.sevenDayTrend} />}
+                                  <TrendIndicator value={store.sevenDayTrend} />
                               </CardHeader>
                               <CardContent className="space-y-4">
                                 <div className="grid grid-cols-3 gap-4 text-center">
@@ -597,7 +605,7 @@ export default function Dashboard() {
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
                   <CardDescription>{selectedStore === 'all' ? 'Top 10 provincias con más pedidos y su gasto total.' : `Este gráfico muestra datos globales.`}</CardDescription>
               </CardHeader>
-              <CardContent className="h-96">
+              <CardContent className="h-96 overflow-auto">
                 <ChartContainer config={{
                     totalOrders: { label: "Pedidos Totales", color: "hsl(var(--chart-1))" },
                     totalSpent: { label: "Gasto Total", color: "hsl(var(--chart-2))" },
@@ -640,7 +648,7 @@ export default function Dashboard() {
                 <CardDescription>Top 10 productos más pedidos y su tasa de confirmación.</CardDescription>
             </CardHeader>
             <CardContent className="h-96 overflow-auto">
-                {renderProductConfirmationList(productConfirmationRates || [])}
+                {renderProductConfirmationList(productConfirmationRates)}
             </CardContent>
           </Card>
       </div>
@@ -652,7 +660,7 @@ export default function Dashboard() {
                     <CardDescription>{selectedStore === 'all' ? 'Productos con mayor demanda (confirmados o no).' : 'Este gráfico muestra datos globales.'}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {renderProductList(mostRequestedProducts || [])}
+                    {renderProductList(mostRequestedProducts)}
                 </CardContent>
             </Card>
 
@@ -662,7 +670,7 @@ export default function Dashboard() {
                     <CardDescription>Productos con más ventas confirmadas.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {renderProductList(mostPurchasedProducts || [])}
+                    {renderProductList(mostPurchasedProducts)}
                 </CardContent>
             </Card>
       </div>
@@ -695,3 +703,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+  

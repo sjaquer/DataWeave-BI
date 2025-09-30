@@ -380,6 +380,14 @@ const getMetricsFlow = ai.defineFlow(
         };
     }).sort((a, b) => b.suggestedPurchase - a.suggestedPurchase);
 
+    // --- NUEVA LÓGICA: TASA DE CONFIRMACIÓN POR PRODUCTO ---
+    const aggregatedProductConfirmationRates = Object.keys(requestedProductData).map(name => {
+        const requested = requestedProductData[name] || 0;
+        const confirmed = purchasedProductData[name] || 0;
+        const confirmationRate = requested > 0 ? (confirmed / requested) * 100 : 0;
+        return { name, requested, confirmed, confirmationRate };
+    }).sort((a, b) => b.requested - a.requested); // Ordenar por los más pedidos
+
 
     // Cálculo de variación diaria
     let dailyOrderVariation = 0;
@@ -414,6 +422,7 @@ const getMetricsFlow = ai.defineFlow(
       provinceMetrics: aggregatedProvinceMetrics,
       mostRequestedProducts: aggregatedRequestedProducts,
       mostPurchasedProducts: aggregatedPurchasedProducts,
+      productConfirmationRates: aggregatedProductConfirmationRates,
       personnelMetrics: aggregatedPersonnelMetrics,
       storeMetrics: aggregatedStoreMetrics,
       miscMetrics: miscMetrics,
@@ -434,7 +443,3 @@ const getMetricsFlow = ai.defineFlow(
 export async function getMetrics(input: GetMetricsInput): Promise<GetMetricsOutput> {
     return getMetricsFlow(input);
 }
-
-    
-
-    

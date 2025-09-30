@@ -40,6 +40,15 @@ export const ProductMetricSchema = z.object({
 });
 export type ProductMetric = z.infer<typeof ProductMetricSchema>;
 
+// Nuevo esquema para tasa de confirmación por producto
+export const ProductConfirmationRateSchema = z.object({
+  name: z.string(),
+  requested: z.number(),
+  confirmed: z.number(),
+  confirmationRate: z.number(),
+});
+export type ProductConfirmationRate = z.infer<typeof ProductConfirmationRateSchema>;
+
 
 export const PersonnelMetricSchema = z.object({
   name: z.string(),
@@ -145,6 +154,7 @@ export const GetMetricsOutputSchema = z.object({
     provinceMetrics: z.array(ProvinceMetricSchema),
     mostRequestedProducts: z.array(ProductMetricSchema),
     mostPurchasedProducts: z.array(ProductMetricSchema),
+    productConfirmationRates: z.array(ProductConfirmationRateSchema).optional(),
     personnelMetrics: z.array(PersonnelMetricSchema),
     storeMetrics: z.array(StoreMetricSchema),
     miscMetrics: MiscMetricsSchema,
@@ -160,5 +170,3 @@ export const GetMetricsOutputSchema = z.object({
 });
 
 export type GetMetricsOutput = z.infer<typeof GetMetricsOutputSchema>;
-
-    

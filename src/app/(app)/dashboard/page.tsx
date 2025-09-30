@@ -7,7 +7,7 @@ import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, CheckCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight, Package2, ArrowDown, ArrowUp } from "lucide-react";
+import { Loader, CheckCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight, Package2, ArrowDown, ArrowUp, BarChartHorizontal } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LabelList, LineChart, Line } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -20,9 +20,10 @@ import { useToast } from "@/hooks/use-toast";
 import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, DailyStorePerformance, DailyMetric } from "@/ai/schemas/getMetricsSchema";
+import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, DailyStorePerformance, DailyMetric, ProductConfirmationRate } from "@/ai/schemas/getMetricsSchema";
 import DashboardNav from "@/components/DashboardNav";
 import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
 
 const CACHE_KEY = 'dashboardMetricsCache_main';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
@@ -235,6 +236,7 @@ export default function Dashboard() {
       personnelMetrics: fullMetrics.personnelMetrics, // This is global across stores
       storeMetrics: fullMetrics.storeMetrics.filter(sm => sm.name.toLowerCase() === lowerCaseStoreName),
       dailyStorePerformance: fullMetrics.dailyStorePerformance, // Keep this global for comparison
+      productConfirmationRates: fullMetrics.productConfirmationRates,
     };
     
     setDisplayMetrics(newDisplayMetrics);
@@ -270,7 +272,8 @@ export default function Dashboard() {
     mostRequestedProducts,
     mostPurchasedProducts,
     storeMetrics,
-    dailyStorePerformance
+    dailyStorePerformance,
+    productConfirmationRates
   } = displayMetrics || {};
 
   const globalTotal = (miscMetrics?.globalConfirmed ?? 0) + (miscMetrics?.globalUnconfirmed ?? 0);
@@ -295,6 +298,33 @@ export default function Dashboard() {
       )}
     </ul>
   );
+
+  const renderProductConfirmationList = (products: ProductConfirmationRate[]) => (
+    <ul className="space-y-4">
+        {products.length > 0 ? (
+            products.slice(0, 10).map(product => {
+                const rateColor = product.confirmationRate < 30 ? "bg-red-500/20" : product.confirmationRate < 50 ? "bg-yellow-500/20" : "bg-green-500/20";
+                const rateTextColor = product.confirmationRate < 30 ? "text-red-500" : product.confirmationRate < 50 ? "text-yellow-500" : "text-green-500";
+                return (
+                    <li key={product.name} className="text-sm">
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="truncate pr-4 font-medium">{product.name}</span>
+                            <span className={`font-bold ${rateTextColor}`}>{product.confirmationRate.toFixed(1)}%</span>
+                        </div>
+                        <Progress value={product.confirmationRate} className={`h-2 ${rateColor}`} />
+                        <div className="flex justify-between items-center mt-1 text-xs text-muted-foreground">
+                            <span>Pedidos: {product.requested}</span>
+                            <span>Confirmados: {product.confirmed}</span>
+                        </div>
+                    </li>
+                )
+            })
+        ) : (
+             <li className="text-center text-muted-foreground">No hay datos.</li>
+        )}
+    </ul>
+);
+
   
   const TrendIndicator = ({ value }: { value: number }) => {
     const isPositive = value > 0;
@@ -604,30 +634,14 @@ export default function Dashboard() {
               </div>
           </Card>
             
-            <Card>
-              <CardHeader>
-                  <CardTitle className="flex items-center"><CalendarIcon className="mr-2 h-5 w-5" />Análisis Diario</CardTitle>
-                  <CardDescription>Resumen general de la actividad diaria de pedidos.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                 <div className="grid grid-cols-2 gap-4 text-center">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Pedidos</p>
-                      <p className="text-2xl font-bold">{globalTotal.toLocaleString()}</p>
-                    </div>
-                     <div>
-                      <p className="text-sm text-muted-foreground">Tasa de Confirmación</p>
-                      <p className="text-2xl font-bold">{globalRate.toFixed(2)}%</p>
-                    </div>
-                 </div>
-              </CardContent>
-               <div className="p-4 pt-0 text-center">
-                  <Link href="/dashboard/daily" passHref>
-                    <Button variant="outline" className="w-full sm:w-auto">
-                        Ver Desglose por Día y Tienda <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </Link>
-              </div>
+          <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center"><Percent className="mr-2 h-5 w-5" />Tasa de Confirmación por Producto</CardTitle>
+                <CardDescription>Top 10 productos más pedidos y su tasa de confirmación.</CardDescription>
+            </CardHeader>
+            <CardContent className="h-96 overflow-auto">
+                {renderProductConfirmationList(productConfirmationRates || [])}
+            </CardContent>
           </Card>
       </div>
 
@@ -681,5 +695,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-    

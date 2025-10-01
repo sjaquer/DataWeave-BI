@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     
     // El orden de los parámetros es crucial para una firma válida.
     const sortedKeys = Object.keys(params).sort();
-    const queryArray = sortedKeys.map(key => `${key}=${encodeURIComponent(params[key])}`);
+    const queryArray = sortedKeys.map(key => `${key}=${params[key]}`);
     const queryString = queryArray.join('&');
 
     // Creación de la firma HMAC-SHA1
@@ -42,7 +42,8 @@ export async function GET(req: Request) {
     const signature = hmac.digest('hex');
 
     // Construcción de la URL final para la petición
-    const apiUrl = `https://api.zadarma.com${method}?${queryString}`;
+    const urlParams = new URLSearchParams(params);
+    const apiUrl = `https://api.zadarma.com${method}?${urlParams.toString()}`;
     
     // Realización de la petición a la API de Zadarma
     const response = await fetch(apiUrl, {

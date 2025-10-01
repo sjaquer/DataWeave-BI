@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   const { ZADARMA_API_KEY, ZADARMA_API_SECRET } = process.env;
 
   if (!ZADARMA_API_KEY || !ZADARMA_API_SECRET) {
-    console.error("Error: Las credenciales de la API de Zadarma no están configuradas en .env");
+    console.error("Error: Las credenciales de la API de Zadarma no están configuradas en .env o están vacías.");
     return NextResponse.json({
       status: 'error',
       message: 'La configuración del servidor está incompleta. Faltan las credenciales de la API de Zadarma en el archivo .env.'
@@ -42,8 +42,9 @@ export async function GET(req: Request) {
     const signature = hmac.digest('hex');
 
     // Construcción de la URL final para la petición
-    const urlParams = new URLSearchParams(params);
-    const apiUrl = `https://api.zadarma.com${method}?${urlParams.toString()}`;
+    // URLSearchParams puede reordenar las claves, lo cual invalida la firma de Zadarma.
+    // Por eso, construimos la cadena de consulta manualmente.
+    const apiUrl = `https://api.zadarma.com${method}?${queryString}`;
     
     // Realización de la petición a la API de Zadarma
     const response = await fetch(apiUrl, {
@@ -57,7 +58,7 @@ export async function GET(req: Request) {
     
     if (data.status === 'error' || !response.ok) {
         const errorMessage = data.message || `El servidor de Zadarma respondió con un error: ${response.statusText}`;
-        console.error("Respuesta de error de la API de Zadarma:", errorMessage);
+        console.error("Respuesta de error de la API de Zadarma:", errorMessage, data);
         throw new Error(errorMessage);
     }
 

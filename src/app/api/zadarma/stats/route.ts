@@ -14,7 +14,7 @@ export async function GET(req: Request) {
     console.error("Error: Las credenciales de la API de Zadarma no están configuradas en .env");
     return NextResponse.json({
       status: 'error',
-      message: 'La configuración del servidor está incompleta. Faltan las credenciales de la API de Zadarma.'
+      message: 'La configuración del servidor está incompleta. Faltan las credenciales de la API de Zadarma en el archivo .env.'
     }, { status: 500 });
   }
 

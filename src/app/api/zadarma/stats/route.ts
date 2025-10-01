@@ -14,12 +14,12 @@ export async function GET(req: Request) {
     console.error("Error: Las credenciales de la API de Zadarma no están configuradas en .env o están vacías.");
     return NextResponse.json({
       status: 'error',
-      message: 'La configuración del servidor está incompleta. Faltan las credenciales de la API de Zadarma en el archivo .env.'
+      message: 'La configuración del servidor está incompleta. Faltan las credenciales de la API de Zadarma.'
     }, { status: 500 });
   }
 
   try {
-    const method = '/v1/statistics/';
+    const method = '/v1/statistics/pbx/';
     const now = new Date();
     // Por defecto, obtenemos las estadísticas del día actual.
     const startDate = format(now, 'yyyy-MM-dd 00:00:00');
@@ -29,14 +29,14 @@ export async function GET(req: Request) {
       start: startDate,
       end: endDate,
       format: 'json',
+      version: '2' // Usamos la versión 2 que es la más reciente
     };
     
     // 1. Ordenar los parámetros alfabéticamente por clave.
     const sortedKeys = Object.keys(params).sort();
     
     // 2. Crear la cadena de consulta (query string).
-    const queryArray = sortedKeys.map(key => `${key}=${params[key]}`);
-    const queryString = queryArray.join('&');
+    const queryString = sortedKeys.map(key => `${key}=${params[key]}`).join('&');
 
     // 3. Crear la cadena completa para la firma.
     const dataToSign = method + queryString + crypto.createHash('md5').update(queryString).digest('hex');

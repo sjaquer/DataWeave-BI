@@ -14,13 +14,13 @@ import { es } from "date-fns/locale";
 
 // Tipado para los datos de las llamadas que esperamos de nuestra API
 interface ZadarmaCall {
-  id: string;
+  pbx_call_id: string;
   call_start: string;
-  internal: string;
-  caller_id: string;
+  sip: string; // "internal" en la otra API
+  clid: string; // "caller_id" en la otra API
   destination: string;
   disposition: "answered" | "busy" | "cancel" | "no answer" | "failed" | "congestion";
-  duration: number;
+  seconds: number; // "duration" en la otra API
   is_recorded: boolean;
 }
 
@@ -41,8 +41,6 @@ export default function CallCenterPage() {
   const fetchCallStats = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
     try {
-      // Por ahora, siempre refrescamos para obtener los últimos datos.
-      // En el futuro, podríamos cachear esto.
       const response = await fetch('/api/zadarma/stats');
       const data = await response.json();
 
@@ -111,7 +109,7 @@ export default function CallCenterPage() {
               <TableHeader className="sticky top-0 bg-card">
                 <TableRow>
                   <TableHead>Fecha y Hora</TableHead>
-                  <TableHead>Agente</TableHead>
+                  <TableHead>Agente (SIP)</TableHead>
                   <TableHead>Origen</TableHead>
                   <TableHead>Destino</TableHead>
                   <TableHead className="text-center">Duración</TableHead>
@@ -121,14 +119,14 @@ export default function CallCenterPage() {
               <TableBody>
                 {callStats.length > 0 ? (
                   callStats.map((call) => (
-                    <TableRow key={call.id}>
+                    <TableRow key={call.pbx_call_id}>
                       <TableCell className="font-medium">
-                        {format(parseISO(call.call_start), "d MMM yyyy, HH:mm:ss", { locale: es })}
+                        {format(new Date(call.call_start), "d MMM yyyy, HH:mm:ss", { locale: es })}
                       </TableCell>
-                      <TableCell>{call.internal}</TableCell>
-                      <TableCell>{call.caller_id}</TableCell>
+                      <TableCell>{call.sip}</TableCell>
+                      <TableCell>{call.clid}</TableCell>
                       <TableCell>{call.destination}</TableCell>
-                      <TableCell className="text-center">{formatDuration(call.duration)}</TableCell>
+                      <TableCell className="text-center">{formatDuration(call.seconds)}</TableCell>
                       <TableCell className="text-right">
                         <Badge variant={dispositionMap[call.disposition]?.variant || "secondary"}>
                           {dispositionMap[call.disposition]?.text || call.disposition}

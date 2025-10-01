@@ -77,6 +77,7 @@ export const StoreMetricSchema = z.object({
     count: z.number()
   })),
   dailyOrderVariation: z.number().optional(),
+  confirmationRateTrend: z.number().optional(),
 });
 export type StoreMetric = z.infer<typeof StoreMetricSchema>;
 
@@ -187,5 +188,7 @@ export const GetMetricsOutputSchema = z.object({
 });
 
 export type GetMetricsOutput = z.infer<typeof GetMetricsOutputSchema>;
+
+    
 
     

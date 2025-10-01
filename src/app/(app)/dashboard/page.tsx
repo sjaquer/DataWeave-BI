@@ -7,7 +7,7 @@ import { format, subDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, CheckCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight, Package2, ArrowDown, ArrowUp, BarChartHorizontal, PieChart as PieChartIcon } from "lucide-react";
+import { Loader, CheckCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight, Package2, ArrowDown, ArrowUp, BarChartHorizontal, PieChart as PieChartIcon, TrendingDown } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LabelList, LineChart, Line, PieChart, Pie, Cell } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -350,17 +350,21 @@ export default function Dashboard() {
 };
 
   
-  const TrendIndicator = ({ value }: { value: number | undefined }) => {
+  const TrendIndicator = ({ value, text, type = 'percent' }: { value: number | undefined; text: string, type?: 'percent' | 'points' }) => {
     if (value === undefined) return null;
     const isPositive = value > 0;
     const isNegative = value < 0;
     const color = isPositive ? 'text-green-500' : isNegative ? 'text-red-500' : 'text-muted-foreground';
-    const Icon = isPositive ? ArrowUp : isNegative ? ArrowDown : ArrowRight;
+    const Icon = isPositive ? TrendingUp : isNegative ? TrendingDown : ArrowRight;
+
+    const formattedValue = type === 'percent' 
+      ? `${value.toFixed(1)}%` 
+      : `${value.toFixed(1)} pp`; // pp = puntos porcentuales
 
     return (
         <div className={`flex items-center text-xs font-semibold ${color}`}>
             <Icon className="h-3 w-3 mr-1" />
-            {value.toFixed(1)}% vs día anterior
+            {isPositive && '+'}{formattedValue} {text}
         </div>
     );
   };
@@ -512,7 +516,10 @@ export default function Dashboard() {
                                         <p className="text-xs text-muted-foreground">Confirmación</p>
                                     </div>
                                   </div>
-                                  <TrendIndicator value={store.dailyOrderVariation} />
+                                  <div className="w-full space-y-1">
+                                    <TrendIndicator value={store.dailyOrderVariation} text="vs día anterior" />
+                                    <TrendIndicator value={store.confirmationRateTrend} text="vs día anterior" type="points" />
+                                  </div>
                               </CardHeader>
                               <CardContent className="space-y-4">
                                 <div className="grid grid-cols-3 gap-4 text-center">
@@ -768,5 +775,7 @@ export default function Dashboard() {
   );
 }
 
+
+    
 
     

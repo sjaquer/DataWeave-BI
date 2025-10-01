@@ -48,10 +48,12 @@ export default function CallCenterPage() {
 
       if (response.ok && data.status === 'success') {
         setCallStats(data.stats || []);
-        toast({
-          title: "Estadísticas de llamadas actualizadas",
-          description: `Se encontraron ${data.stats?.length || 0} registros.`,
-        });
+        if (forceRefresh) {
+            toast({
+                title: "Estadísticas de llamadas actualizadas",
+                description: `Se encontraron ${data.stats?.length || 0} registros para hoy.`,
+            });
+        }
       } else {
         throw new Error(data.message || "Error al obtener los datos de Zadarma.");
       }
@@ -101,7 +103,7 @@ export default function CallCenterPage() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center"><Phone className="mr-2 h-5 w-5" />Últimas 100 Llamadas</CardTitle>
+            <CardTitle className="flex items-center"><Phone className="mr-2 h-5 w-5" />Llamadas del Día</CardTitle>
             <CardDescription>Registro de las llamadas más recientes procesadas por Zadarma.</CardDescription>
           </CardHeader>
           <CardContent className="overflow-auto max-h-[70vh] p-2">
@@ -137,7 +139,7 @@ export default function CallCenterPage() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6} className="h-24 text-center">
-                      No se encontraron registros de llamadas. Verifica tu conexión o el rango de fechas.
+                      No se encontraron registros de llamadas para el día de hoy.
                     </TableCell>
                   </TableRow>
                 )}

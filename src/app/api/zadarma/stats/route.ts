@@ -53,17 +53,12 @@ export async function GET(req: Request) {
       }
     });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Error de la API de Zadarma (${response.status}): ${errorText}`);
-        throw new Error(`El servidor de Zadarma respondió con un error: ${response.statusText}`);
-    }
-
     const data = await response.json();
-
-    if (data.status === 'error') {
-        console.error("Respuesta de error de la API de Zadarma:", data.message);
-        throw new Error(`Error en la respuesta de Zadarma: ${data.message}`);
+    
+    if (data.status === 'error' || !response.ok) {
+        const errorMessage = data.message || `El servidor de Zadarma respondió con un error: ${response.statusText}`;
+        console.error("Respuesta de error de la API de Zadarma:", errorMessage);
+        throw new Error(errorMessage);
     }
 
     // Devolvemos las estadísticas encontradas. El campo `stats` contiene el array de llamadas.

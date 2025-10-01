@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 interface DashboardNavProps {
-  active: 'main' | 'provinces' | 'daily' | 'inventory' | 'inventory-status' | 'returns';
+  active: 'main' | 'provinces' | 'daily' | 'inventory' | 'inventory-status' | 'returns' | 'call-center';
 }
 
 export default function DashboardNav({ active }: DashboardNavProps) {
@@ -14,6 +14,11 @@ export default function DashboardNav({ active }: DashboardNavProps) {
       <Link href="/dashboard" passHref className="flex-1">
         <Button variant={active === 'main' ? "default" : "ghost"} size="sm" className="w-full">
           Dashboard Principal
+        </Button>
+      </Link>
+       <Link href="/dashboard/call-center" passHref className="flex-1">
+        <Button variant={active === 'call-center' ? "default" : "ghost"} size="sm" className="w-full">
+          Call Center
         </Button>
       </Link>
       <Link href="/dashboard/provinces" passHref className="flex-1">
@@ -44,5 +49,3 @@ export default function DashboardNav({ active }: DashboardNavProps) {
     </div>
   );
 }
-
-    

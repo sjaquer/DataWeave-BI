@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import DashboardNav from "@/components/DashboardNav";
 import { Badge } from "@/components/ui/badge";
-import { format, parseISO } from "date-fns";
+import { format, parse } from "date-fns";
 import { es } from "date-fns/locale";
 
 // Tipado para los datos de las llamadas que esperamos de nuestra API
@@ -77,6 +77,20 @@ export default function CallCenterPage() {
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
+  const formatCallDate = (dateString: string | undefined) => {
+    if (!dateString) {
+      return "Fecha no disponible";
+    }
+    try {
+      // Usamos parse para interpretar correctamente el formato "yyyy-MM-dd HH:mm:ss"
+      const date = parse(dateString, "yyyy-MM-dd HH:mm:ss", new Date());
+      return format(date, "d MMM yyyy, HH:mm:ss", { locale: es });
+    } catch (error) {
+      console.error("Error al formatear la fecha:", dateString, error);
+      return "Fecha inválida";
+    }
+  };
+
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -121,7 +135,7 @@ export default function CallCenterPage() {
                   callStats.map((call) => (
                     <TableRow key={call.pbx_call_id}>
                       <TableCell className="font-medium">
-                        {format(new Date(call.call_start), "d MMM yyyy, HH:mm:ss", { locale: es })}
+                        {formatCallDate(call.call_start)}
                       </TableCell>
                       <TableCell>{call.sip}</TableCell>
                       <TableCell>{call.clid}</TableCell>

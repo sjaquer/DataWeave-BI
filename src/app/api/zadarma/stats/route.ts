@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { format } from 'date-fns';
@@ -35,18 +34,25 @@ export async function GET(req: Request) {
     // 1. Ordenar los parámetros alfabéticamente por clave.
     const sortedKeys = Object.keys(params).sort();
     
-    // 2. Crear la cadena de consulta (query string) siguiendo el formato RFC1738 (http_build_query).
+    // 2. Crear la cadena de consulta (query string).
     const searchParams = new URLSearchParams();
     sortedKeys.forEach(key => searchParams.append(key, params[key]));
-    const queryString = searchParams.toString(); // No reemplazar %20 con +, dejar que fetch lo maneje.
+    const queryString = searchParams.toString();
 
-    // 3. Crear la cadena completa para la firma, según la fórmula: method + queryString + md5(queryString)
+    // 3. Crear la cadena para la firma según la fórmula de la documentación de Python.
     const dataToSign = method + queryString + crypto.createHash('md5').update(queryString).digest('hex');
     
-    // 4. Generar la firma HMAC-SHA1 y codificarla en Base64.
+    // 4. Generar la firma HMAC-SHA1.
     const hmac = crypto.createHmac('sha1', ZADARMA_API_SECRET);
     hmac.update(dataToSign);
-    const signature = hmac.digest('base64');
+
+    // 5. Convertir el hash a HEXADECIMAL.
+    const hmacHex = hmac.digest('hex');
+
+    // 6. Codificar la cadena HEXADECIMAL en Base64.
+    const signature = Buffer.from(hmacHex).toString('base64');
+    
+    const authHeader = `${ZADARMA_API_KEY}:${signature}`;
 
     // Construcción de la URL final para la petición.
     const apiUrl = `https://api.zadarma.com${method}?${queryString}`;
@@ -55,7 +61,7 @@ export async function GET(req: Request) {
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `${ZADARMA_API_KEY}:${signature}`
+        'Authorization': authHeader
       }
     });
 

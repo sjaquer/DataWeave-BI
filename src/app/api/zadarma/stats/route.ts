@@ -35,8 +35,13 @@ export async function GET(req: Request) {
     // 1. Ordenar los parámetros alfabéticamente por clave.
     const sortedKeys = Object.keys(params).sort();
     
-    // 2. Crear la cadena de consulta (query string).
-    const queryString = sortedKeys.map(key => `${key}=${params[key]}`).join('&');
+    // 2. Crear la cadena de consulta (query string) siguiendo el formato RFC1738, que es lo que http_build_query hace.
+    // URLSearchParams codifica los espacios como %20, pero el estándar RFC1738 los codifica como '+'. 
+    // Aunque en este caso no tenemos espacios, usar un método estándar y luego ajustar si es necesario es más robusto.
+    const searchParams = new URLSearchParams();
+    sortedKeys.forEach(key => searchParams.append(key, params[key]));
+    const queryString = searchParams.toString().replace(/%20/g, '+');
+
 
     // 3. Crear la cadena completa para la firma.
     const dataToSign = method + queryString + crypto.createHash('md5').update(queryString).digest('hex');

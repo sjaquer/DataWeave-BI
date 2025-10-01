@@ -1,4 +1,5 @@
 
+
 'use server';
 /**
  * @fileOverview Flujo para obtener y consolidar todas las métricas de Firestore.
@@ -170,20 +171,37 @@ const getMetricsFlow = ai.defineFlow(
       if (isOrderConfirmed) {
           storeData[storeName].confirmedOrders++;
       }
-      if (order.createdAt && typeof order.createdAt.toDate === 'function') {
-         const utcDate = order.createdAt.toDate();
-         const localDate = adjustToLocalTimezone(utcDate);
-         const dateStr = `${String(localDate.getUTCFullYear())}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`;
-         if(!storeData[storeName].dailyConfirmed[dateStr]) {
-            storeData[storeName].dailyConfirmed[dateStr] = { confirmed: 0, total: 0, rate: 0 };
-         }
-         storeData[storeName].dailyConfirmed[dateStr].total++;
-         if(isOrderConfirmed) {
-            storeData[storeName].dailyConfirmed[dateStr].confirmed++;
-         }
-         storeData[storeName].dailyConfirmed[dateStr].rate = (storeData[storeName].dailyConfirmed[dateStr].confirmed / storeData[storeName].dailyConfirmed[dateStr].total) * 100;
-      }
     });
+
+    // --- Rellenar datos diarios para cada tienda ---
+    const allStoreNames = Object.keys(storeData);
+    const allDates = Object.keys(dailyData).sort();
+
+    if (allDates.length > 0) {
+      const startDate = new Date(allDates[0]);
+      const endDate = new Date(allDates[allDates.length - 1]);
+      
+      for (let d = startDate; d <= endDate; d.setDate(d.getDate() + 1)) {
+        const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+        
+        for (const storeName of allStoreNames) {
+          const dailyStoreData = dailyData[dateStr]?.byStore?.[storeName] || { confirmed: 0, unconfirmed: 0 };
+          const total = dailyStoreData.confirmed + dailyStoreData.unconfirmed;
+          
+          if (!storeData[storeName].dailyConfirmed[dateStr]) {
+            storeData[storeName].dailyConfirmed[dateStr] = {
+              total: total,
+              confirmed: dailyStoreData.confirmed,
+              rate: total > 0 ? (dailyStoreData.confirmed / total) * 100 : 0
+            };
+          } else {
+             storeData[storeName].dailyConfirmed[dateStr].total = total;
+             storeData[storeName].dailyConfirmed[dateStr].confirmed = dailyStoreData.confirmed;
+             storeData[storeName].dailyConfirmed[dateStr].rate = total > 0 ? (dailyStoreData.confirmed / total) * 100 : 0;
+          }
+        }
+      }
+    }
 
     // --- PROCESAMIENTO DE INVENTARIO (Inventory Movements) ---
     inventoryMovements.forEach((mov) => {
@@ -522,6 +540,8 @@ const getMetricsFlow = ai.defineFlow(
 export async function getMetrics(input: GetMetricsInput): Promise<GetMetricsOutput> {
     return getMetricsFlow(input);
 }
+
+    
 
     
 

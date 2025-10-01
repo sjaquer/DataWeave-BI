@@ -15,12 +15,13 @@ import { es } from "date-fns/locale";
 // Tipado para los datos de las llamadas que esperamos de nuestra API
 interface ZadarmaCall {
   pbx_call_id: string;
+  call_id: string; // ID único del evento de llamada
   call_start: string;
-  sip: string; // "internal" en la otra API
-  clid: string; // "caller_id" en la otra API
+  sip: string;
+  clid: string;
   destination: string;
   disposition: "answered" | "busy" | "cancel" | "no answer" | "failed" | "congestion";
-  seconds: number; // "duration" en la otra API
+  seconds: number;
   is_recorded: boolean;
 }
 
@@ -45,11 +46,22 @@ export default function CallCenterPage() {
       const data = await response.json();
 
       if (response.ok && data.status === 'success') {
-        setCallStats(data.stats || []);
+        // Filtramos para obtener un listado único por pbx_call_id, quedándonos con el registro más reciente (mayor call_id)
+        const uniqueCalls = Object.values(
+          (data.stats || []).reduce((acc: { [key: string]: ZadarmaCall }, call: ZadarmaCall) => {
+            if (!acc[call.pbx_call_id] || call.call_id > acc[call.pbx_call_id].call_id) {
+              acc[call.pbx_call_id] = call;
+            }
+            return acc;
+          }, {})
+        );
+        
+        setCallStats(uniqueCalls);
+        
         if (forceRefresh) {
             toast({
                 title: "Estadísticas de llamadas actualizadas",
-                description: `Se encontraron ${data.stats?.length || 0} registros para hoy.`,
+                description: `Se encontraron ${uniqueCalls.length} llamadas únicas para hoy.`,
             });
         }
       } else {
@@ -133,7 +145,7 @@ export default function CallCenterPage() {
               <TableBody>
                 {callStats.length > 0 ? (
                   callStats.map((call) => (
-                    <TableRow key={call.pbx_call_id}>
+                    <TableRow key={`${call.pbx_call_id}-${call.call_id}`}>
                       <TableCell className="font-medium">
                         {formatCallDate(call.call_start)}
                       </TableCell>

@@ -313,7 +313,10 @@ export default function Dashboard() {
   );
 
   const renderProductConfirmationList = (products: ProductConfirmationRate[] | undefined) => {
-    const data = products?.slice(0, 10) || [];
+    // Sort by confirmation rate descending
+    const sortedProducts = products ? [...products].sort((a, b) => b.confirmationRate - a.confirmationRate) : [];
+    const data = sortedProducts.slice(0, 10);
+    
     if (data.length === 0) {
         return <p className="text-center text-muted-foreground">No hay datos para mostrar.</p>;
     }
@@ -509,7 +512,7 @@ export default function Dashboard() {
                                         <p className="text-xs text-muted-foreground">Confirmación</p>
                                     </div>
                                   </div>
-                                  <TrendIndicator value={store.sevenDayTrend} />
+                                  <TrendIndicator value={store.dailyOrderVariation} />
                               </CardHeader>
                               <CardContent className="space-y-4">
                                 <div className="grid grid-cols-3 gap-4 text-center">
@@ -718,7 +721,7 @@ export default function Dashboard() {
           <Card>
             <CardHeader>
                 <CardTitle className="flex items-center"><Percent className="mr-2 h-5 w-5" />Tasa de Confirmación por Producto</CardTitle>
-                <CardDescription>Top 10 productos más pedidos y su tasa de confirmación.</CardDescription>
+                <CardDescription>Top 10 productos más vendidos y su tasa de éxito.</CardDescription>
             </CardHeader>
             <CardContent>
                 {renderProductConfirmationList(productConfirmationRates)}

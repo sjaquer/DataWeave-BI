@@ -31,6 +31,15 @@ const dispositionMap: { [key: string]: { text: string; variant: "default" | "sec
   congestion: { text: "Congestión", variant: "destructive" },
 };
 
+const agentMap: { [key: string]: string } = {
+  "101": "Aylen",
+  "104": "Alanis",
+  "105": "Marisol",
+  "107": "Lisset",
+  "108": "Wendy",
+  "111": "Luz",
+};
+
 export default function ZadarmaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [calls, setCalls] = useState<ZadarmaCall[]>([]);
@@ -123,7 +132,7 @@ export default function ZadarmaPage() {
                 <TableHeader>
                     <TableRow>
                     <TableHead>Fecha y Hora</TableHead>
-                    <TableHead>Agente (SIP)</TableHead>
+                    <TableHead>Agente</TableHead>
                     <TableHead>Origen</TableHead>
                     <TableHead>Destino</TableHead>
                     <TableHead className="text-center">Duración</TableHead>
@@ -135,7 +144,7 @@ export default function ZadarmaPage() {
                     calls.map((call, index) => (
                         <TableRow key={`${call.pbx_call_id}-${index}`}>
                         <TableCell className="font-medium">{formatCallDate(call.call_start)}</TableCell>
-                        <TableCell>{call.sip}</TableCell>
+                        <TableCell>{agentMap[call.sip] || call.sip}</TableCell>
                         <TableCell>{call.clid}</TableCell>
                         <TableCell>{call.destination}</TableCell>
                         <TableCell className="text-center">{formatDuration(call.seconds)}</TableCell>

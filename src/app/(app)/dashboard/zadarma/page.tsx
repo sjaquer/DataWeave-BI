@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -9,6 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import DashboardNav from "@/components/DashboardNav";
 import { Badge } from "@/components/ui/badge";
+import { format, parse } from "date-fns";
+
 
 // Tipado para los datos de las llamadas que esperamos de nuestra API
 interface ZadarmaCall {
@@ -74,6 +75,21 @@ export default function ZadarmaPage() {
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
+  const formatCallDate = (dateString: string) => {
+    if (!dateString) {
+      return "No disponible";
+    }
+    try {
+      // Parseamos la fecha indicando el formato exacto que nos da la API
+      const date = parse(dateString, 'yyyy-MM-dd HH:mm:ss', new Date());
+      // La formateamos a un formato más amigable
+      return format(date, 'dd/MM/yyyy HH:mm');
+    } catch (error) {
+      console.error(`Error al formatear la fecha: ${dateString}`, error);
+      return "Fecha inválida";
+    }
+  };
+
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -118,7 +134,7 @@ export default function ZadarmaPage() {
                     {calls.length > 0 ? (
                     calls.map((call, index) => (
                         <TableRow key={`${call.pbx_call_id}-${index}`}>
-                        <TableCell className="font-medium">{call.call_start || "No disponible"}</TableCell>
+                        <TableCell className="font-medium">{formatCallDate(call.call_start)}</TableCell>
                         <TableCell>{call.sip}</TableCell>
                         <TableCell>{call.clid}</TableCell>
                         <TableCell>{call.destination}</TableCell>

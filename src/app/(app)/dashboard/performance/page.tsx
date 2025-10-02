@@ -1,15 +1,21 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader, RefreshCw, PhoneForwarded, Users, Clock, CheckCircle, XCircle } from "lucide-react";
+import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import DashboardNav from "@/components/DashboardNav";
 import { Badge } from "@/components/ui/badge";
-import { format, parse } from "date-fns";
+import { format, parse, subDays } from "date-fns";
+import { es } from "date-fns/locale";
+import { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 
 // --- Tipos de Datos ---
 interface ZadarmaCall {
@@ -47,11 +53,47 @@ export default function AdvisorPerformancePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [performanceData, setPerformanceData] = useState<AdvisorPerformance[]>([]);
   const { toast } = useToast();
+  const [date, setDate] = useState<DateRange | undefined>(() => {
+    const today = new Date();
+    return { from: today, to: today };
+  });
+
+  const handleDatePreset = (preset: string) => {
+    const to = new Date();
+    let from: Date | undefined;
+
+    switch (preset) {
+      case 'today':
+        from = new Date();
+        break;
+      case 'yesterday':
+        from = subDays(new Date(), 1);
+        setDate({ from, to: from });
+        return;
+      case '7days':
+        from = new Date();
+        from.setDate(from.getDate() - 6);
+        break;
+      case '30days':
+        from = new Date();
+        from.setDate(from.getDate() - 29);
+        break;
+      case 'all':
+        from = undefined;
+        break;
+    }
+    setDate({ from, to });
+  };
+
 
   const fetchAndProcessData = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/zadarma/stats');
+      const params = new URLSearchParams();
+      if (date?.from) params.append('startDate', date.from.toISOString());
+      if (date?.to) params.append('endDate', date.to.toISOString());
+
+      const response = await fetch(`/api/zadarma/stats?${params.toString()}`);
       const data = await response.json();
 
       if (!response.ok || data.status !== 'success') {
@@ -61,7 +103,6 @@ export default function AdvisorPerformancePage() {
       // --- Lógica de Agregación de Datos ---
       const performanceByAgent: { [key: string]: AdvisorPerformance } = {};
 
-      // Inicializar todos los agentes del mapa para que aparezcan aunque no tengan llamadas
       Object.keys(agentMap).forEach(agentId => {
         performanceByAgent[agentId] = {
           id: agentId,
@@ -79,14 +120,12 @@ export default function AdvisorPerformancePage() {
       calls.forEach(call => {
         const agentId = call.sip;
 
-        // Si el agente no está en nuestro mapa, lo ignoramos
         if (!performanceByAgent[agentId]) {
           return;
         }
 
         const agentData = performanceByAgent[agentId];
         
-        // Contar solo llamadas salientes (cuando el destino NO es una extensión interna)
         const destinationStr = String(call.destination);
         if (destinationStr.length > 3) {
             agentData.totalCalls += 1;
@@ -109,7 +148,6 @@ export default function AdvisorPerformancePage() {
         }
       });
       
-      // Calcular tasa de efectividad y ordenar
       const finalPerformanceData = Object.values(performanceByAgent).map(agent => {
         agent.effectivenessRate = agent.totalCalls > 0 ? (agent.effectiveCalls / agent.totalCalls) * 100 : 0;
         return agent;
@@ -133,11 +171,12 @@ export default function AdvisorPerformancePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, date]);
 
   useEffect(() => {
     fetchAndProcessData();
-  }, [fetchAndProcessData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
 
   const getCallCountColor = (count: number): string => {
     if (count < 60) return "bg-red-500/20 text-red-500 border-red-500/50";
@@ -151,9 +190,31 @@ export default function AdvisorPerformancePage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Informe de Rendimiento de Asesores</h2>
-          <p className="text-muted-foreground">Métricas clave de la actividad de llamadas del día.</p>
+          <p className="text-muted-foreground">Métricas clave de la actividad de llamadas del período seleccionado.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+           <Select onValueChange={handleDatePreset}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Filtro Rápido" />
+              </SelectTrigger>
+              <SelectContent>
+                  <SelectItem value="today">Hoy</SelectItem>
+                  <SelectItem value="yesterday">Ayer</SelectItem>
+                  <SelectItem value="7days">Últimos 7 días</SelectItem>
+                  <SelectItem value="30days">Últimos 30 días</SelectItem>
+              </SelectContent>
+          </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {date?.from ? (date.to ? (<>{format(date.from, "LLL dd, y", { locale: es })} - {format(date.to, "LLL dd, y", { locale: es })}</>) : (format(date.from, "LLL dd, y", { locale: es }))) : (<span>Selecciona un rango</span>)}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
+            </PopoverContent>
+          </Popover>
           <Button variant="outline" size="sm" onClick={() => fetchAndProcessData(true)} disabled={isLoading}>
             {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Actualizar
@@ -172,7 +233,7 @@ export default function AdvisorPerformancePage() {
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Rendimiento por Asesor</CardTitle>
-                <CardDescription>Resumen de actividad de llamadas salientes para el día de hoy.</CardDescription>
+                <CardDescription>Resumen de actividad de llamadas salientes para el período seleccionado.</CardDescription>
             </CardHeader>
             <CardContent className="overflow-auto max-h-[70vh] p-2">
                 <Table>
@@ -217,7 +278,7 @@ export default function AdvisorPerformancePage() {
                     ) : (
                     <TableRow>
                         <TableCell colSpan={6} className="h-24 text-center">
-                            No se encontraron datos de rendimiento para el día de hoy.
+                            No se encontraron datos de rendimiento para el período seleccionado.
                         </TableCell>
                     </TableRow>
                     )}

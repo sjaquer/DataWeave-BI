@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { format } from 'date-fns';
+import { format, startOfDay, endOfDay } from 'date-fns';
 import * as dotenv from 'dotenv';
 import CryptoJS from 'crypto-js';
 
@@ -7,9 +7,9 @@ dotenv.config();
 
 /**
  * Endpoint para obtener estadísticas de llamadas desde la API de Zadarma.
- * Recrea la lógica de autenticación del cliente de Python.
+ * Acepta parámetros de consulta 'startDate' y 'endDate' (en formato ISO).
  */
-export async function GET() {
+export async function GET(req: Request) {
   const { ZADARMA_API_KEY, ZADARMA_API_SECRET } = process.env;
 
   if (!ZADARMA_API_KEY || !ZADARMA_API_SECRET) {
@@ -21,33 +21,36 @@ export async function GET() {
   }
 
   try {
-    const method = '/v1/statistics/pbx/';
-    const now = new Date();
-    const startDate = format(now, 'yyyy-MM-dd 00:00:00');
-    const endDate = format(now, 'yyyy-MM-dd 23:59:59');
+    const { searchParams } = new URL(req.url);
+    const startDateQuery = searchParams.get('startDate');
+    const endDateQuery = searchParams.get('endDate');
 
+    // Si no se proporcionan fechas, usar el día actual.
+    const start = startDateQuery ? new Date(startDateQuery) : startOfDay(new Date());
+    const end = endDateQuery ? new Date(endDateQuery) : endOfDay(new Date());
+
+    const formattedStartDate = format(start, 'yyyy-MM-dd HH:mm:ss');
+    const formattedEndDate = format(end, 'yyyy-MM-dd HH:mm:ss');
+
+    const method = '/v1/statistics/pbx/';
     const params: { [key: string]: string } = {
-      start: startDate,
-      end: endDate,
+      start: formattedStartDate,
+      end: formattedEndDate,
       format: 'json',
       version: '2'
     };
     
-    // 1. Ordenar los parámetros alfabéticamente por clave.
     const sortedKeys = Object.keys(params).sort();
     const sortedParams = new URLSearchParams();
     sortedKeys.forEach(key => sortedParams.append(key, params[key]));
     const queryString = sortedParams.toString();
 
-    // 2. Crear la cadena para la firma.
     const md5Hash = CryptoJS.MD5(queryString).toString(CryptoJS.enc.Hex);
     const dataToSign = method + queryString + md5Hash;
     
-    // 3. Generar la firma HMAC-SHA1.
     const hmac = CryptoJS.HmacSHA1(dataToSign, ZADARMA_API_SECRET);
     const hmacHex = hmac.toString(CryptoJS.enc.Hex);
 
-    // 4. Codificar la firma en Base64.
     const signature = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(hmacHex));
     
     const authHeader = `${ZADARMA_API_KEY}:${signature}`;
@@ -63,7 +66,6 @@ export async function GET() {
 
     const data = await response.json();
     
-    // *** AÑADIDO PARA DEPURACIÓN ***
     console.log('[ZADARMA API RESPONSE]:', JSON.stringify(data, null, 2));
 
     if (data.status === 'error' || !response.ok) {

@@ -63,6 +63,9 @@ export async function GET() {
 
     const data = await response.json();
     
+    // *** AÑADIDO PARA DEPURACIÓN ***
+    console.log('[ZADARMA API RESPONSE]:', JSON.stringify(data, null, 2));
+
     if (data.status === 'error' || !response.ok) {
         const errorMessage = data.message || `El servidor de Zadarma respondió con un error: ${response.statusText}`;
         console.error("Respuesta de error de la API de Zadarma:", data);

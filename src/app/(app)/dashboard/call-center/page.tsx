@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader, RefreshCw, Phone, Hourglass, BarChart3, PieChart as PieChartIcon, PhoneMissed, TrendingUp } from "lucide-react";
+import { Loader, RefreshCw, Phone, Hourglass, BarChart3, PieChart as PieChartIcon, PhoneMissed, TrendingUp, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -50,24 +50,37 @@ export default function CallCenterPage() {
       const data = await response.json();
 
       if (response.ok && data.status === 'success') {
-        const validCalls = (data.stats || []).filter((call: ZadarmaCall) => call.call_start);
-
-        const uniqueCalls = Object.values(
-          validCalls.reduce((acc: { [key: string]: ZadarmaCall }, call: ZadarmaCall) => {
-             if (!call.pbx_call_id) return acc;
-            if (!acc[call.pbx_call_id] || call.call_id > acc[call.pbx_call_id].call_id) {
-              acc[call.pbx_call_id] = call;
-            }
-            return acc;
-          }, {})
-        );
+        const rawCalls: ZadarmaCall[] = data.stats || [];
         
-        setCallStats(uniqueCalls);
+        // Agrupar llamadas por pbx_call_id
+        const callsByPbxId = rawCalls.reduce((acc: { [key: string]: ZadarmaCall[] }, call) => {
+          if (call.pbx_call_id) {
+            if (!acc[call.pbx_call_id]) {
+              acc[call.pbx_call_id] = [];
+            }
+            acc[call.pbx_call_id].push(call);
+          }
+          return acc;
+        }, {});
+
+        // Consolidar cada grupo en una única llamada representativa
+        const consolidatedCalls = Object.values(callsByPbxId).map(callGroup => {
+          // Ordenar para priorizar: contestadas, con fecha, y más recientes
+          return callGroup.sort((a, b) => {
+            if (a.disposition === 'answered' && b.disposition !== 'answered') return -1;
+            if (b.disposition === 'answered' && a.disposition !== 'answered') return 1;
+            if (a.call_start && !b.call_start) return -1;
+            if (!a.call_start && b.call_start) return 1;
+            return b.seconds - a.seconds;
+          })[0];
+        }).filter(call => !!call.call_start); // Asegurarse de que el registro final tenga fecha
+
+        setCallStats(consolidatedCalls);
         
         if (forceRefresh) {
             toast({
                 title: "Estadísticas de llamadas actualizadas",
-                description: `Se encontraron ${uniqueCalls.length} llamadas únicas y válidas para hoy.`,
+                description: `Se encontraron ${consolidatedCalls.length} llamadas únicas para hoy.`,
             });
         }
       } else {
@@ -89,9 +102,9 @@ export default function CallCenterPage() {
     fetchCallStats();
   }, [fetchCallStats]);
 
-  const { kpis, dispositionData, hourlyData, agentAHTData, hourlyAHTData } = useMemo(() => {
+  const { kpis, dispositionData, hourlyData, agentAHTData, hourlyAHTData, agentTrafficData } = useMemo(() => {
     if (!callStats || callStats.length === 0) {
-      return { kpis: { totalCalls: 0, answeredCalls: 0, abandonedCalls: 0, avgDuration: 0, abandonRate: 0 }, dispositionData: [], hourlyData: [], agentAHTData: [], hourlyAHTData: [] };
+      return { kpis: { totalCalls: 0, answeredCalls: 0, abandonedCalls: 0, avgDuration: 0, abandonRate: 0 }, dispositionData: [], hourlyData: [], agentAHTData: [], hourlyAHTData: [], agentTrafficData: [] };
     }
 
     const answeredCalls = callStats.filter(c => c.disposition === 'answered');
@@ -141,13 +154,15 @@ export default function CallCenterPage() {
     
     const agentStats = callStats.reduce((acc, call) => {
         const agent = call.sip || 'Desconocido';
-        if (!acc[agent]) acc[agent] = { totalDuration: 0, answeredCount: 0 };
+        if (!acc[agent]) acc[agent] = { totalDuration: 0, answeredCount: 0, totalCalls: 0 };
+        
+        acc[agent].totalCalls++;
         if (call.disposition === 'answered') {
             acc[agent].totalDuration += call.seconds;
             acc[agent].answeredCount++;
         }
         return acc;
-    }, {} as { [key: string]: { totalDuration: number, answeredCount: number } });
+    }, {} as { [key: string]: { totalDuration: number, answeredCount: number, totalCalls: number } });
 
     const agentAHTData = Object.entries(agentStats)
         .map(([agent, data]) => ({
@@ -156,6 +171,14 @@ export default function CallCenterPage() {
         }))
         .filter(d => d.aht > 0)
         .sort((a, b) => b.aht - a.aht);
+
+    const agentTrafficData = Object.entries(agentStats)
+        .map(([agent, data]) => ({
+            agent,
+            llamadas: data.totalCalls,
+        }))
+        .filter(d => d.llamadas > 0)
+        .sort((a, b) => b.llamadas - a.llamadas);
 
     return {
       kpis: {
@@ -169,6 +192,7 @@ export default function CallCenterPage() {
       hourlyData,
       agentAHTData,
       hourlyAHTData,
+      agentTrafficData,
     };
   }, [callStats]);
 
@@ -347,6 +371,26 @@ export default function CallCenterPage() {
                     </CardContent>
                 </Card>
             </div>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Tráfico por Agente</CardTitle>
+                    <CardDescription>Número total de llamadas gestionadas por cada agente.</CardDescription>
+                </CardHeader>
+                <CardContent className="h-80">
+                    <ChartContainer config={{ llamadas: { label: "Llamadas", color: "hsl(var(--chart-4))" } }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={agentTrafficData}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="agent" tick={{ fontSize: 12 }} />
+                                <YAxis allowDecimals={false} />
+                                <Tooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--chart-4) / 0.1)' }} />
+                                <Legend />
+                                <Bar dataKey="llamadas" fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </ChartContainer>
+                </CardContent>
+            </Card>
 
 
             <Card>
@@ -369,7 +413,7 @@ export default function CallCenterPage() {
                     <TableBody>
                         {callStats.length > 0 ? (
                         callStats.map((call) => (
-                            <TableRow key={`${call.pbx_call_id}-${call.call_id}`}>
+                            <TableRow key={call.call_id}>
                             <TableCell className="font-medium">
                                 {formatCallDate(call.call_start)}
                             </TableCell>

@@ -96,18 +96,31 @@ export default function AdvisorPerformancePage() {
         };
       });
       
-      const calls: ZadarmaCall[] = data.stats || [];
-      const seenCalls = new Set<string>();
-      const processedCalls: ZadarmaCall[] = [];
+      const rawCalls: ZadarmaCall[] = data.stats || [];
+      const callsByPbxId: { [pbxId: string]: ZadarmaCall[] } = {};
 
-      calls.reverse().forEach(call => {
-         if (!seenCalls.has(call.pbx_call_id)) {
-            processedCalls.push(call);
-            seenCalls.add(call.pbx_call_id);
-         }
+      // 1. Agrupar todas las llamadas por pbx_call_id
+      rawCalls.forEach(call => {
+          if (!callsByPbxId[call.pbx_call_id]) {
+              callsByPbxId[call.pbx_call_id] = [];
+          }
+          callsByPbxId[call.pbx_call_id].push(call);
       });
 
-      processedCalls.forEach(call => {
+      // 2. Procesar cada grupo para crear una llamada consolidada
+      const consolidatedCalls: ZadarmaCall[] = Object.values(callsByPbxId).map(group => {
+          // Ordenar por disposición ('answered' primero) y luego por duración para encontrar el mejor registro
+          group.sort((a, b) => {
+              if (a.disposition === 'answered' && b.disposition !== 'answered') return -1;
+              if (a.disposition !== 'answered' && b.disposition === 'answered') return 1;
+              return b.seconds - a.seconds;
+          });
+          // El primer elemento es el "mejor" registro consolidado.
+          return group[0];
+      });
+
+      // 3. Calcular métricas basadas en las llamadas consolidadas
+      consolidatedCalls.forEach(call => {
         const agentId = call.sip;
 
         if (!performanceByAgent[agentId]) {
@@ -117,6 +130,7 @@ export default function AdvisorPerformancePage() {
         const agentData = performanceByAgent[agentId];
         const destinationStr = String(call.destination);
 
+        // Asegurarse de que son llamadas salientes a números externos
         if (destinationStr.length > 3) {
             agentData.totalCalls += 1;
             agentData.totalMinutes += Math.ceil(call.seconds / 60);
@@ -129,9 +143,10 @@ export default function AdvisorPerformancePage() {
                 try {
                     const callDate = new Date(call.callstart);
                     const lastCallDate = agentData.lastCallTime ? new Date(agentData.lastCallTime) : null;
-
+                    
+                    // Almacenamos la fecha completa para comparar, luego formateamos solo para mostrar
                     if (!lastCallDate || callDate > lastCallDate) {
-                        agentData.lastCallTime = format(callDate, 'HH:mm:ss');
+                        agentData.lastCallTime = callDate.toISOString(); 
                     }
                 } catch (e) {
                     console.error("Error parseando fecha para última llamada:", call.callstart);
@@ -142,6 +157,14 @@ export default function AdvisorPerformancePage() {
       
       const finalPerformanceData = Object.values(performanceByAgent).map(agent => {
         agent.effectivenessRate = agent.totalCalls > 0 ? (agent.effectiveCalls / agent.totalCalls) * 100 : 0;
+         // Formatear la hora de la última llamada solo para la visualización
+        if (agent.lastCallTime) {
+            try {
+                agent.lastCallTime = format(new Date(agent.lastCallTime), 'HH:mm:ss');
+            } catch {
+                agent.lastCallTime = "Inválido";
+            }
+        }
         return agent;
       });
 
@@ -150,7 +173,7 @@ export default function AdvisorPerformancePage() {
       if (forceRefresh) {
         toast({
           title: "Informe de Rendimiento Actualizado",
-          description: `Se procesaron ${calls.length} registros de llamadas.`,
+          description: `Se procesaron ${rawCalls.length} registros de llamadas.`,
         });
       }
     } catch (error: any) {
@@ -167,7 +190,8 @@ export default function AdvisorPerformancePage() {
 
   useEffect(() => {
     fetchAndProcessData();
-  }, [fetchAndProcessData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
 
   const sortedPerformanceData = useMemo(() => {
     let sortableItems = [...performanceData];
@@ -321,5 +345,3 @@ export default function AdvisorPerformancePage() {
     </div>
   );
 }
-
-    

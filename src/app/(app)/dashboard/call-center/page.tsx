@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -9,16 +8,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import DashboardNav from "@/components/DashboardNav";
 import { Badge } from "@/components/ui/badge";
-import { format, parse } from "date-fns";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 
-
 // Tipado para los datos de las llamadas que esperamos de nuestra API
 interface ZadarmaCall {
   pbx_call_id: string;
-  call_id: string; // ID único del evento de llamada
+  call_id: string;
   call_start: string;
   sip: string;
   clid: string;
@@ -39,18 +37,6 @@ const dispositionMap: { [key: string]: { text: string; variant: "default" | "sec
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
-// Función dedicada y robusta para parsear la fecha de Zadarma
-const parseZadarmaDate = (dateString: string | undefined): Date | null => {
-    if (!dateString) return null;
-    try {
-      // El formato de Zadarma es 'yyyy-MM-dd HH:mm:ss'
-      return parse(dateString, "yyyy-MM-dd HH:mm:ss", new Date());
-    } catch (e) {
-      console.error("Error al parsear fecha de Zadarma:", dateString, e);
-      return null;
-    }
-};
-
 
 export default function CallCenterPage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -64,10 +50,11 @@ export default function CallCenterPage() {
       const data = await response.json();
 
       if (response.ok && data.status === 'success') {
+        const validCalls = (data.stats || []).filter((call: ZadarmaCall) => call.call_start);
+
         const uniqueCalls = Object.values(
-          (data.stats || []).reduce((acc: { [key: string]: ZadarmaCall }, call: ZadarmaCall) => {
+          validCalls.reduce((acc: { [key: string]: ZadarmaCall }, call: ZadarmaCall) => {
              if (!call.pbx_call_id) return acc;
-            // Se usa pbx_call_id para agrupar, pero se compara con call_id para obtener el evento más reciente
             if (!acc[call.pbx_call_id] || call.call_id > acc[call.pbx_call_id].call_id) {
               acc[call.pbx_call_id] = call;
             }
@@ -80,7 +67,7 @@ export default function CallCenterPage() {
         if (forceRefresh) {
             toast({
                 title: "Estadísticas de llamadas actualizadas",
-                description: `Se encontraron ${uniqueCalls.length} llamadas únicas para hoy.`,
+                description: `Se encontraron ${uniqueCalls.length} llamadas únicas y válidas para hoy.`,
             });
         }
       } else {
@@ -124,8 +111,8 @@ export default function CallCenterPage() {
     const dispositionData = Object.entries(dispositionCounts).map(([name, value]) => ({ name, value }));
     
     const hourlyCounts = callStats.reduce((acc, call) => {
-        const callDate = parseZadarmaDate(call.call_start);
-        if (!callDate) return acc;
+        const callDate = new Date(Date.parse(call.call_start));
+        if (isNaN(callDate.getTime())) return acc;
         
         const hour = callDate.getHours();
         if (!acc[hour]) acc[hour] = { atendidas: 0, perdidas: 0, totalDuration: 0, callCount: 0 };
@@ -192,11 +179,10 @@ export default function CallCenterPage() {
   };
 
   const formatCallDate = (dateString: string | undefined) => {
-    const date = parseZadarmaDate(dateString);
-    if (!date) {
-      return "Fecha no disponible";
-    }
+    if (!dateString) return "Fecha no disponible";
     try {
+      const date = new Date(Date.parse(dateString));
+      if (isNaN(date.getTime())) return "Fecha inválida";
       return format(date, "d MMM yyyy, HH:mm:ss", { locale: es });
     } catch (error) {
       console.error("Error al formatear la fecha:", dateString, error);

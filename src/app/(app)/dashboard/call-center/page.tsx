@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader, RefreshCw, Phone, Hourglass, BarChart3, PieChart as PieChartIcon } from "lucide-react";
+import { Loader, RefreshCw, Phone, Hourglass, BarChart3, PieChart as PieChartIcon, PhoneMissed, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,7 +10,7 @@ import DashboardNav from "@/components/DashboardNav";
 import { Badge } from "@/components/ui/badge";
 import { format, parse } from "date-fns";
 import { es } from "date-fns/locale";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 
 
@@ -53,6 +53,7 @@ export default function CallCenterPage() {
       if (response.ok && data.status === 'success') {
         const uniqueCalls = Object.values(
           (data.stats || []).reduce((acc: { [key: string]: ZadarmaCall }, call: ZadarmaCall) => {
+             if (!call.pbx_call_id) return acc;
             // Se usa pbx_call_id para agrupar, pero se compara con call_id para obtener el evento más reciente
             if (!acc[call.pbx_call_id] || call.call_id > acc[call.pbx_call_id].call_id) {
               acc[call.pbx_call_id] = call;
@@ -88,14 +89,18 @@ export default function CallCenterPage() {
     fetchCallStats();
   }, [fetchCallStats]);
 
-  const { kpis, dispositionData, hourlyData, agentData } = useMemo(() => {
+  const { kpis, dispositionData, hourlyData, agentAHTData, hourlyAHTData } = useMemo(() => {
     if (!callStats || callStats.length === 0) {
-      return { kpis: { totalCalls: 0, answeredCalls: 0, avgDuration: 0 }, dispositionData: [], hourlyData: [], agentData: [] };
+      return { kpis: { totalCalls: 0, answeredCalls: 0, abandonedCalls: 0, avgDuration: 0, abandonRate: 0 }, dispositionData: [], hourlyData: [], agentAHTData: [], hourlyAHTData: [] };
     }
 
     const answeredCalls = callStats.filter(c => c.disposition === 'answered');
+    const abandonedCalls = callStats.filter(c => c.disposition === 'no answer' || c.disposition === 'failed');
+    
     const totalDuration = answeredCalls.reduce((sum, call) => sum + call.seconds, 0);
     const avgDuration = answeredCalls.length > 0 ? totalDuration / answeredCalls.length : 0;
+    const abandonRate = callStats.length > 0 ? (abandonedCalls.length / callStats.length) * 100 : 0;
+
 
     const dispositionCounts = callStats.reduce((acc, call) => {
         const status = dispositionMap[call.disposition]?.text || call.disposition;
@@ -104,37 +109,67 @@ export default function CallCenterPage() {
     }, {} as { [key: string]: number });
 
     const dispositionData = Object.entries(dispositionCounts).map(([name, value]) => ({ name, value }));
-
+    
     const hourlyCounts = callStats.reduce((acc, call) => {
         if (!call.call_start) return acc;
         try {
             const hour = parse(call.call_start, "yyyy-MM-dd HH:mm:ss", new Date()).getHours();
-            acc[hour] = (acc[hour] || 0) + 1;
+            if (!acc[hour]) acc[hour] = { atendidas: 0, perdidas: 0, totalDuration: 0, callCount: 0 };
+
+            if (call.disposition === 'answered') {
+                acc[hour].atendidas++;
+                acc[hour].totalDuration += call.seconds;
+                acc[hour].callCount++;
+            } else if (call.disposition === 'no answer' || call.disposition === 'failed') {
+                acc[hour].perdidas++;
+            }
         } catch (e) {
             console.error("Error al parsear fecha en hourlyCounts:", call.call_start, e);
         }
         return acc;
-    }, {} as { [key: number]: number });
+    }, {} as { [key: number]: { atendidas: number, perdidas: number, totalDuration: number, callCount: number } });
     
-    const hourlyData = Array.from({ length: 24 }, (_, i) => ({ hour: `${String(i).padStart(2, '0')}:00`, llamadas: hourlyCounts[i] || 0 }));
-    
-    const agentCounts = callStats.reduce((acc, call) => {
-        const agent = call.sip || 'Desconocido';
-        acc[agent] = (acc[agent] || 0) + 1;
-        return acc;
-    }, {} as { [key: string]: number });
+    const hourlyData = Array.from({ length: 24 }, (_, i) => ({ 
+        hour: `${String(i).padStart(2, '0')}:00`, 
+        atendidas: hourlyCounts[i]?.atendidas || 0,
+        perdidas: hourlyCounts[i]?.perdidas || 0
+    }));
 
-    const agentData = Object.entries(agentCounts).map(([agent, llamadas]) => ({ agent, llamadas })).sort((a,b) => b.llamadas - a.llamadas);
+    const hourlyAHTData = Array.from({ length: 24 }, (_, i) => ({
+        hour: `${String(i).padStart(2, '0')}:00`,
+        aht: (hourlyCounts[i]?.callCount > 0) ? (hourlyCounts[i].totalDuration / hourlyCounts[i].callCount) : 0,
+    }));
+    
+    const agentStats = callStats.reduce((acc, call) => {
+        const agent = call.sip || 'Desconocido';
+        if (!acc[agent]) acc[agent] = { totalDuration: 0, answeredCount: 0 };
+        if (call.disposition === 'answered') {
+            acc[agent].totalDuration += call.seconds;
+            acc[agent].answeredCount++;
+        }
+        return acc;
+    }, {} as { [key: string]: { totalDuration: number, answeredCount: number } });
+
+    const agentAHTData = Object.entries(agentStats)
+        .map(([agent, data]) => ({
+            agent,
+            aht: data.answeredCount > 0 ? Math.round(data.totalDuration / data.answeredCount) : 0,
+        }))
+        .filter(d => d.aht > 0)
+        .sort((a, b) => b.aht - a.aht);
 
     return {
       kpis: {
         totalCalls: callStats.length,
         answeredCalls: answeredCalls.length,
-        avgDuration: avgDuration,
+        abandonedCalls: abandonedCalls.length,
+        avgDuration,
+        abandonRate,
       },
       dispositionData,
       hourlyData,
-      agentData
+      agentAHTData,
+      hourlyAHTData,
     };
   }, [callStats]);
 
@@ -180,7 +215,7 @@ export default function CallCenterPage() {
         </div>
       ) : (
         <>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total de Llamadas (Hoy)</CardTitle>
@@ -213,10 +248,20 @@ export default function CallCenterPage() {
                         </p>
                     </CardContent>
                 </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Tasa de Abandono</CardTitle>
+                        <PhoneMissed className="h-4 w-4 text-destructive" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{kpis.abandonRate.toFixed(1)}%</div>
+                        <p className="text-xs text-muted-foreground">{kpis.abandonedCalls} llamadas perdidas.</p>
+                    </CardContent>
+                </Card>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-                <Card className="lg:col-span-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center"><PieChartIcon className="mr-2 h-5 w-5" />Distribución de Resultados</CardTitle>
                         <CardDescription>Desglose del estado final de todas las llamadas.</CardDescription>
@@ -237,47 +282,73 @@ export default function CallCenterPage() {
                         </ChartContainer>
                     </CardContent>
                 </Card>
-                 <Card className="lg:col-span-3">
+                 <Card>
                     <CardHeader>
-                        <CardTitle className="flex items-center"><BarChart3 className="mr-2 h-5 w-5" />Volumen de Llamadas por Hora</CardTitle>
-                        <CardDescription>Actividad de llamadas a lo largo del día para detectar horas pico.</CardDescription>
+                        <CardTitle className="flex items-center"><BarChart3 className="mr-2 h-5 w-5" />Llamadas Atendidas vs. Perdidas por Hora</CardTitle>
+                        <CardDescription>Actividad de llamadas para detectar horas pico y fallos.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-80">
-                        <ChartContainer config={{ llamadas: { label: "Llamadas", color: "hsl(var(--primary))" } }}>
+                        <ChartContainer config={{ 
+                            atendidas: { label: "Atendidas", color: "hsl(var(--chart-1))" },
+                            perdidas: { label: "Perdidas", color: "hsl(var(--destructive))" }
+                        }}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={hourlyData}>
+                                <BarChart data={hourlyData} stackOffset="none">
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="hour" tick={{ fontSize: 12 }} />
                                     <YAxis />
-                                    <Tooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--primary) / 0.1)' }}/>
+                                    <Tooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--muted))' }}/>
                                     <Legend />
-                                    <Bar dataKey="llamadas" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="atendidas" fill="hsl(var(--chart-1))" stackId="a" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="perdidas" fill="hsl(var(--destructive))" stackId="a" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </ChartContainer>
                     </CardContent>
                 </Card>
             </div>
-             <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center"><BarChart3 className="mr-2 h-5 w-5" />Tráfico por Agente</CardTitle>
-                    <CardDescription>Total de llamadas gestionadas por cada extensión SIP.</CardDescription>
-                </CardHeader>
-                <CardContent className="h-80">
-                    <ChartContainer config={{ llamadas: { label: "Llamadas", color: "hsl(var(--chart-2))" } }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={agentData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="agent" tick={{ fontSize: 12 }} />
-                                <YAxis />
-                                <Tooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--chart-2) / 0.1)' }}/>
-                                <Legend />
-                                <Bar dataKey="llamadas" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </ChartContainer>
-                </CardContent>
-            </Card>
+             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                 <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center"><Hourglass className="mr-2 h-5 w-5" />Duración Media (AHT) por Agente</CardTitle>
+                        <CardDescription>Tiempo promedio en segundos que cada agente dedica por llamada.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-80">
+                        <ChartContainer config={{ aht: { label: "Segundos", color: "hsl(var(--chart-2))" } }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={agentAHTData}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="agent" tick={{ fontSize: 12 }} />
+                                    <YAxis />
+                                    <Tooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--chart-2) / 0.1)' }}/>
+                                    <Legend />
+                                    <Bar dataKey="aht" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center"><TrendingUp className="mr-2 h-5 w-5" />Tendencia de AHT por Hora</CardTitle>
+                        <CardDescription>Evolución de la duración media de la llamada a lo largo del día.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-80">
+                         <ChartContainer config={{ aht: { label: "Segundos", color: "hsl(var(--primary))" } }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={hourlyAHTData}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="hour" tick={{ fontSize: 12 }} />
+                                    <YAxis />
+                                    <Tooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--primary) / 0.1)' }}/>
+                                    <Legend />
+                                    <Line type="monotone" dataKey="aht" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                    </CardContent>
+                </Card>
+            </div>
 
 
             <Card>

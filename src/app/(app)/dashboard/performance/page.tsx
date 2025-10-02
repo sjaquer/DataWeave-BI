@@ -1,20 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon } from "lucide-react";
+import { Loader, RefreshCw, Users, Clock, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import DashboardNav from "@/components/DashboardNav";
 import { Badge } from "@/components/ui/badge";
-import { format, parse, subDays } from "date-fns";
-import { es } from "date-fns/locale";
-import { DateRange } from "react-day-picker";
+import { format, parse } from "date-fns";
 import { cn } from "@/lib/utils";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
 // --- Tipos de Datos ---
@@ -53,47 +48,11 @@ export default function AdvisorPerformancePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [performanceData, setPerformanceData] = useState<AdvisorPerformance[]>([]);
   const { toast } = useToast();
-  const [date, setDate] = useState<DateRange | undefined>(() => {
-    const today = new Date();
-    return { from: today, to: today };
-  });
-
-  const handleDatePreset = (preset: string) => {
-    const to = new Date();
-    let from: Date | undefined;
-
-    switch (preset) {
-      case 'today':
-        from = new Date();
-        break;
-      case 'yesterday':
-        from = subDays(new Date(), 1);
-        setDate({ from, to: from });
-        return;
-      case '7days':
-        from = new Date();
-        from.setDate(from.getDate() - 6);
-        break;
-      case '30days':
-        from = new Date();
-        from.setDate(from.getDate() - 29);
-        break;
-      case 'all':
-        from = undefined;
-        break;
-    }
-    setDate({ from, to });
-  };
-
 
   const fetchAndProcessData = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (date?.from) params.append('startDate', date.from.toISOString());
-      if (date?.to) params.append('endDate', date.to.toISOString());
-
-      const response = await fetch(`/api/zadarma/stats?${params.toString()}`);
+      const response = await fetch(`/api/zadarma/stats`);
       const data = await response.json();
 
       if (!response.ok || data.status !== 'success') {
@@ -135,15 +94,26 @@ export default function AdvisorPerformancePage() {
                 agentData.effectiveCalls += 1;
             }
             
-            try {
-                const callDate = parse(call.callstart, 'yyyy-MM-dd HH:mm:ss', new Date());
-                const lastCallDate = agentData.lastCallTime ? parse(agentData.lastCallTime, 'HH:mm:ss', new Date(callDate)) : null;
+            if (call.callstart) {
+                try {
+                    const callDate = parse(call.callstart, 'yyyy-MM-dd HH:mm:ss', new Date());
+                    const lastCallDateString = agentData.lastCallTime;
+                    
+                    let lastCallDate: Date | null = null;
+                    if(lastCallDateString) {
+                       // Asumimos que el año, mes y día son los de callDate para la comparación
+                       const tempDate = new Date(callDate);
+                       const timeParts = lastCallDateString.split(':');
+                       tempDate.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]), parseInt(timeParts[2]));
+                       lastCallDate = tempDate;
+                    }
 
-                if (!lastCallDate || callDate > lastCallDate) {
-                    agentData.lastCallTime = format(callDate, 'HH:mm:ss');
+                    if (!lastCallDate || callDate > lastCallDate) {
+                        agentData.lastCallTime = format(callDate, 'HH:mm:ss');
+                    }
+                } catch (e) {
+                    console.error("Error parseando fecha para última llamada:", call.callstart);
                 }
-            } catch (e) {
-                console.error("Error parseando fecha para última llamada:", call.callstart);
             }
         }
       });
@@ -171,12 +141,12 @@ export default function AdvisorPerformancePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast, date]);
+  }, [toast]);
 
   useEffect(() => {
     fetchAndProcessData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date]);
+  }, [fetchAndProcessData]);
 
   const getCallCountColor = (count: number): string => {
     if (count < 60) return "bg-red-500/20 text-red-500 border-red-500/50";
@@ -190,31 +160,9 @@ export default function AdvisorPerformancePage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Informe de Rendimiento de Asesores</h2>
-          <p className="text-muted-foreground">Métricas clave de la actividad de llamadas del período seleccionado.</p>
+          <p className="text-muted-foreground">Métricas clave de la actividad de llamadas para el día de hoy.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-           <Select onValueChange={handleDatePreset}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Filtro Rápido" />
-              </SelectTrigger>
-              <SelectContent>
-                  <SelectItem value="today">Hoy</SelectItem>
-                  <SelectItem value="yesterday">Ayer</SelectItem>
-                  <SelectItem value="7days">Últimos 7 días</SelectItem>
-                  <SelectItem value="30days">Últimos 30 días</SelectItem>
-              </SelectContent>
-          </Select>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {date?.from ? (date.to ? (<>{format(date.from, "LLL dd, y", { locale: es })} - {format(date.to, "LLL dd, y", { locale: es })}</>) : (format(date.from, "LLL dd, y", { locale: es }))) : (<span>Selecciona un rango</span>)}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
-            </PopoverContent>
-          </Popover>
           <Button variant="outline" size="sm" onClick={() => fetchAndProcessData(true)} disabled={isLoading}>
             {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Actualizar
@@ -233,7 +181,7 @@ export default function AdvisorPerformancePage() {
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Rendimiento por Asesor</CardTitle>
-                <CardDescription>Resumen de actividad de llamadas salientes para el período seleccionado.</CardDescription>
+                <CardDescription>Resumen de actividad de llamadas salientes para hoy.</CardDescription>
             </CardHeader>
             <CardContent className="overflow-auto max-h-[70vh] p-2">
                 <Table>
@@ -278,7 +226,7 @@ export default function AdvisorPerformancePage() {
                     ) : (
                     <TableRow>
                         <TableCell colSpan={6} className="h-24 text-center">
-                            No se encontraron datos de rendimiento para el período seleccionado.
+                            No se encontraron datos de rendimiento para el día de hoy.
                         </TableCell>
                     </TableRow>
                     )}

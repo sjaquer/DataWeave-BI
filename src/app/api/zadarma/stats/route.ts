@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { format, startOfDay, endOfDay } from 'date-fns';
+import { format } from 'date-fns';
 import * as dotenv from 'dotenv';
 import CryptoJS from 'crypto-js';
 
@@ -25,13 +25,13 @@ export async function GET(req: Request) {
     const startDateQuery = searchParams.get('startDate');
     const endDateQuery = searchParams.get('endDate');
 
-    // Si no se proporcionan fechas, usar el día actual.
-    const start = startDateQuery ? new Date(startDateQuery) : startOfDay(new Date());
-    const end = endDateQuery ? new Date(endDateQuery) : endOfDay(new Date());
+    // Usar las fechas proporcionadas o el día actual si no se especifica.
+    const start = startDateQuery ? new Date(startDateQuery) : new Date();
+    const end = endDateQuery ? new Date(endDateQuery) : new Date();
 
     const formattedStartDate = format(start, 'yyyy-MM-dd HH:mm:ss');
     const formattedEndDate = format(end, 'yyyy-MM-dd HH:mm:ss');
-
+    
     const method = '/v1/statistics/pbx/';
     const params: { [key: string]: string } = {
       start: formattedStartDate,

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
-import { format } from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 
 import DashboardNav from "@/components/DashboardNav";
@@ -70,8 +70,11 @@ export default function AdvisorPerformancePage() {
     try {
       const params = new URLSearchParams();
       if (date?.from) {
-        params.append('startDate', date.from.toISOString());
-        params.append('endDate', (date.to || date.from).toISOString());
+        // Para asegurar que el rango cubra todo el día
+        const startDate = startOfDay(date.from);
+        const endDate = endOfDay(date.to || date.from);
+        params.append('startDate', startDate.toISOString());
+        params.append('endDate', endDate.toISOString());
       }
       
       const response = await fetch(`/api/zadarma/stats?${params.toString()}`);

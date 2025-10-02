@@ -53,6 +53,7 @@ export default function CallCenterPage() {
       if (response.ok && data.status === 'success') {
         const uniqueCalls = Object.values(
           (data.stats || []).reduce((acc: { [key: string]: ZadarmaCall }, call: ZadarmaCall) => {
+            // Se usa pbx_call_id para agrupar, pero se compara con call_id para obtener el evento más reciente
             if (!acc[call.pbx_call_id] || call.call_id > acc[call.pbx_call_id].call_id) {
               acc[call.pbx_call_id] = call;
             }

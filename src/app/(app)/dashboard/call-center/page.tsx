@@ -89,6 +89,17 @@ export default function CallCenterPage() {
     fetchCallStats();
   }, [fetchCallStats]);
 
+  const parseZadarmaDate = (dateString: string | undefined): Date | null => {
+      if (!dateString) return null;
+      try {
+        // El formato de Zadarma es 'yyyy-MM-dd HH:mm:ss'
+        return parse(dateString, "yyyy-MM-dd HH:mm:ss", new Date());
+      } catch (e) {
+        console.error("Error al parsear fecha de Zadarma:", dateString, e);
+        return null;
+      }
+  };
+
   const { kpis, dispositionData, hourlyData, agentAHTData, hourlyAHTData } = useMemo(() => {
     if (!callStats || callStats.length === 0) {
       return { kpis: { totalCalls: 0, answeredCalls: 0, abandonedCalls: 0, avgDuration: 0, abandonRate: 0 }, dispositionData: [], hourlyData: [], agentAHTData: [], hourlyAHTData: [] };
@@ -111,21 +122,20 @@ export default function CallCenterPage() {
     const dispositionData = Object.entries(dispositionCounts).map(([name, value]) => ({ name, value }));
     
     const hourlyCounts = callStats.reduce((acc, call) => {
-        if (!call.call_start) return acc;
-        try {
-            const hour = parse(call.call_start, "yyyy-MM-dd HH:mm:ss", new Date()).getHours();
-            if (!acc[hour]) acc[hour] = { atendidas: 0, perdidas: 0, totalDuration: 0, callCount: 0 };
+        const callDate = parseZadarmaDate(call.call_start);
+        if (!callDate) return acc;
+        
+        const hour = callDate.getHours();
+        if (!acc[hour]) acc[hour] = { atendidas: 0, perdidas: 0, totalDuration: 0, callCount: 0 };
 
-            if (call.disposition === 'answered') {
-                acc[hour].atendidas++;
-                acc[hour].totalDuration += call.seconds;
-                acc[hour].callCount++;
-            } else if (call.disposition === 'no answer' || call.disposition === 'failed') {
-                acc[hour].perdidas++;
-            }
-        } catch (e) {
-            console.error("Error al parsear fecha en hourlyCounts:", call.call_start, e);
+        if (call.disposition === 'answered') {
+            acc[hour].atendidas++;
+            acc[hour].totalDuration += call.seconds;
+            acc[hour].callCount++;
+        } else if (call.disposition === 'no answer' || call.disposition === 'failed') {
+            acc[hour].perdidas++;
         }
+        
         return acc;
     }, {} as { [key: number]: { atendidas: number, perdidas: number, totalDuration: number, callCount: number } });
     
@@ -180,11 +190,11 @@ export default function CallCenterPage() {
   };
 
   const formatCallDate = (dateString: string | undefined) => {
-    if (!dateString) {
+    const date = parseZadarmaDate(dateString);
+    if (!date) {
       return "Fecha no disponible";
     }
     try {
-      const date = parse(dateString, "yyyy-MM-dd HH:mm:ss", new Date());
       return format(date, "d MMM yyyy, HH:mm:ss", { locale: es });
     } catch (error) {
       console.error("Error al formatear la fecha:", dateString, error);

@@ -14,10 +14,10 @@ import { format, parse } from "date-fns";
 // Tipado para los datos de las llamadas que esperamos de nuestra API
 interface ZadarmaCall {
   pbx_call_id: string;
-  call_start: string;
+  callstart: string; // Corregido de call_start a callstart
   sip: string;
   clid: string;
-  destination: string;
+  destination: string | number; // Acepta número o texto
   disposition: "answered" | "busy" | "cancel" | "no answer" | "failed" | "congestion";
   seconds: number;
 }
@@ -48,7 +48,7 @@ const agentMap: { [key: string]: string } = {
 export default function ZadarmaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [calls, setCalls] = useState<ZadarmaCall[]>([]);
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'call_start', direction: 'descending' });
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'callstart', direction: 'descending' });
   const { toast } = useToast();
 
   const fetchCallStats = useCallback(async (forceRefresh = false) => {
@@ -128,9 +128,7 @@ export default function ZadarmaPage() {
       return "No disponible";
     }
     try {
-      // Parseamos la fecha indicando el formato exacto que nos da la API
       const date = parse(dateString, 'yyyy-MM-dd HH:mm:ss', new Date());
-      // La formateamos a un formato más amigable
       return format(date, 'dd/MM/yyyy HH:mm');
     } catch (error) {
       console.error(`Error al formatear la fecha: ${dateString}`, error);
@@ -171,8 +169,8 @@ export default function ZadarmaPage() {
                 <TableHeader className="sticky top-0 bg-card">
                     <TableRow>
                     <TableHead>
-                        <Button variant="ghost" onClick={() => handleSort('call_start')}>
-                            Fecha y Hora {renderSortArrow('call_start')}
+                        <Button variant="ghost" onClick={() => handleSort('callstart')}>
+                            Fecha y Hora {renderSortArrow('callstart')}
                         </Button>
                     </TableHead>
                     <TableHead>
@@ -206,7 +204,7 @@ export default function ZadarmaPage() {
                     {sortedCalls.length > 0 ? (
                     sortedCalls.map((call, index) => (
                         <TableRow key={`${call.pbx_call_id}-${index}`}>
-                        <TableCell className="font-medium">{formatCallDate(call.call_start)}</TableCell>
+                        <TableCell className="font-medium">{formatCallDate(call.callstart)}</TableCell>
                         <TableCell>{agentMap[call.sip] || call.sip}</TableCell>
                         <TableCell>{call.clid}</TableCell>
                         <TableCell>{call.destination}</TableCell>

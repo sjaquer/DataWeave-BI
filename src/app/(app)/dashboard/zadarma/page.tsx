@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Loader, RefreshCw, Phone } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Loader, RefreshCw, Phone, ArrowUp, ArrowDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,6 +21,11 @@ interface ZadarmaCall {
   disposition: "answered" | "busy" | "cancel" | "no answer" | "failed" | "congestion";
   seconds: number;
 }
+
+type SortConfig = {
+    key: keyof ZadarmaCall;
+    direction: 'ascending' | 'descending';
+};
 
 const dispositionMap: { [key: string]: { text: string; variant: "default" | "secondary" | "destructive" | "outline" } } = {
   answered: { text: "Contestada", variant: "default" },
@@ -43,6 +48,7 @@ const agentMap: { [key: string]: string } = {
 export default function ZadarmaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [calls, setCalls] = useState<ZadarmaCall[]>([]);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'call_start', direction: 'descending' });
   const { toast } = useToast();
 
   const fetchCallStats = useCallback(async (forceRefresh = false) => {
@@ -77,6 +83,39 @@ export default function ZadarmaPage() {
   useEffect(() => {
     fetchCallStats();
   }, [fetchCallStats]);
+
+  const sortedCalls = useMemo(() => {
+    let sortableItems = [...calls];
+    if (sortConfig !== null) {
+        sortableItems.sort((a, b) => {
+            const aValue = a[sortConfig.key];
+            const bValue = b[sortConfig.key];
+
+            if (aValue < bValue) {
+                return sortConfig.direction === 'ascending' ? -1 : 1;
+            }
+            if (aValue > bValue) {
+                return sortConfig.direction === 'ascending' ? 1 : -1;
+            }
+            return 0;
+        });
+    }
+    return sortableItems;
+  }, [calls, sortConfig]);
+
+  const handleSort = (key: keyof ZadarmaCall) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+        direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+  
+  const renderSortArrow = (key: keyof ZadarmaCall) => {
+    if (sortConfig.key !== key) return null;
+    return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
+  };
+
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -127,21 +166,45 @@ export default function ZadarmaPage() {
                 <CardTitle className="flex items-center"><Phone className="mr-2 h-5 w-5" />Registros de Llamadas del Día</CardTitle>
                 <CardDescription>Eventos de llamadas más recientes procesados por Zadarma.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="overflow-auto max-h-[70vh] p-2">
                 <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-card">
                     <TableRow>
-                    <TableHead>Fecha y Hora</TableHead>
-                    <TableHead>Agente</TableHead>
-                    <TableHead>Origen</TableHead>
-                    <TableHead>Destino</TableHead>
-                    <TableHead className="text-center">Duración</TableHead>
-                    <TableHead className="text-right">Estado</TableHead>
+                    <TableHead>
+                        <Button variant="ghost" onClick={() => handleSort('call_start')}>
+                            Fecha y Hora {renderSortArrow('call_start')}
+                        </Button>
+                    </TableHead>
+                    <TableHead>
+                         <Button variant="ghost" onClick={() => handleSort('sip')}>
+                            Agente {renderSortArrow('sip')}
+                        </Button>
+                    </TableHead>
+                    <TableHead>
+                        <Button variant="ghost" onClick={() => handleSort('clid')}>
+                            Origen {renderSortArrow('clid')}
+                        </Button>
+                    </TableHead>
+                    <TableHead>
+                        <Button variant="ghost" onClick={() => handleSort('destination')}>
+                            Destino {renderSortArrow('destination')}
+                        </Button>
+                    </TableHead>
+                    <TableHead className="text-center">
+                        <Button variant="ghost" onClick={() => handleSort('seconds')}>
+                            Duración {renderSortArrow('seconds')}
+                        </Button>
+                    </TableHead>
+                    <TableHead className="text-right">
+                        <Button variant="ghost" onClick={() => handleSort('disposition')}>
+                            Estado {renderSortArrow('disposition')}
+                        </Button>
+                    </TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {calls.length > 0 ? (
-                    calls.map((call, index) => (
+                    {sortedCalls.length > 0 ? (
+                    sortedCalls.map((call, index) => (
                         <TableRow key={`${call.pbx_call_id}-${index}`}>
                         <TableCell className="font-medium">{formatCallDate(call.call_start)}</TableCell>
                         <TableCell>{agentMap[call.sip] || call.sip}</TableCell>

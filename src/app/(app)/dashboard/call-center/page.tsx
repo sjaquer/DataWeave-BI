@@ -105,11 +105,12 @@ export default function CallCenterPage() {
     const dispositionData = Object.entries(dispositionCounts).map(([name, value]) => ({ name, value }));
 
     const hourlyCounts = callStats.reduce((acc, call) => {
+        if (!call.call_start) return acc;
         try {
             const hour = parse(call.call_start, "yyyy-MM-dd HH:mm:ss", new Date()).getHours();
             acc[hour] = (acc[hour] || 0) + 1;
         } catch (e) {
-            // Ignorar si la fecha es inválida
+            console.error("Error al parsear fecha en hourlyCounts:", call.call_start, e);
         }
         return acc;
     }, {} as { [key: number]: number });

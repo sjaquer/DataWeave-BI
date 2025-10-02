@@ -324,10 +324,18 @@ export default function Dashboard() {
     return (
         <ChartContainer config={{ confirmationRate: { label: "Tasa de Confirmación", color: "hsl(var(--primary))" } }} className="h-96">
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} layout="vertical" margin={{ top: 5, right: 50, left: 120, bottom: 5 }}>
+                <BarChart data={data} layout="vertical" margin={{ top: 5, right: 50, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
-                    <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} interval={0} />
+                    <YAxis 
+                      dataKey="name" 
+                      type="category" 
+                      width={150} 
+                      tick={{ fontSize: 12, width: 150 }} 
+                      interval={0}
+                      tickLine={false}
+                      axisLine={false}
+                    />
                     <Tooltip 
                         content={<ChartTooltipContent 
                             formatter={(value) => `${(value as number).toFixed(2)}%`} 
@@ -335,10 +343,11 @@ export default function Dashboard() {
                         />} 
                         cursor={{ fill: 'hsl(var(--primary) / 0.1)' }}
                     />
-                    <Bar dataKey="confirmationRate" name="Tasa de Confirmación" fill="hsl(var(--primary))">
+                    <Bar dataKey="confirmationRate" name="Tasa de Confirmación" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]}>
                         <LabelList 
                             dataKey="confirmationRate" 
                             position="right" 
+                            offset={8}
                             formatter={(value: number) => `${value.toFixed(1)}%`}
                             className="font-bold text-xs fill-foreground"
                         />
@@ -724,8 +733,8 @@ export default function Dashboard() {
           </Card>
       </div>
       
-       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6">
-          <Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-6">
+        <Card>
             <CardHeader>
                 <CardTitle className="flex items-center"><Percent className="mr-2 h-5 w-5" />Tasa de Confirmación por Producto</CardTitle>
                 <CardDescription>Top 10 productos más vendidos y su tasa de éxito.</CardDescription>
@@ -733,17 +742,16 @@ export default function Dashboard() {
             <CardContent>
                 {renderProductConfirmationList(productConfirmationRates)}
             </CardContent>
-          </Card>
-
-           <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center"><ShoppingCart className="mr-2 h-5 w-5" />Top 5 Productos Más Comprados</CardTitle>
-                    <CardDescription>Productos con más ventas confirmadas.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {renderProductList(mostPurchasedProducts)}
-                </CardContent>
-            </Card>
+        </Card>
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center"><ShoppingCart className="mr-2 h-5 w-5" />Top 5 Productos Más Comprados</CardTitle>
+                <CardDescription>Productos con más ventas confirmadas.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {renderProductList(mostPurchasedProducts)}
+            </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -774,8 +782,5 @@ export default function Dashboard() {
     </div>
   );
 }
-
-
-    
 
     

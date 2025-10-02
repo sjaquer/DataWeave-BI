@@ -38,6 +38,18 @@ const dispositionMap: { [key: string]: { text: string; variant: "default" | "sec
 
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
+// Función dedicada y robusta para parsear la fecha de Zadarma
+const parseZadarmaDate = (dateString: string | undefined): Date | null => {
+    if (!dateString) return null;
+    try {
+      // El formato de Zadarma es 'yyyy-MM-dd HH:mm:ss'
+      return parse(dateString, "yyyy-MM-dd HH:mm:ss", new Date());
+    } catch (e) {
+      console.error("Error al parsear fecha de Zadarma:", dateString, e);
+      return null;
+    }
+};
+
 
 export default function CallCenterPage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -88,17 +100,6 @@ export default function CallCenterPage() {
   useEffect(() => {
     fetchCallStats();
   }, [fetchCallStats]);
-
-  const parseZadarmaDate = (dateString: string | undefined): Date | null => {
-      if (!dateString) return null;
-      try {
-        // El formato de Zadarma es 'yyyy-MM-dd HH:mm:ss'
-        return parse(dateString, "yyyy-MM-dd HH:mm:ss", new Date());
-      } catch (e) {
-        console.error("Error al parsear fecha de Zadarma:", dateString, e);
-        return null;
-      }
-  };
 
   const { kpis, dispositionData, hourlyData, agentAHTData, hourlyAHTData } = useMemo(() => {
     if (!callStats || callStats.length === 0) {

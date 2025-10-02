@@ -1,29 +1,28 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { format } from 'date-fns';
 import * as dotenv from 'dotenv';
+import CryptoJS from 'crypto-js';
 
 dotenv.config();
 
 /**
  * Endpoint para obtener estadísticas de llamadas desde la API de Zadarma.
- * Utiliza las credenciales almacenadas de forma segura en variables de entorno.
+ * Recrea la lógica de autenticación del cliente de Python.
  */
-export async function GET(req: Request) {
+export async function GET() {
   const { ZADARMA_API_KEY, ZADARMA_API_SECRET } = process.env;
 
   if (!ZADARMA_API_KEY || !ZADARMA_API_SECRET) {
-    console.error("Error: Las credenciales de la API de Zadarma no están configuradas en .env o están vacías.");
+    console.error("Error: Las credenciales de la API de Zadarma no están configuradas en .env.");
     return NextResponse.json({
       status: 'error',
-      message: 'La configuración del servidor está incompleta. Faltan las credenciales de la API de Zadarma.'
+      message: 'La configuración del servidor está incompleta. Faltan las credenciales de la API.'
     }, { status: 500 });
   }
 
   try {
     const method = '/v1/statistics/pbx/';
     const now = new Date();
-    // Por defecto, obtenemos las estadísticas del día actual.
     const startDate = format(now, 'yyyy-MM-dd 00:00:00');
     const endDate = format(now, 'yyyy-MM-dd 23:59:59');
 
@@ -31,36 +30,30 @@ export async function GET(req: Request) {
       start: startDate,
       end: endDate,
       format: 'json',
-      version: '2' // Usamos la versión 2 que es la más reciente
+      version: '2'
     };
     
     // 1. Ordenar los parámetros alfabéticamente por clave.
     const sortedKeys = Object.keys(params).sort();
+    const sortedParams = new URLSearchParams();
+    sortedKeys.forEach(key => sortedParams.append(key, params[key]));
+    const queryString = sortedParams.toString();
+
+    // 2. Crear la cadena para la firma.
+    const md5Hash = CryptoJS.MD5(queryString).toString(CryptoJS.enc.Hex);
+    const dataToSign = method + queryString + md5Hash;
     
-    // 2. Crear la cadena de consulta (query string).
-    const searchParams = new URLSearchParams();
-    sortedKeys.forEach(key => searchParams.append(key, params[key]));
-    const queryString = searchParams.toString();
+    // 3. Generar la firma HMAC-SHA1.
+    const hmac = CryptoJS.HmacSHA1(dataToSign, ZADARMA_API_SECRET);
+    const hmacHex = hmac.toString(CryptoJS.enc.Hex);
 
-    // 3. Crear la cadena para la firma según la fórmula de la documentación de Python.
-    const dataToSign = method + queryString + crypto.createHash('md5').update(queryString).digest('hex');
-    
-    // 4. Generar la firma HMAC-SHA1.
-    const hmac = crypto.createHmac('sha1', ZADARMA_API_SECRET);
-    hmac.update(dataToSign);
-
-    // 5. Convertir el hash a HEXADECIMAL.
-    const hmacHex = hmac.digest('hex');
-
-    // 6. Codificar la cadena HEXADECIMAL en Base64.
-    const signature = Buffer.from(hmacHex).toString('base64');
+    // 4. Codificar la firma en Base64.
+    const signature = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(hmacHex));
     
     const authHeader = `${ZADARMA_API_KEY}:${signature}`;
 
-    // Construcción de la URL final para la petición.
     const apiUrl = `https://api.zadarma.com${method}?${queryString}`;
     
-    // Realización de la petición a la API de Zadarma
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
@@ -72,12 +65,10 @@ export async function GET(req: Request) {
     
     if (data.status === 'error' || !response.ok) {
         const errorMessage = data.message || `El servidor de Zadarma respondió con un error: ${response.statusText}`;
-        console.error("Respuesta de error de la API de Zadarma:", errorMessage, data);
-        // Devuelve un error más específico para que el frontend lo pueda manejar.
+        console.error("Respuesta de error de la API de Zadarma:", data);
         return NextResponse.json({ status: 'error', message: `Error de Zadarma: ${errorMessage}` }, { status: response.status });
     }
 
-    // Devolvemos las estadísticas encontradas. El campo `stats` contiene el array de llamadas.
     return NextResponse.json({ status: 'success', stats: data.stats || [] }, { status: 200 });
 
   } catch (error: any) {

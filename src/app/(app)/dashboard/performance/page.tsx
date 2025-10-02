@@ -1,14 +1,19 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader, RefreshCw, Users, Clock, CheckCircle } from "lucide-react";
+import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { DateRange } from "react-day-picker";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+
 import DashboardNav from "@/components/DashboardNav";
 import { Badge } from "@/components/ui/badge";
-import { format, parse } from "date-fns";
 import { cn } from "@/lib/utils";
 
 
@@ -33,6 +38,11 @@ interface AdvisorPerformance {
   lastCallTime: string | null;
 }
 
+type SortConfig = {
+    key: keyof AdvisorPerformance;
+    direction: 'ascending' | 'descending';
+};
+
 // --- Mapeo de Agentes ---
 const agentMap: { [key: string]: string } = {
   "101": "Aylen",
@@ -47,12 +57,24 @@ const agentMap: { [key: string]: string } = {
 export default function AdvisorPerformancePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [performanceData, setPerformanceData] = useState<AdvisorPerformance[]>([]);
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'totalCalls', direction: 'descending' });
+  const [date, setDate] = useState<DateRange | undefined>(() => {
+    const today = new Date();
+    return { from: today, to: today };
+  });
+
   const { toast } = useToast();
 
   const fetchAndProcessData = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/zadarma/stats`);
+      const params = new URLSearchParams();
+      if (date?.from) {
+        params.append('startDate', date.from.toISOString());
+        params.append('endDate', (date.to || date.from).toISOString());
+      }
+      
+      const response = await fetch(`/api/zadarma/stats?${params.toString()}`);
       const data = await response.json();
 
       if (!response.ok || data.status !== 'success') {
@@ -75,8 +97,17 @@ export default function AdvisorPerformancePage() {
       });
       
       const calls: ZadarmaCall[] = data.stats || [];
+      const seenCalls = new Set<string>();
+      const processedCalls: ZadarmaCall[] = [];
 
-      calls.forEach(call => {
+      calls.reverse().forEach(call => {
+         if (!seenCalls.has(call.pbx_call_id)) {
+            processedCalls.push(call);
+            seenCalls.add(call.pbx_call_id);
+         }
+      });
+
+      processedCalls.forEach(call => {
         const agentId = call.sip;
 
         if (!performanceByAgent[agentId]) {
@@ -84,8 +115,8 @@ export default function AdvisorPerformancePage() {
         }
 
         const agentData = performanceByAgent[agentId];
-        
         const destinationStr = String(call.destination);
+
         if (destinationStr.length > 3) {
             agentData.totalCalls += 1;
             agentData.totalMinutes += Math.ceil(call.seconds / 60);
@@ -96,17 +127,8 @@ export default function AdvisorPerformancePage() {
             
             if (call.callstart) {
                 try {
-                    const callDate = parse(call.callstart, 'yyyy-MM-dd HH:mm:ss', new Date());
-                    const lastCallDateString = agentData.lastCallTime;
-                    
-                    let lastCallDate: Date | null = null;
-                    if(lastCallDateString) {
-                       // Asumimos que el año, mes y día son los de callDate para la comparación
-                       const tempDate = new Date(callDate);
-                       const timeParts = lastCallDateString.split(':');
-                       tempDate.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]), parseInt(timeParts[2]));
-                       lastCallDate = tempDate;
-                    }
+                    const callDate = new Date(call.callstart);
+                    const lastCallDate = agentData.lastCallTime ? new Date(agentData.lastCallTime) : null;
 
                     if (!lastCallDate || callDate > lastCallDate) {
                         agentData.lastCallTime = format(callDate, 'HH:mm:ss');
@@ -121,7 +143,7 @@ export default function AdvisorPerformancePage() {
       const finalPerformanceData = Object.values(performanceByAgent).map(agent => {
         agent.effectivenessRate = agent.totalCalls > 0 ? (agent.effectiveCalls / agent.totalCalls) * 100 : 0;
         return agent;
-      }).sort((a, b) => b.totalCalls - a.totalCalls);
+      });
 
       setPerformanceData(finalPerformanceData);
 
@@ -141,12 +163,50 @@ export default function AdvisorPerformancePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [date, toast]);
 
   useEffect(() => {
     fetchAndProcessData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchAndProcessData]);
+
+  const sortedPerformanceData = useMemo(() => {
+    let sortableItems = [...performanceData];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
+
+        if (aValue === null) return 1;
+        if (bValue === null) return -1;
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortConfig.direction === 'ascending' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        
+        if ((aValue as number) < (bValue as number)) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if ((aValue as number) > (bValue as number)) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [performanceData, sortConfig]);
+
+  const handleSort = (key: SortConfig['key']) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const renderSortArrow = (key: SortConfig['key']) => {
+    if (sortConfig?.key !== key) return null;
+    return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
+  };
 
   const getCallCountColor = (count: number): string => {
     if (count < 60) return "bg-red-500/20 text-red-500 border-red-500/50";
@@ -160,9 +220,20 @@ export default function AdvisorPerformancePage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Informe de Rendimiento de Asesores</h2>
-          <p className="text-muted-foreground">Métricas clave de la actividad de llamadas para el día de hoy.</p>
+          <p className="text-muted-foreground">Métricas clave de la actividad de llamadas.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {date?.from ? (date.to ? (<>{format(date.from, "LLL dd, y", { locale: es })} - {format(date.to, "LLL dd, y", { locale: es })}</>) : (format(date.from, "LLL dd, y", { locale: es }))) : (<span>Selecciona un rango</span>)}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
+            </PopoverContent>
+          </Popover>
           <Button variant="outline" size="sm" onClick={() => fetchAndProcessData(true)} disabled={isLoading}>
             {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Actualizar
@@ -181,23 +252,35 @@ export default function AdvisorPerformancePage() {
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Rendimiento por Asesor</CardTitle>
-                <CardDescription>Resumen de actividad de llamadas salientes para hoy.</CardDescription>
+                <CardDescription>Resumen de actividad de llamadas salientes.</CardDescription>
             </CardHeader>
             <CardContent className="overflow-auto max-h-[70vh] p-2">
                 <Table>
                 <TableHeader className="sticky top-0 bg-card">
                     <TableRow>
-                        <TableHead>Asesor</TableHead>
-                        <TableHead className="text-center">Llamadas Salientes (Intentos)</TableHead>
-                        <TableHead className="text-center">Llamadas Efectivas</TableHead>
-                        <TableHead className="text-center">Tasa de Efectividad</TableHead>
-                        <TableHead className="text-center">Total Minutos</TableHead>
-                        <TableHead className="text-right">Última Llamada</TableHead>
+                        <TableHead>
+                             <Button variant="ghost" onClick={() => handleSort('name')}>Asesor {renderSortArrow('name')}</Button>
+                        </TableHead>
+                        <TableHead className="text-center">
+                            <Button variant="ghost" onClick={() => handleSort('totalCalls')}>Llamadas Salientes {renderSortArrow('totalCalls')}</Button>
+                        </TableHead>
+                        <TableHead className="text-center">
+                            <Button variant="ghost" onClick={() => handleSort('effectiveCalls')}>Llamadas Efectivas {renderSortArrow('effectiveCalls')}</Button>
+                        </TableHead>
+                        <TableHead className="text-center">
+                            <Button variant="ghost" onClick={() => handleSort('effectivenessRate')}>Tasa de Efectividad {renderSortArrow('effectivenessRate')}</Button>
+                        </TableHead>
+                        <TableHead className="text-center">
+                            <Button variant="ghost" onClick={() => handleSort('totalMinutes')}>Total Minutos {renderSortArrow('totalMinutes')}</Button>
+                        </TableHead>
+                        <TableHead className="text-right">
+                             <Button variant="ghost" onClick={() => handleSort('lastCallTime')}>Última Llamada {renderSortArrow('lastCallTime')}</Button>
+                        </TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {performanceData.length > 0 ? (
-                    performanceData.map((agent) => (
+                    {sortedPerformanceData.length > 0 ? (
+                    sortedPerformanceData.map((agent) => (
                         <TableRow key={agent.id}>
                             <TableCell className="font-bold">{agent.name} ({agent.id})</TableCell>
                             <TableCell className="text-center">
@@ -226,7 +309,7 @@ export default function AdvisorPerformancePage() {
                     ) : (
                     <TableRow>
                         <TableCell colSpan={6} className="h-24 text-center">
-                            No se encontraron datos de rendimiento para el día de hoy.
+                            No se encontraron datos de rendimiento para el período seleccionado.
                         </TableCell>
                     </TableRow>
                     )}
@@ -238,3 +321,5 @@ export default function AdvisorPerformancePage() {
     </div>
   );
 }
+
+    

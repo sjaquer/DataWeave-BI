@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { format } from 'date-fns';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 /**
  * Endpoint para obtener estadísticas de llamadas desde la API de Zadarma.

@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp, Timer, PlayCircle, StopCircle } from "lucide-react";
+import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp, Timer, PlayCircle, StopCircle, PhoneForwarded, PhoneOutgoing, BarChartHorizontal } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -12,10 +11,12 @@ import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 import DashboardNav from "@/components/DashboardNav";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 
 
 // --- Tipos de Datos ---
@@ -121,6 +122,7 @@ export default function AdvisorPerformancePage() {
 
       // 2. Procesar cada grupo para crear una llamada consolidada
       const consolidatedCalls: ZadarmaCall[] = Object.values(callsByPbxId).map(group => {
+          // Prioriza la llamada que fue 'answered', sino, la de mayor duración.
           group.sort((a, b) => {
               if (a.disposition === 'answered' && b.disposition !== 'answered') return -1;
               if (a.disposition !== 'answered' && b.disposition === 'answered') return 1;
@@ -251,6 +253,17 @@ export default function AdvisorPerformancePage() {
     if (count >= 60 && count <= 100) return "bg-yellow-500/20 text-yellow-500 border-yellow-500/50";
     return "bg-green-500/20 text-green-500 border-green-500/50";
   };
+  
+  const totalCalls = useMemo(() => performanceData.reduce((acc, agent) => acc + agent.totalCalls, 0), [performanceData]);
+  const totalEffectiveCalls = useMemo(() => performanceData.reduce((acc, agent) => acc + agent.effectiveCalls, 0), [performanceData]);
+  const averageEffectiveness = totalCalls > 0 ? (totalEffectiveCalls / totalCalls) * 100 : 0;
+  
+  const chartData = useMemo(() => {
+    return [...performanceData]
+        .filter(d => d.totalCalls > 0)
+        .sort((a,b) => a.totalCalls - b.totalCalls)
+        .map(d => ({...d, totalMinutes: Math.ceil(d.totalSeconds / 60)}));
+  }, [performanceData]);
 
 
   return (
@@ -287,98 +300,195 @@ export default function AdvisorPerformancePage() {
           <p className="ml-4 text-muted-foreground">Calculando rendimiento...</p>
         </div>
       ) : (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Rendimiento por Asesor</CardTitle>
-                <CardDescription>Resumen de actividad de llamadas salientes.</CardDescription>
-            </CardHeader>
-            <CardContent className="overflow-auto max-h-[70vh] p-2">
-                <Table>
-                <TableHeader className="sticky top-0 bg-card">
-                    <TableRow>
-                        <TableHead>
-                             <Button variant="ghost" onClick={() => handleSort('name')}>Asesor {renderSortArrow('name')}</Button>
-                        </TableHead>
-                        <TableHead className="text-center">
-                            <Button variant="ghost" onClick={() => handleSort('totalCalls')}>Intentos {renderSortArrow('totalCalls')}</Button>
-                        </TableHead>
-                        <TableHead className="text-center">
-                            <Button variant="ghost" onClick={() => handleSort('effectiveCalls')}>Efectivas {renderSortArrow('effectiveCalls')}</Button>
-                        </TableHead>
-                        <TableHead className="text-center">
-                            <Button variant="ghost" onClick={() => handleSort('effectivenessRate')}>Efectividad {renderSortArrow('effectivenessRate')}</Button>
-                        </TableHead>
-                        <TableHead className="text-center">
-                            <Button variant="ghost" onClick={() => handleSort('totalSeconds')}>Minutos Totales {renderSortArrow('totalSeconds')}</Button>
-                        </TableHead>
-                         <TableHead className="text-center">
-                            <Button variant="ghost" onClick={() => handleSort('averageCallDuration')}>Duración Prom. {renderSortArrow('averageCallDuration')}</Button>
-                        </TableHead>
-                        <TableHead className="text-center">
-                             <Button variant="ghost" onClick={() => handleSort('firstCallTime')}>Primera Llamada {renderSortArrow('firstCallTime')}</Button>
-                        </TableHead>
-                        <TableHead className="text-right">
-                             <Button variant="ghost" onClick={() => handleSort('lastCallTime')}>Última Llamada {renderSortArrow('lastCallTime')}</Button>
-                        </TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {sortedPerformanceData.length > 0 ? (
-                    sortedPerformanceData.map((agent) => (
-                        <TableRow key={agent.id}>
-                            <TableCell className="font-bold">{agent.name} ({agent.id})</TableCell>
-                            <TableCell className="text-center">
-                                <Badge variant="outline" className={cn("text-base font-bold", getCallCountColor(agent.totalCalls))}>
-                                    {agent.totalCalls}
-                                </Badge>
-                            </TableCell>
-                            <TableCell className="text-center font-semibold text-green-500">
-                                <div className="flex items-center justify-center gap-2">
-                                    <CheckCircle className="h-4 w-4" />
-                                    {agent.effectiveCalls}
+        <div className="space-y-8">
+            <div className="grid gap-4 md:grid-cols-3">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total de Intentos</CardTitle>
+                        <PhoneOutgoing className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{totalCalls}</div>
+                        <p className="text-xs text-muted-foreground">Llamadas salientes realizadas por el equipo</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total de Llamadas Efectivas</CardTitle>
+                        <PhoneForwarded className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{totalEffectiveCalls}</div>
+                        <p className="text-xs text-muted-foreground">Llamadas que fueron contestadas</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Tasa de Efectividad Promedio</CardTitle>
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{averageEffectiveness.toFixed(1)}%</div>
+                        <p className="text-xs text-muted-foreground">Efectividad promedio del equipo</p>
+                    </CardContent>
+                </Card>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center"><BarChartHorizontal className="mr-2 h-5 w-5" />Comparativa de Intentos de Llamada</CardTitle>
+                        <CardDescription>Total de llamadas salientes realizadas por cada asesor.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-80">
+                         <ChartContainer config={{ totalCalls: { label: "Intentos", color: "hsl(var(--chart-2))" } }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30}}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis type="number" />
+                                    <YAxis dataKey="name" type="category" width={60} tick={{ fontSize: 12 }} />
+                                    <Tooltip content={<ChartTooltipContent />} cursor={{fill: "hsl(var(--muted))"}}/>
+                                    <Bar dataKey="totalCalls" name="Intentos" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center"><CheckCircle className="mr-2 h-5 w-5" />Comparativa de Llamadas Efectivas</CardTitle>
+                        <CardDescription>Total de llamadas contestadas por cada asesor.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-80">
+                        <ChartContainer config={{ effectiveCalls: { label: "Efectivas", color: "hsl(var(--chart-1))" } }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30}}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis type="number" />
+                                    <YAxis dataKey="name" type="category" width={60} tick={{ fontSize: 12 }} />
+                                    <Tooltip content={<ChartTooltipContent />} cursor={{fill: "hsl(var(--muted))"}} />
+                                    <Bar dataKey="effectiveCalls" name="Efectivas" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                    </CardContent>
+                </Card>
+            </div>
+             <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center"><Clock className="mr-2 h-5 w-5" />Comparativa de Minutos en Llamada</CardTitle>
+                    <CardDescription>Total de minutos que cada asesor ha pasado en llamadas.</CardDescription>
+                </CardHeader>
+                <CardContent className="h-80">
+                    <ChartContainer config={{ totalMinutes: { label: "Minutos", color: "hsl(var(--chart-4))" } }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30}}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis type="number" />
+                                <YAxis dataKey="name" type="category" width={60} tick={{ fontSize: 12 }} />
+                                <Tooltip content={<ChartTooltipContent />} cursor={{fill: "hsl(var(--muted))"}}/>
+                                <Bar dataKey="totalMinutes" name="Minutos Totales" fill="hsl(var(--chart-4))" radius={[0, 4, 4, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </ChartContainer>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Detalle de Rendimiento por Asesor</CardTitle>
+                    <CardDescription>Resumen detallado de la actividad de llamadas salientes.</CardDescription>
+                </CardHeader>
+                <CardContent className="overflow-auto max-h-[70vh] p-2">
+                    <Table>
+                    <TableHeader className="sticky top-0 bg-card">
+                        <TableRow>
+                            <TableHead>
+                                <Button variant="ghost" onClick={() => handleSort('name')}>Asesor {renderSortArrow('name')}</Button>
+                            </TableHead>
+                            <TableHead className="text-center">
+                                <Button variant="ghost" onClick={() => handleSort('totalCalls')}>Intentos {renderSortArrow('totalCalls')}</Button>
+                            </TableHead>
+                            <TableHead className="text-center">
+                                <Button variant="ghost" onClick={() => handleSort('effectiveCalls')}>Efectivas {renderSortArrow('effectiveCalls')}</Button>
+                            </TableHead>
+                            <TableHead className="text-center">
+                                <Button variant="ghost" onClick={() => handleSort('effectivenessRate')}>Efectividad {renderSortArrow('effectivenessRate')}</Button>
+                            </TableHead>
+                            <TableHead className="text-center">
+                                <Button variant="ghost" onClick={() => handleSort('totalSeconds')}>Minutos Totales {renderSortArrow('totalSeconds')}</Button>
+                            </TableHead>
+                            <TableHead className="text-center">
+                                <Button variant="ghost" onClick={() => handleSort('averageCallDuration')}>Duración Prom. {renderSortArrow('averageCallDuration')}</Button>
+                            </TableHead>
+                            <TableHead className="text-center">
+                                <Button variant="ghost" onClick={() => handleSort('firstCallTime')}>Primera Llamada {renderSortArrow('firstCallTime')}</Button>
+                            </TableHead>
+                            <TableHead className="text-right">
+                                <Button variant="ghost" onClick={() => handleSort('lastCallTime')}>Última Llamada {renderSortArrow('lastCallTime')}</Button>
+                            </TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {sortedPerformanceData.length > 0 ? (
+                        sortedPerformanceData.map((agent) => (
+                            <TableRow key={agent.id}>
+                                <TableCell className="font-bold">{agent.name} ({agent.id})</TableCell>
+                                <TableCell className="text-center">
+                                    <Badge variant="outline" className={cn("text-base font-bold", getCallCountColor(agent.totalCalls))}>
+                                        {agent.totalCalls}
+                                    </Badge>
+                                </TableCell>
+                                <TableCell className="text-center font-semibold text-green-500">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <CheckCircle className="h-4 w-4" />
+                                        {agent.effectiveCalls}
+                                    </div>
+                                </TableCell>
+                                <TableCell className="text-center font-mono font-semibold">
+                                {agent.effectivenessRate.toFixed(1)}%
+                                </TableCell>
+                                <TableCell className="text-center">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Clock className="h-4 w-4 text-muted-foreground" />
+                                        {Math.ceil(agent.totalSeconds / 60)} min
+                                    </div>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Timer className="h-4 w-4 text-muted-foreground" />
+                                        {agent.averageCallDuration.toFixed(0)} s
+                                    </div>
+                                </TableCell>
+                                <TableCell className="text-center font-mono">
+                                <div className="flex items-center justify-center gap-2 text-green-500">
+                                    <PlayCircle className="h-4 w-4" />
+                                    {agent.firstCallTime || "N/A"}
                                 </div>
-                            </TableCell>
-                            <TableCell className="text-center font-mono font-semibold">
-                               {agent.effectivenessRate.toFixed(1)}%
-                            </TableCell>
-                            <TableCell className="text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                    <Clock className="h-4 w-4 text-muted-foreground" />
-                                    {Math.ceil(agent.totalSeconds / 60)} min
+                                </TableCell>
+                                <TableCell className="text-right font-mono">
+                                <div className="flex items-center justify-end gap-2 text-red-500">
+                                    <StopCircle className="h-4 w-4" />
+                                    {agent.lastCallTime || "N/A"}
                                 </div>
-                            </TableCell>
-                             <TableCell className="text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                    <Timer className="h-4 w-4 text-muted-foreground" />
-                                    {agent.averageCallDuration.toFixed(0)} s
-                                </div>
-                            </TableCell>
-                             <TableCell className="text-center font-mono">
-                               <div className="flex items-center justify-center gap-2 text-green-500">
-                                  <PlayCircle className="h-4 w-4" />
-                                  {agent.firstCallTime || "N/A"}
-                               </div>
-                            </TableCell>
-                            <TableCell className="text-right font-mono">
-                              <div className="flex items-center justify-end gap-2 text-red-500">
-                                  <StopCircle className="h-4 w-4" />
-                                  {agent.lastCallTime || "N/A"}
-                              </div>
+                                </TableCell>
+                            </TableRow>
+                        ))
+                        ) : (
+                        <TableRow>
+                            <TableCell colSpan={8} className="h-24 text-center">
+                                No se encontraron datos de rendimiento para el período seleccionado.
                             </TableCell>
                         </TableRow>
-                    ))
-                    ) : (
-                    <TableRow>
-                        <TableCell colSpan={8} className="h-24 text-center">
-                            No se encontraron datos de rendimiento para el período seleccionado.
-                        </TableCell>
-                    </TableRow>
-                    )}
-                </TableBody>
-                </Table>
-            </CardContent>
-        </Card>
+                        )}
+                    </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+        </div>
       )}
     </div>
   );
 }
+
+    

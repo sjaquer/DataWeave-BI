@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
@@ -17,6 +18,7 @@ import DashboardNav from "@/components/DashboardNav";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
 // --- Tipos de Datos ---
@@ -70,6 +72,30 @@ export default function AdvisorPerformancePage() {
     const today = new Date();
     setDate({ from: today, to: today });
   }, []);
+
+    const handleDatePreset = (preset: string) => {
+        const to = new Date();
+        let from: Date | undefined;
+
+        switch (preset) {
+        case 'today':
+            from = new Date();
+            break;
+        case 'yesterday':
+            from = subDays(new Date(), 1);
+            setDate({ from, to: from });
+            return;
+        case '7days':
+            from = new Date();
+            from.setDate(from.getDate() - 6);
+            break;
+        case '30days':
+            from = new Date();
+            from.setDate(from.getDate() - 29);
+            break;
+        }
+        setDate({ from, to });
+    };
 
   const fetchAndProcessData = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
@@ -275,6 +301,17 @@ export default function AdvisorPerformancePage() {
           <p className="text-muted-foreground">Métricas clave de la actividad de llamadas.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+            <Select onValueChange={handleDatePreset}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="Filtro Rápido" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="today">Hoy</SelectItem>
+                    <SelectItem value="yesterday">Ayer</SelectItem>
+                    <SelectItem value="7days">Últimos 7 días</SelectItem>
+                    <SelectItem value="30days">Últimos 30 días</SelectItem>
+                </SelectContent>
+            </Select>
           <Popover>
             <PopoverTrigger asChild>
               <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp } from "lucide-react";
+import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp, Timer, PlayCircle, StopCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
-import { format, startOfDay, endOfDay } from "date-fns";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
 import DashboardNav from "@/components/DashboardNav";
@@ -34,7 +34,9 @@ interface AdvisorPerformance {
   totalCalls: number;
   effectiveCalls: number;
   effectivenessRate: number;
-  totalMinutes: number;
+  totalSeconds: number;
+  averageCallDuration: number;
+  firstCallTime: string | null;
   lastCallTime: string | null;
 }
 
@@ -70,9 +72,8 @@ export default function AdvisorPerformancePage() {
     try {
       const params = new URLSearchParams();
       if (date?.from) {
-        // Para asegurar que el rango cubra todo el día
-        const startDate = startOfDay(date.from);
-        const endDate = endOfDay(date.to || date.from);
+        const startDate = new Date(date.from.setHours(0, 0, 0, 0));
+        const endDate = new Date((date.to || date.from).setHours(23, 59, 59, 999));
         params.append('startDate', startDate.toISOString());
         params.append('endDate', endDate.toISOString());
       }
@@ -94,8 +95,10 @@ export default function AdvisorPerformancePage() {
           totalCalls: 0,
           effectiveCalls: 0,
           effectivenessRate: 0,
-          totalMinutes: 0,
-          lastCallTime: null
+          totalSeconds: 0,
+          averageCallDuration: 0,
+          firstCallTime: null,
+          lastCallTime: null,
         };
       });
       
@@ -112,13 +115,11 @@ export default function AdvisorPerformancePage() {
 
       // 2. Procesar cada grupo para crear una llamada consolidada
       const consolidatedCalls: ZadarmaCall[] = Object.values(callsByPbxId).map(group => {
-          // Ordenar por disposición ('answered' primero) y luego por duración para encontrar el mejor registro
           group.sort((a, b) => {
               if (a.disposition === 'answered' && b.disposition !== 'answered') return -1;
               if (a.disposition !== 'answered' && b.disposition === 'answered') return 1;
               return b.seconds - a.seconds;
           });
-          // El primer elemento es el "mejor" registro consolidado.
           return group[0];
       });
 
@@ -133,10 +134,9 @@ export default function AdvisorPerformancePage() {
         const agentData = performanceByAgent[agentId];
         const destinationStr = String(call.destination);
 
-        // Asegurarse de que son llamadas salientes a números externos
-        if (destinationStr.length > 3) {
+        if (destinationStr.length > 3) { // Asegurarse de que son llamadas salientes a números externos
             agentData.totalCalls += 1;
-            agentData.totalMinutes += Math.ceil(call.seconds / 60);
+            agentData.totalSeconds += call.seconds;
 
             if (call.disposition === 'answered') {
                 agentData.effectiveCalls += 1;
@@ -145,14 +145,17 @@ export default function AdvisorPerformancePage() {
             if (call.callstart) {
                 try {
                     const callDate = new Date(call.callstart);
+                    const firstCallDate = agentData.firstCallTime ? new Date(agentData.firstCallTime) : null;
                     const lastCallDate = agentData.lastCallTime ? new Date(agentData.lastCallTime) : null;
                     
-                    // Almacenamos la fecha completa para comparar, luego formateamos solo para mostrar
+                    if (!firstCallDate || callDate < firstCallDate) {
+                        agentData.firstCallTime = callDate.toISOString(); 
+                    }
                     if (!lastCallDate || callDate > lastCallDate) {
                         agentData.lastCallTime = callDate.toISOString(); 
                     }
                 } catch (e) {
-                    console.error("Error parseando fecha para última llamada:", call.callstart);
+                    console.error("Error parseando fecha:", call.callstart);
                 }
             }
         }
@@ -160,13 +163,13 @@ export default function AdvisorPerformancePage() {
       
       const finalPerformanceData = Object.values(performanceByAgent).map(agent => {
         agent.effectivenessRate = agent.totalCalls > 0 ? (agent.effectiveCalls / agent.totalCalls) * 100 : 0;
-         // Formatear la hora de la última llamada solo para la visualización
+        agent.averageCallDuration = agent.totalCalls > 0 ? agent.totalSeconds / agent.totalCalls : 0;
+
+        if (agent.firstCallTime) {
+            try { agent.firstCallTime = format(new Date(agent.firstCallTime), 'HH:mm:ss'); } catch { agent.firstCallTime = "Inválido"; }
+        }
         if (agent.lastCallTime) {
-            try {
-                agent.lastCallTime = format(new Date(agent.lastCallTime), 'HH:mm:ss');
-            } catch {
-                agent.lastCallTime = "Inválido";
-            }
+            try { agent.lastCallTime = format(new Date(agent.lastCallTime), 'HH:mm:ss'); } catch { agent.lastCallTime = "Inválido"; }
         }
         return agent;
       });
@@ -289,16 +292,22 @@ export default function AdvisorPerformancePage() {
                              <Button variant="ghost" onClick={() => handleSort('name')}>Asesor {renderSortArrow('name')}</Button>
                         </TableHead>
                         <TableHead className="text-center">
-                            <Button variant="ghost" onClick={() => handleSort('totalCalls')}>Llamadas Salientes {renderSortArrow('totalCalls')}</Button>
+                            <Button variant="ghost" onClick={() => handleSort('totalCalls')}>Intentos {renderSortArrow('totalCalls')}</Button>
                         </TableHead>
                         <TableHead className="text-center">
-                            <Button variant="ghost" onClick={() => handleSort('effectiveCalls')}>Llamadas Efectivas {renderSortArrow('effectiveCalls')}</Button>
+                            <Button variant="ghost" onClick={() => handleSort('effectiveCalls')}>Efectivas {renderSortArrow('effectiveCalls')}</Button>
                         </TableHead>
                         <TableHead className="text-center">
-                            <Button variant="ghost" onClick={() => handleSort('effectivenessRate')}>Tasa de Efectividad {renderSortArrow('effectivenessRate')}</Button>
+                            <Button variant="ghost" onClick={() => handleSort('effectivenessRate')}>Efectividad {renderSortArrow('effectivenessRate')}</Button>
                         </TableHead>
                         <TableHead className="text-center">
-                            <Button variant="ghost" onClick={() => handleSort('totalMinutes')}>Total Minutos {renderSortArrow('totalMinutes')}</Button>
+                            <Button variant="ghost" onClick={() => handleSort('totalSeconds')}>Minutos Totales {renderSortArrow('totalSeconds')}</Button>
+                        </TableHead>
+                         <TableHead className="text-center">
+                            <Button variant="ghost" onClick={() => handleSort('averageCallDuration')}>Duración Prom. {renderSortArrow('averageCallDuration')}</Button>
+                        </TableHead>
+                        <TableHead className="text-center">
+                             <Button variant="ghost" onClick={() => handleSort('firstCallTime')}>Primera Llamada {renderSortArrow('firstCallTime')}</Button>
                         </TableHead>
                         <TableHead className="text-right">
                              <Button variant="ghost" onClick={() => handleSort('lastCallTime')}>Última Llamada {renderSortArrow('lastCallTime')}</Button>
@@ -327,15 +336,32 @@ export default function AdvisorPerformancePage() {
                             <TableCell className="text-center">
                                 <div className="flex items-center justify-center gap-2">
                                     <Clock className="h-4 w-4 text-muted-foreground" />
-                                    {agent.totalMinutes} min
+                                    {Math.ceil(agent.totalSeconds / 60)} min
                                 </div>
                             </TableCell>
-                            <TableCell className="text-right font-mono">{agent.lastCallTime || "N/A"}</TableCell>
+                             <TableCell className="text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                    <Timer className="h-4 w-4 text-muted-foreground" />
+                                    {agent.averageCallDuration.toFixed(0)} s
+                                </div>
+                            </TableCell>
+                             <TableCell className="text-center font-mono">
+                               <div className="flex items-center justify-center gap-2 text-green-500">
+                                  <PlayCircle className="h-4 w-4" />
+                                  {agent.firstCallTime || "N/A"}
+                               </div>
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              <div className="flex items-center justify-end gap-2 text-red-500">
+                                  <StopCircle className="h-4 w-4" />
+                                  {agent.lastCallTime || "N/A"}
+                              </div>
+                            </TableCell>
                         </TableRow>
                     ))
                     ) : (
                     <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center">
+                        <TableCell colSpan={8} className="h-24 text-center">
                             No se encontraron datos de rendimiento para el período seleccionado.
                         </TableCell>
                     </TableRow>

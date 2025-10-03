@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -60,20 +61,25 @@ export default function AdvisorPerformancePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [performanceData, setPerformanceData] = useState<AdvisorPerformance[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'totalCalls', direction: 'descending' });
-  const [date, setDate] = useState<DateRange | undefined>(() => {
-    const today = new Date();
-    return { from: today, to: today };
-  });
+  const [date, setDate] = useState<DateRange | undefined>(undefined);
 
   const { toast } = useToast();
+  
+  useEffect(() => {
+    const today = new Date();
+    setDate({ from: today, to: today });
+  }, []);
 
   const fetchAndProcessData = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
     try {
       const params = new URLSearchParams();
       if (date?.from) {
-        const startDate = new Date(date.from.setHours(0, 0, 0, 0));
-        const endDate = new Date((date.to || date.from).setHours(23, 59, 59, 999));
+        const startDate = new Date(date.from);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(date.to || date.from);
+        endDate.setHours(23, 59, 59, 999);
+        
         params.append('startDate', startDate.toISOString());
         params.append('endDate', endDate.toISOString());
       }
@@ -195,7 +201,9 @@ export default function AdvisorPerformancePage() {
   }, [date, toast]);
 
   useEffect(() => {
-    fetchAndProcessData();
+    if (date) {
+      fetchAndProcessData();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 

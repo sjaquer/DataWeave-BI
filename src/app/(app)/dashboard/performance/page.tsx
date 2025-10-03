@@ -171,7 +171,8 @@ export default function AdvisorPerformancePage() {
       
       const finalPerformanceData = Object.values(performanceByAgent).map(agent => {
         agent.effectivenessRate = agent.totalCalls > 0 ? (agent.effectiveCalls / agent.totalCalls) * 100 : 0;
-        agent.averageCallDuration = agent.totalCalls > 0 ? agent.totalSeconds / agent.totalCalls : 0;
+        // CORRECCIÓN: Calcular el promedio solo sobre las llamadas efectivas.
+        agent.averageCallDuration = agent.effectiveCalls > 0 ? agent.totalSeconds / agent.effectiveCalls : 0;
 
         if (agent.firstCallTime) {
             try { agent.firstCallTime = format(new Date(agent.firstCallTime), 'HH:mm:ss'); } catch { agent.firstCallTime = "Inválido"; }
@@ -419,7 +420,7 @@ export default function AdvisorPerformancePage() {
                                 <Button variant="ghost" onClick={() => handleSort('totalSeconds')}>Minutos Totales {renderSortArrow('totalSeconds')}</Button>
                             </TableHead>
                             <TableHead className="text-center">
-                                <Button variant="ghost" onClick={() => handleSort('averageCallDuration')}>Duración Prom. {renderSortArrow('averageCallDuration')}</Button>
+                                <Button variant="ghost" onClick={() => handleSort('averageCallDuration')}>Duración Prom. (Efectivas) {renderSortArrow('averageCallDuration')}</Button>
                             </TableHead>
                             <TableHead className="text-center">
                                 <Button variant="ghost" onClick={() => handleSort('firstCallTime')}>Primera Llamada {renderSortArrow('firstCallTime')}</Button>
@@ -490,5 +491,3 @@ export default function AdvisorPerformancePage() {
     </div>
   );
 }
-
-    

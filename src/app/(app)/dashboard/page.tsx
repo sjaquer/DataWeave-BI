@@ -1,13 +1,13 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { format, subDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, CheckCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight, Package2, ArrowDown, ArrowUp, BarChartHorizontal, PieChart as PieChartIcon, TrendingDown } from "lucide-react";
+import { Loader, CheckCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight, Package2, ArrowDown, ArrowUp, BarChartHorizontal, PieChart as PieChartIcon, TrendingDown, PackageSearch } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LabelList, LineChart, Line, PieChart, Pie, Cell } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -24,10 +24,20 @@ import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMe
 import DashboardNav from "@/components/DashboardNav";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
+import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+
 
 const CACHE_KEY = 'dashboardMetricsCache_main';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
 const MAIN_STORES = ["dearel", "blumi", "novi", "trazto", "cumbre"];
+const ITEMS_PER_PAGE = 10;
+
+
+type ProductConfirmationSortConfig = {
+    key: keyof ProductConfirmationRate;
+    direction: 'ascending' | 'descending';
+};
 
 const COLORS = [
   "hsl(var(--chart-1))",
@@ -312,52 +322,127 @@ export default function Dashboard() {
     </ul>
   );
 
-  const renderProductConfirmationList = (products: ProductConfirmationRate[] | undefined) => {
-    // Sort by confirmation rate descending
-    const sortedProducts = products ? [...products].sort((a, b) => b.confirmationRate - a.confirmationRate) : [];
-    const data = sortedProducts.slice(0, 10);
+  const ProductConfirmationTable = ({ products }: { products: ProductConfirmationRate[] | undefined }) => {
+    const [searchQuery, setSearchQuery] = useState("");
+    const [sortConfig, setSortConfig] = useState<ProductConfirmationSortConfig | null>({ key: 'requested', direction: 'descending' });
+    const [visibleItemsCount, setVisibleItemsCount] = useState(ITEMS_PER_PAGE);
+
+    const handleSort = (key: ProductConfirmationSortConfig['key']) => {
+        let direction: 'ascending' | 'descending' = 'ascending';
+        if (sortConfig?.key === key && sortConfig.direction === 'ascending') {
+            direction = 'descending';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const renderSortArrow = (key: ProductConfirmationSortConfig['key']) => {
+        if (sortConfig?.key !== key) return null;
+        return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
+    };
+
+    const filteredAndSortedData = useMemo(() => {
+        if (!products) return [];
+        let filtered = products.filter(item =>
+            searchQuery === '' || item.name.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+
+        if (sortConfig !== null) {
+            filtered.sort((a, b) => {
+                const aValue = a[sortConfig.key];
+                const bValue = b[sortConfig.key];
+                if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
+                if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
+                return 0;
+            });
+        }
+        return filtered;
+    }, [products, searchQuery, sortConfig]);
+
+    const visibleData = useMemo(() => {
+        return filteredAndSortedData.slice(0, visibleItemsCount);
+    }, [filteredAndSortedData, visibleItemsCount]);
     
-    if (data.length === 0) {
-        return <p className="text-center text-muted-foreground">No hay datos para mostrar.</p>;
+    const getRateColor = (rate: number) => {
+        if (rate < 40) return "bg-red-500/20";
+        if (rate < 70) return "bg-yellow-500/20";
+        return "bg-green-500/20";
     }
 
     return (
-        <ChartContainer config={{ confirmationRate: { label: "Tasa de Confirmación", color: "hsl(var(--primary))" } }} className="h-96">
-            <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} layout="vertical" margin={{ top: 5, right: 50, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
-                    <YAxis 
-                      dataKey="name" 
-                      type="category" 
-                      width={150} 
-                      tick={{ fontSize: 12, width: 150 }} 
-                      interval={0}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <Tooltip 
-                        content={<ChartTooltipContent 
-                            formatter={(value) => `${(value as number).toFixed(2)}%`} 
-                            nameKey="name"
-                        />} 
-                        cursor={{ fill: 'hsl(var(--primary) / 0.1)' }}
-                    />
-                    <Bar dataKey="confirmationRate" name="Tasa de Confirmación" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]}>
-                        <LabelList 
-                            dataKey="confirmationRate" 
-                            position="right" 
-                            offset={8}
-                            formatter={(value: number) => `${value.toFixed(1)}%`}
-                            className="font-bold text-xs fill-foreground"
-                        />
-                    </Bar>
-                </BarChart>
-            </ResponsiveContainer>
-        </ChartContainer>
+        <div className="space-y-4">
+             <div className="relative">
+                <PackageSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder="Buscar producto..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setVisibleItemsCount(ITEMS_PER_PAGE);
+                    }}
+                    className="pl-10 w-full"
+                />
+            </div>
+            <Card className="h-96">
+                <CardContent className="overflow-auto h-full p-0">
+                    <Table>
+                        <TableHeader className="sticky top-0 bg-card">
+                            <TableRow>
+                                <TableHead>
+                                    <Button variant="ghost" onClick={() => handleSort('name')}>
+                                        Producto {renderSortArrow('name')}
+                                    </Button>
+                                </TableHead>
+                                <TableHead className="text-center">
+                                    <Button variant="ghost" onClick={() => handleSort('requested')}>
+                                        Pedidos {renderSortArrow('requested')}
+                                    </Button>
+                                </TableHead>
+                                <TableHead className="text-center">
+                                    <Button variant="ghost" onClick={() => handleSort('confirmed')}>
+                                        Confirmados {renderSortArrow('confirmed')}
+                                    </Button>
+                                </TableHead>
+                                <TableHead className="text-right w-[200px]">
+                                    <Button variant="ghost" onClick={() => handleSort('confirmationRate')}>
+                                        Tasa de Confirmación {renderSortArrow('confirmationRate')}
+                                    </Button>
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {visibleData.length > 0 ? (
+                                visibleData.map(p => (
+                                    <TableRow key={p.name}>
+                                        <TableCell className="font-medium">{p.name}</TableCell>
+                                        <TableCell className="text-center">{p.requested}</TableCell>
+                                        <TableCell className="text-center text-green-500 font-semibold">{p.confirmed}</TableCell>
+                                        <TableCell className="text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <span className="font-mono font-semibold w-12">{p.confirmationRate.toFixed(1)}%</span>
+                                                <Progress value={p.confirmationRate} className={cn("h-2 w-24", getRateColor(p.confirmationRate))} />
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="h-24 text-center">No se encontraron productos.</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+                 {filteredAndSortedData.length > visibleItemsCount && (
+                    <CardFooter className="flex justify-center pt-4">
+                        <Button onClick={() => setVisibleItemsCount(prev => prev + ITEMS_PER_PAGE)}>
+                            Cargar más
+                        </Button>
+                    </CardFooter>
+                )}
+            </Card>
+        </div>
     );
-};
-
+  };
   
   const TrendIndicator = ({ value, text, type = 'percent' }: { value: number | undefined; text: string, type?: 'percent' | 'points' }) => {
     if (value === undefined) return null;
@@ -734,13 +819,13 @@ export default function Dashboard() {
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-6">
-        <Card>
+        <Card className="lg:col-span-2">
             <CardHeader>
-                <CardTitle className="flex items-center"><Percent className="mr-2 h-5 w-5" />Tasa de Confirmación por Producto</CardTitle>
-                <CardDescription>Top 10 productos más vendidos y su tasa de éxito.</CardDescription>
+                <CardTitle className="flex items-center"><Percent className="mr-2 h-5 w-5" />Análisis de Tasa de Confirmación por Producto</CardTitle>
+                <CardDescription>Busca y filtra para analizar la efectividad de venta por producto.</CardDescription>
             </CardHeader>
             <CardContent>
-                {renderProductConfirmationList(productConfirmationRates)}
+                <ProductConfirmationTable products={productConfirmationRates} />
             </CardContent>
         </Card>
         <Card>
@@ -783,4 +868,3 @@ export default function Dashboard() {
   );
 }
 
-    

@@ -5,3 +5,27 @@ runConfig:
   # Increase this value if you'd like to automatically spin up
   # more instances in response to increased traffic.
   maxInstances: 1
+
+# Environment variables and secrets
+# These secrets need to be created in Google Cloud Secret Manager.
+env:
+  - variable: SERVICE_ACCOUNT
+    secret: SERVICE_ACCOUNT
+    availability:
+      - RUNTIME
+  - variable: ZADARMA_API_KEY
+    secret: ZADARMA_API_KEY
+    availability:
+      - RUNTIME
+  - variable: ZADARMA_API_SECRET
+    secret: ZADARMA_API_SECRET
+    availability:
+      - RUNTIME
+  - variable: META_ACCESS_TOKEN
+    secret: META_ACCESS_TOKEN
+    availability:
+      - RUNTIME
+  - variable: META_AD_ACCOUNT_ID
+    secret: META_AD_ACCOUNT_ID
+    availability:
+      - RUNTIME

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 interface DashboardNavProps {
-  active: 'main' | 'provinces' | 'daily' | 'inventory' | 'inventory-status' | 'returns' | 'performance';
+  active: 'main' | 'provinces' | 'daily' | 'inventory' | 'inventory-status' | 'returns' | 'performance' | 'meta-campaigns';
 }
 
 export default function DashboardNav({ active }: DashboardNavProps) {
@@ -18,6 +18,11 @@ export default function DashboardNav({ active }: DashboardNavProps) {
        <Link href="/dashboard/performance" passHref className="flex-1">
         <Button variant={active === 'performance' ? "default" : "ghost"} size="sm" className="w-full">
           Rendimiento Asesores
+        </Button>
+      </Link>
+      <Link href="/dashboard/meta-campaigns" passHref className="flex-1">
+        <Button variant={active === 'meta-campaigns' ? "default" : "ghost"} size="sm" className="w-full">
+          Campañas Meta
         </Button>
       </Link>
       <Link href="/dashboard/provinces" passHref className="flex-1">

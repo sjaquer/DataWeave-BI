@@ -7,6 +7,10 @@ interface DashboardNavProps {
   active: 'main' | 'provinces' | 'daily' | 'inventory' | 'inventory-status' | 'returns' | 'performance' | 'meta-campaigns';
 }
 
+/**
+ * @deprecated Este componente ha sido reemplazado por la navegación en `(app)/layout.tsx` con el nuevo Sidebar.
+ * Se mantiene por si es necesario revertir cambios, pero no está en uso activo.
+ */
 export default function DashboardNav({ active }: DashboardNavProps) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex items-center gap-2 rounded-md bg-muted p-1 w-full lg:w-auto flex-wrap justify-center">

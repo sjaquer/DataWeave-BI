@@ -4,16 +4,20 @@ import DataUploader from "@/components/DataUploader";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export default function UploadDataPage() {
     return (
-        <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
+        <div className="space-y-6">
              <div className="flex items-center justify-between space-y-2 mb-6">
-                <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Carga Manual de Datos</h2>
-                    <p className="text-muted-foreground">
-                        Sube aquí los archivos CSV para las tiendas no conectadas por webhooks.
-                    </p>
+                <div className="flex items-center gap-4">
+                    <SidebarTrigger className="md:hidden"/>
+                    <div>
+                        <h2 className="text-3xl font-bold tracking-tight">Carga Manual de Datos</h2>
+                        <p className="text-muted-foreground">
+                            Sube aquí los archivos CSV para las tiendas no conectadas por webhooks.
+                        </p>
+                    </div>
                 </div>
                 <Link href="/dashboard" passHref>
                     <Button variant="outline">

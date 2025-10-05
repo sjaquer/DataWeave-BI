@@ -21,11 +21,11 @@ import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, DailyStorePerformance, DailyMetric, ProductConfirmationRate } from "@/ai/schemas/getMetricsSchema";
-import DashboardNav from "@/components/DashboardNav";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 
 const CACHE_KEY = 'dashboardMetricsCache_main';
@@ -465,14 +465,18 @@ export default function Dashboard() {
 
 
   return (
-    <div className="flex-1 space-y-8 p-4 md:p-8">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard de Inteligencia de Negocio</h2>
-          <p className="text-muted-foreground">
-            {selectedStore === 'all' ? 'Una vista general de las métricas clave de tu negocio.' : `Mostrando métricas para la tienda: ${capitalize(selectedStore)}`}
-          </p>
+         <div className="flex items-center gap-4">
+            <SidebarTrigger className="md:hidden"/>
+            <div>
+                <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+                <p className="text-muted-foreground">
+                    {selectedStore === 'all' ? 'Vista general de métricas clave.' : `Métricas para: ${capitalize(selectedStore)}`}
+                </p>
+            </div>
         </div>
+
         <div className="flex items-center gap-2 flex-wrap">
           <Select onValueChange={handleDatePreset}>
               <SelectTrigger className="w-full sm:w-[120px]">
@@ -524,8 +528,6 @@ export default function Dashboard() {
         </div>
       </div>
       
-      <DashboardNav active="main" />
-
        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

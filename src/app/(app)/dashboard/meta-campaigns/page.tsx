@@ -14,7 +14,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import DashboardNav from "@/components/DashboardNav";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 // --- Tipos de Datos (simulados por ahora) ---
 interface MetaCampaign {
@@ -157,11 +157,14 @@ export default function MetaCampaignsPage() {
 
 
   return (
-    <div className="flex-1 space-y-8 p-4 md:p-8">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Rendimiento de Campañas (Meta)</h2>
-          <p className="text-muted-foreground">Análisis de las métricas clave de tus campañas publicitarias.</p>
+        <div className="flex items-center gap-4">
+            <SidebarTrigger className="md:hidden"/>
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight">Rendimiento de Campañas (Meta)</h2>
+              <p className="text-muted-foreground">Análisis de las métricas clave de tus campañas publicitarias.</p>
+            </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
            <Select onValueChange={handleDatePreset}>
@@ -193,8 +196,6 @@ export default function MetaCampaignsPage() {
         </div>
       </div>
       
-      <DashboardNav active="meta-campaigns" />
-
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

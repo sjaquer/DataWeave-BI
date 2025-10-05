@@ -16,7 +16,7 @@ import { Tooltip as UiTooltip, TooltipContent as UiTooltipContent, TooltipProvid
 import { useToast } from "@/hooks/use-toast";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { GetMetricsOutput, GetMetricsInput, CustomerReturn, PurchaseForecastItem } from "@/ai/schemas/getMetricsSchema";
-import DashboardNav from "@/components/DashboardNav";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 const CACHE_KEY = 'dashboardMetricsCache_inventory';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
@@ -243,11 +243,14 @@ export default function InventoryDetailPage() {
 
 
   return (
-    <div className="flex-1 space-y-8 p-4 md:p-8">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Análisis de Inventario</h2>
-          <p className="text-muted-foreground">Flujo, rotación, devoluciones y previsión de compras.</p>
+        <div className="flex items-center gap-4">
+            <SidebarTrigger className="md:hidden"/>
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight">Análisis de Inventario</h2>
+              <p className="text-muted-foreground">Flujo, rotación, devoluciones y previsión de compras.</p>
+            </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Select onValueChange={handleDatePreset} defaultValue="all">
@@ -280,8 +283,6 @@ export default function InventoryDetailPage() {
           </Button>
         </div>
       </div>
-      
-      <DashboardNav active="inventory" />
       
       {isLoading ? (
         <div className="flex items-center justify-center h-96">

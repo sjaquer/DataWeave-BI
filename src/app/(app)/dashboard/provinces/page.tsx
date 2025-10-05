@@ -19,7 +19,7 @@ import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { ProvinceMetric, GetMetricsOutput, GetMetricsInput, StoreMetric } from "@/ai/schemas/getMetricsSchema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import DashboardNav from "@/components/DashboardNav";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 const CACHE_KEY = 'dashboardMetricsCache_provinces';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
@@ -213,11 +213,14 @@ export default function ProvincesDetailPage() {
   };
 
   return (
-    <div className="flex-1 space-y-8 p-4 md:p-8">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Análisis Detallado por Provincia</h2>
-          <p className="text-muted-foreground">Desglose completo de pedidos, gasto y tasas de confirmación por provincia.</p>
+        <div className="flex items-center gap-4">
+            <SidebarTrigger className="md:hidden"/>
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight">Análisis por Provincia</h2>
+              <p className="text-muted-foreground">Desglose de pedidos, gasto y tasas de confirmación.</p>
+            </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Select onValueChange={handleDatePreset}>
@@ -261,8 +264,6 @@ export default function ProvincesDetailPage() {
           </Button>
         </div>
       </div>
-      
-      <DashboardNav active="provinces" />
       
       <Card>
         <CardHeader>

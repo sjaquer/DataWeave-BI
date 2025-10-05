@@ -14,11 +14,11 @@ import { format, subDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
-import DashboardNav from "@/components/DashboardNav";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 
 // --- Tipos de Datos ---
@@ -70,6 +70,7 @@ export default function AdvisorPerformancePage() {
   const { toast } = useToast();
   
   useEffect(() => {
+    // Set initial date range to today on client side to avoid hydration errors
     const today = new Date();
     setDate({ from: today, to: today });
   }, []);
@@ -295,11 +296,14 @@ export default function AdvisorPerformancePage() {
 
 
   return (
-    <div className="flex-1 space-y-8 p-4 md:p-8">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Informe de Rendimiento de Asesores</h2>
-          <p className="text-muted-foreground">Métricas clave de la actividad de llamadas.</p>
+        <div className="flex items-center gap-4">
+            <SidebarTrigger className="md:hidden"/>
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight">Rendimiento de Asesores</h2>
+              <p className="text-muted-foreground">Métricas clave de la actividad de llamadas.</p>
+            </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
             <Select onValueChange={handleDatePreset}>
@@ -331,8 +335,6 @@ export default function AdvisorPerformancePage() {
         </div>
       </div>
       
-      <DashboardNav active="performance" />
-
       {isLoading ? (
         <div className="flex items-center justify-center h-96">
           <Loader className="h-8 w-8 animate-spin text-primary" />

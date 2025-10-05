@@ -15,7 +15,7 @@ import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { CurrentInventoryItem, GetMetricsOutput } from "@/ai/schemas/getMetricsSchema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
-import DashboardNav from "@/components/DashboardNav";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 const CACHE_KEY = 'dashboardMetricsCache_inventory_status';
 const CACHE_EXPIRATION_MS = 5 * 60 * 1000; // 5 minutos de caché
@@ -154,11 +154,14 @@ export default function InventoryStatusPage() {
   };
 
   return (
-    <div className="flex-1 space-y-8 p-4 md:p-8">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Estado de Inventario Actual</h2>
-          <p className="text-muted-foreground">Consulta el stock en tiempo real y alertas de productos.</p>
+        <div className="flex items-center gap-4">
+            <SidebarTrigger className="md:hidden"/>
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight">Estado de Inventario Actual</h2>
+              <p className="text-muted-foreground">Consulta el stock en tiempo real y alertas de productos.</p>
+            </div>
         </div>
          <div className="flex items-center gap-2 flex-wrap">
           <Button className="flex-1 sm:flex-initial" variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>
@@ -167,8 +170,6 @@ export default function InventoryStatusPage() {
           </Button>
         </div>
       </div>
-      
-      <DashboardNav active="inventory-status" />
       
       <Card>
           <CardHeader>
@@ -315,3 +316,4 @@ export default function InventoryStatusPage() {
     </div>
   );
 }
+

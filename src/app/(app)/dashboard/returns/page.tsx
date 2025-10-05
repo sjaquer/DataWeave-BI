@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { MonthlyProductReport, GetMetricsOutput } from "@/ai/schemas/getMetricsSchema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import DashboardNav from "@/components/DashboardNav";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 const CACHE_KEY = 'dashboardMetricsCache_monthly_report';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
@@ -142,11 +142,14 @@ export default function MonthlyReportPage() {
   };
 
   return (
-    <div className="flex-1 space-y-8 p-4 md:p-8">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Análisis de Movimiento Mensual</h2>
-          <p className="text-muted-foreground">Revisa las ventas mensuales, tendencias y sugerencias de compra.</p>
+        <div className="flex items-center gap-4">
+            <SidebarTrigger className="md:hidden"/>
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight">Análisis de Movimiento Mensual</h2>
+              <p className="text-muted-foreground">Revisa las ventas mensuales, tendencias y sugerencias de compra.</p>
+            </div>
         </div>
          <div className="flex items-center gap-2 flex-wrap">
           <Button className="flex-1 sm:flex-initial" variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>
@@ -155,8 +158,6 @@ export default function MonthlyReportPage() {
           </Button>
         </div>
       </div>
-      
-      <DashboardNav active="returns" />
       
       <Card>
         <CardHeader>

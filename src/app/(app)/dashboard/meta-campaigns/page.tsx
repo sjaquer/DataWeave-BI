@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -39,12 +40,15 @@ export default function MetaCampaignsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'spend', direction: 'descending' });
-  const [date, setDate] = useState<DateRange | undefined>(() => {
-    const today = new Date();
-    return { from: subDays(today, 7), to: today };
-  });
+  const [date, setDate] = useState<DateRange | undefined>(undefined);
 
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Set initial date range to last 7 days on client side to avoid hydration errors
+    const today = new Date();
+    setDate({ from: subDays(today, 7), to: today });
+  }, []);
 
    const handleDatePreset = (preset: string) => {
     const to = new Date();
@@ -95,7 +99,9 @@ export default function MetaCampaignsPage() {
   }, [date, toast]);
 
   useEffect(() => {
-    fetchCampaignData();
+    if (date) {
+      fetchCampaignData();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 

@@ -256,47 +256,49 @@ export default function MetaCampaignsPage() {
                     <Loader className="h-8 w-8 animate-spin text-primary" />
                 </div>
                ) : (
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead><Button variant="ghost" onClick={() => handleSort('name')}>Campaña {renderSortArrow('name')}</Button></TableHead>
-                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('status')}>Estado {renderSortArrow('status')}</Button></TableHead>
-                            <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('spend')}>Gasto (S/) {renderSortArrow('spend')}</Button></TableHead>
-                            <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('impressions')}>Impresiones {renderSortArrow('impressions')}</Button></TableHead>
-                            <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('clicks')}>Clics {renderSortArrow('clicks')}</Button></TableHead>
-                            <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('cpc')}>CPC (S/) {renderSortArrow('cpc')}</Button></TableHead>
-                            <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('ctr')}>CTR (%) {renderSortArrow('ctr')}</Button></TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                    {sortedCampaigns.length > 0 ? (
-                        sortedCampaigns.map((c) => (
-                            <TableRow key={c.id}>
-                                <TableCell className="font-medium">
-                                    <div className="flex flex-col">
-                                        <span>{c.name}</span>
-                                        <span className="text-xs text-muted-foreground">{c.objective}</span>
-                                    </div>
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    <span className={cn("px-2 py-1 rounded-full text-xs font-semibold", getStatusBadge(c.status))}>
-                                        {c.status}
-                                    </span>
-                                </TableCell>
-                                <TableCell className="text-right font-mono">S/ {c.spend.toFixed(2)}</TableCell>
-                                <TableCell className="text-right font-mono">{c.impressions.toLocaleString()}</TableCell>
-                                <TableCell className="text-right font-mono">{c.clicks.toLocaleString()}</TableCell>
-                                <TableCell className="text-right font-mono">S/ {c.cpc.toFixed(2)}</TableCell>
-                                <TableCell className="text-right font-mono">{c.ctr.toFixed(2)}%</TableCell>
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead><Button variant="ghost" onClick={() => handleSort('name')}>Campaña {renderSortArrow('name')}</Button></TableHead>
+                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('status')}>Estado {renderSortArrow('status')}</Button></TableHead>
+                                <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('spend')}>Gasto (S/) {renderSortArrow('spend')}</Button></TableHead>
+                                <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('impressions')}>Impresiones {renderSortArrow('impressions')}</Button></TableHead>
+                                <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('clicks')}>Clics {renderSortArrow('clicks')}</Button></TableHead>
+                                <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('cpc')}>CPC (S/) {renderSortArrow('cpc')}</Button></TableHead>
+                                <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('ctr')}>CTR (%) {renderSortArrow('ctr')}</Button></TableHead>
                             </TableRow>
-                        ))
-                    ) : (
-                        <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center">No se encontraron datos de campañas para el período seleccionado.</TableCell>
-                        </TableRow>
-                    )}
-                    </TableBody>
-                </Table>
+                        </TableHeader>
+                        <TableBody>
+                        {sortedCampaigns.length > 0 ? (
+                            sortedCampaigns.map((c) => (
+                                <TableRow key={c.id} className="md:table-row block mb-4 md:mb-0 border-b md:border-none">
+                                    <TableCell className="md:table-cell block font-medium before:content-['Campaña:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">
+                                        <div className="flex flex-col">
+                                            <span>{c.name}</span>
+                                            <span className="text-xs text-muted-foreground">{c.objective}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="md:table-cell block text-center before:content-['Estado:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                                        <span className={cn("px-2 py-1 rounded-full text-xs font-semibold", getStatusBadge(c.status))}>
+                                            {c.status}
+                                        </span>
+                                    </TableCell>
+                                    <TableCell className="md:table-cell block font-mono text-right before:content-['Gasto:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">S/ {c.spend.toFixed(2)}</TableCell>
+                                    <TableCell className="md:table-cell block font-mono text-right before:content-['Impresiones:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{c.impressions.toLocaleString()}</TableCell>
+                                    <TableCell className="md:table-cell block font-mono text-right before:content-['Clics:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{c.clicks.toLocaleString()}</TableCell>
+                                    <TableCell className="md:table-cell block font-mono text-right before:content-['CPC:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">S/ {c.cpc.toFixed(2)}</TableCell>
+                                    <TableCell className="md:table-cell block font-mono text-right before:content-['CTR:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{c.ctr.toFixed(2)}%</TableCell>
+                                </TableRow>
+                            ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={7} className="h-24 text-center">No se encontraron datos de campañas para el período seleccionado.</TableCell>
+                            </TableRow>
+                        )}
+                        </TableBody>
+                    </Table>
+                </div>
               )}
             </CardContent>
         </Card>

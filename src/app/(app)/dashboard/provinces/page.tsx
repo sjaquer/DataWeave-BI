@@ -275,67 +275,69 @@ export default function ProvincesDetailPage() {
           <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Métricas por Provincia</CardTitle>
           <CardDescription>Desglose completo de pedidos y gasto para {selectedStore === 'all' ? 'todas las tiendas' : `la tienda ${selectedStore}`}.</CardDescription>
         </CardHeader>
-        <CardContent className="overflow-auto max-h-[70vh] p-2">
+        <CardContent className="p-2">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
                 <Loader className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
-            <Table>
-              <TableHeader className="sticky top-0 bg-card">
-                <TableRow>
-                  <TableHead>
-                    <Button variant="ghost" onClick={() => handleSort('name')}>
-                      Provincia {renderSortArrow('name')}
-                    </Button>
-                  </TableHead>
-                  <TableHead className="text-center">
-                    <Button variant="ghost" onClick={() => handleSort('totalOrders')}>
-                      Pedidos Totales {renderSortArrow('totalOrders')}
-                    </Button>
-                  </TableHead>
-                  <TableHead className="text-center">
-                    <Button variant="ghost" onClick={() => handleSort('confirmedOrders')}>
-                      Pedidos Confirmados {renderSortArrow('confirmedOrders')}
-                    </Button>
-                  </TableHead>
-                  <TableHead className="text-right">
-                    <Button variant="ghost" onClick={() => handleSort('totalSpent')}>
-                      Gasto Total (S/) {renderSortArrow('totalSpent')}
-                    </Button>
-                  </TableHead>
-                  <TableHead className="w-[220px] text-right">
-                    <Button variant="ghost" onClick={() => handleSort('confirmationRate')}>
-                      Tasa de Confirmación {renderSortArrow('confirmationRate')}
-                    </Button>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedMetrics.length > 0 ? (
-                  sortedMetrics.filter(p => p.totalOrders > 0).map((p) => (
-                    <TableRow key={p.name}>
-                      <TableCell className="font-medium">{p.name}</TableCell>
-                      <TableCell className="text-center">{p.totalOrders}</TableCell>
-                      <TableCell className="text-center text-green-500 font-semibold">{p.confirmedOrders}</TableCell>
-                      <TableCell className="text-right font-medium">{p.totalSpent.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-3">
-                          <span className="font-medium text-sm w-16">{p.confirmationRate.toFixed(2)}%</span>
-                          <Progress value={p.confirmationRate} className="h-2 w-[100px]" />
-                        </div>
-                      </TableCell>
+            <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        <Button variant="ghost" onClick={() => handleSort('name')}>
+                          Provincia {renderSortArrow('name')}
+                        </Button>
+                      </TableHead>
+                      <TableHead className="text-center">
+                        <Button variant="ghost" onClick={() => handleSort('totalOrders')}>
+                          Pedidos Totales {renderSortArrow('totalOrders')}
+                        </Button>
+                      </TableHead>
+                      <TableHead className="text-center">
+                        <Button variant="ghost" onClick={() => handleSort('confirmedOrders')}>
+                          Pedidos Confirmados {renderSortArrow('confirmedOrders')}
+                        </Button>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <Button variant="ghost" onClick={() => handleSort('totalSpent')}>
+                          Gasto Total (S/) {renderSortArrow('totalSpent')}
+                        </Button>
+                      </TableHead>
+                      <TableHead className="w-[220px] text-right">
+                        <Button variant="ghost" onClick={() => handleSort('confirmationRate')}>
+                          Tasa de Confirmación {renderSortArrow('confirmationRate')}
+                        </Button>
+                      </TableHead>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
-                      No se encontraron datos para los filtros seleccionados.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedMetrics.length > 0 ? (
+                      sortedMetrics.filter(p => p.totalOrders > 0).map((p) => (
+                        <TableRow key={p.name} className="md:table-row block mb-4 md:mb-0 border-b md:border-none">
+                          <TableCell className="md:table-cell block font-medium before:content-['Provincia:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{p.name}</TableCell>
+                          <TableCell className="md:table-cell block text-center before:content-['Pedidos_Totales:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{p.totalOrders}</TableCell>
+                          <TableCell className="md:table-cell block text-center text-green-500 font-semibold before:content-['Pedidos_Confirmados:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{p.confirmedOrders}</TableCell>
+                          <TableCell className="md:table-cell block text-right font-medium before:content-['Gasto_Total:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{p.totalSpent.toFixed(2)}</TableCell>
+                          <TableCell className="md:table-cell block text-right before:content-['Tasa_de_Confirmación:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                            <div className="flex items-center justify-end gap-3">
+                              <span className="font-medium text-sm w-16">{p.confirmationRate.toFixed(2)}%</span>
+                              <Progress value={p.confirmationRate} className="h-2 w-[100px]" />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-24 text-center">
+                          No se encontraron datos para los filtros seleccionados.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+            </div>
           )}
         </CardContent>
       </Card>

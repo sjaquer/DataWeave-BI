@@ -203,59 +203,69 @@ export default function DailyDetailPage() {
       : sortedMetrics;
 
     return (
-      <Table>
-        <TableHeader className="sticky top-0 bg-card">
-          <TableRow>
-            <TableHead className="w-[120px]">
-              <Button variant="ghost" onClick={() => handleSort('date')}>
-                Fecha {renderSortArrow('date')}
-              </Button>
-            </TableHead>
-            <TableHead className="text-center">
-              <Button variant="ghost" onClick={() => handleSort('totalOrders')}>
-                Pedidos Totales {renderSortArrow('totalOrders')}
-              </Button>
-            </TableHead>
-            <TableHead className="text-center">
-               <Button variant="ghost" onClick={() => handleSort('confirmed')}>
-                Confirmados {renderSortArrow('confirmed')}
-              </Button>
-            </TableHead>
-            <TableHead className="text-center">
-              <Button variant="ghost" onClick={() => handleSort('unconfirmed')}>
-                No Confirmados {renderSortArrow('unconfirmed')}
-              </Button>
-            </TableHead>
-            <TableHead className="w-[220px] text-right">
-              <Button variant="ghost" onClick={() => handleSort('confirmationRate')}>
-                Tasa de Confirmación {renderSortArrow('confirmationRate')}
-              </Button>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {dataToRender.length > 0 ? (
-            dataToRender.map((metric) => (
-              <TableRow key={metric.date}>
-                <TableCell className="font-medium">{metric.date}</TableCell>
-                <TableCell className="text-center">{metric.totalOrders}</TableCell>
-                <TableCell className="text-center text-green-500 font-semibold">{metric.confirmed}</TableCell>
-                <TableCell className="text-center text-red-500 font-semibold">{metric.unconfirmed}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-3">
-                    <span className="font-medium text-sm w-16">{metric.confirmationRate.toFixed(2)}%</span>
-                    <Progress value={metric.confirmationRate} className="h-2 w-[100px]" />
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))
-          ) : (
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={5} className="h-24 text-center">No se encontraron datos de pedidos para esta selección.</TableCell>
+              <TableHead className="w-[120px]">
+                <Button variant="ghost" onClick={() => handleSort('date')}>
+                  Fecha {renderSortArrow('date')}
+                </Button>
+              </TableHead>
+              <TableHead className="text-center">
+                <Button variant="ghost" onClick={() => handleSort('totalOrders')}>
+                  Pedidos Totales {renderSortArrow('totalOrders')}
+                </Button>
+              </TableHead>
+              <TableHead className="text-center">
+                 <Button variant="ghost" onClick={() => handleSort('confirmed')}>
+                  Confirmados {renderSortArrow('confirmed')}
+                </Button>
+              </TableHead>
+              <TableHead className="text-center">
+                <Button variant="ghost" onClick={() => handleSort('unconfirmed')}>
+                  No Confirmados {renderSortArrow('unconfirmed')}
+                </Button>
+              </TableHead>
+              <TableHead className="w-[220px] text-right">
+                <Button variant="ghost" onClick={() => handleSort('confirmationRate')}>
+                  Tasa de Confirmación {renderSortArrow('confirmationRate')}
+                </Button>
+              </TableHead>
             </TableRow>
-          )}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {dataToRender.length > 0 ? (
+              dataToRender.map((metric) => (
+                <TableRow key={metric.date} className="md:table-row block mb-4 md:mb-0 border-b md:border-none">
+                  <TableCell className="md:table-cell block font-medium before:content-['Fecha:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">
+                      {metric.date}
+                  </TableCell>
+                  <TableCell className="md:table-cell block text-center before:content-['Pedidos_Totales:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                      {metric.totalOrders}
+                  </TableCell>
+                  <TableCell className="md:table-cell block text-center text-green-500 font-semibold before:content-['Confirmados:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                      {metric.confirmed}
+                  </TableCell>
+                  <TableCell className="md:table-cell block text-center text-red-500 font-semibold before:content-['No_Confirmados:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                      {metric.unconfirmed}
+                  </TableCell>
+                  <TableCell className="md:table-cell block text-right before:content-['Tasa_de_Confirmación:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                    <div className="flex items-center justify-end gap-3">
+                      <span className="font-medium text-sm w-16">{metric.confirmationRate.toFixed(2)}%</span>
+                      <Progress value={metric.confirmationRate} className="h-2 w-[100px]" />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={5} className="h-24 text-center">No se encontraron datos de pedidos para esta selección.</TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
     );
   };
 
@@ -302,7 +312,7 @@ export default function DailyDetailPage() {
       </div>
 
       {isLoading ? (
-            <div className="flex items-center justify-center h-96">
+            <div className="flex items-center justify-center min-h-[400px]">
                 <Loader className="h-8 w-8 animate-spin text-primary" />
             </div>
         ) : (
@@ -313,7 +323,7 @@ export default function DailyDetailPage() {
                         <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Pedidos Totales</CardTitle>
                         <CardDescription>Evolución del total de pedidos (confirmados y no confirmados) en el período.</CardDescription>
                     </CardHeader>
-                    <CardContent className="h-64">
+                    <CardContent className="min-h-[250px]">
                          <ChartContainer config={{ totalOrders: { label: "Pedidos Totales", color: "hsl(var(--primary))" } }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
@@ -333,7 +343,7 @@ export default function DailyDetailPage() {
                         <CardTitle className="flex items-center"><CheckCircle className="mr-2 h-5 w-5 text-green-500" /> <XCircle className="mr-2 h-5 w-5 text-red-500" />Composición de Pedidos</CardTitle>
                         <CardDescription>Desglose de pedidos confirmados vs. no confirmados por día.</CardDescription>
                     </CardHeader>
-                    <CardContent className="h-64">
+                    <CardContent className="min-h-[250px]">
                         <ChartContainer config={{ 
                             confirmed: { label: "Confirmados", color: "hsl(var(--chart-1))" },
                             unconfirmed: { label: "No Confirmados", color: "hsl(var(--chart-3))" }
@@ -357,7 +367,7 @@ export default function DailyDetailPage() {
                         <CardTitle className="flex items-center"><Percent className="mr-2 h-5 w-5" />Tendencia de Tasa de Confirmación</CardTitle>
                         <CardDescription>Evolución del porcentaje de pedidos confirmados sobre el total.</CardDescription>
                     </CardHeader>
-                    <CardContent className="h-64">
+                    <CardContent className="min-h-[250px]">
                         <ChartContainer config={{ confirmationRate: { label: "Tasa de Confirmación", color: "hsl(var(--chart-2))" } }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
@@ -380,7 +390,7 @@ export default function DailyDetailPage() {
                     <CardTitle>Desglose Diario por Tienda</CardTitle>
                     <CardDescription>Usa las pestañas para filtrar los datos por una tienda específica o ver el total.</CardDescription>
                 </CardHeader>
-                <CardContent className="overflow-auto max-h-[70vh] p-2">
+                <CardContent className="p-2">
                     <Tabs defaultValue="all" className="w-full">
                         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 sticky top-0 bg-card z-10 p-1 h-auto">
                             <TabsTrigger value="all">General</TabsTrigger>
@@ -422,5 +432,3 @@ export default function DailyDetailPage() {
     </div>
   );
 }
-
-    

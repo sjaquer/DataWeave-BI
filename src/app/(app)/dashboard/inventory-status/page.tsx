@@ -176,7 +176,7 @@ export default function InventoryStatusPage() {
               <CardTitle className="flex items-center"><BarChartHorizontal className="mr-2 h-5 w-5 text-destructive" />Top 10 Productos con Bajo Stock</CardTitle>
               <CardDescription>Productos con {LOW_STOCK_THRESHOLD} o menos unidades en stock. ¡Requieren atención!</CardDescription>
           </CardHeader>
-          <CardContent className="aspect-video">
+          <CardContent className="min-h-[400px]">
               {isLoading ? (
                   <div className="flex items-center justify-center h-full">
                       <Loader className="h-8 w-8 animate-spin text-primary" />
@@ -235,14 +235,15 @@ export default function InventoryStatusPage() {
               </div>
           </div>
         </CardHeader>
-        <CardContent className="overflow-auto max-h-[70vh] p-2">
+        <CardContent className="p-2">
             {isLoading ? (
                 <div className="flex items-center justify-center h-64">
                     <Loader className="h-8 w-8 animate-spin text-primary" />
                 </div>
             ) : (
+              <div className="overflow-x-auto">
                 <Table>
-                    <TableHeader className="sticky top-0 bg-card">
+                    <TableHeader>
                         <TableRow>
                             <TableHead>
                                 <Button variant="ghost" onClick={() => handleSort('sku')}>
@@ -274,19 +275,19 @@ export default function InventoryStatusPage() {
                     <TableBody>
                         {visibleInventory.length > 0 ? (
                             visibleInventory.map(item => (
-                                <TableRow key={`${item.sku}-${item.store}`} className={cn(item.currentStock <= LOW_STOCK_THRESHOLD && "bg-destructive/10 hover:bg-destructive/20")}>
-                                    <TableCell className="font-mono">{item.sku}</TableCell>
-                                    <TableCell className="font-medium">{item.productName}</TableCell>
-                                    <TableCell className="text-muted-foreground">{item.store}</TableCell>
-                                    <TableCell className="text-center font-bold">
-                                        <div className="flex items-center justify-center gap-2">
+                                <TableRow key={`${item.sku}-${item.store}`} className={cn("md:table-row block mb-4 md:mb-0 border-b md:border-none", item.currentStock <= LOW_STOCK_THRESHOLD && "bg-destructive/10 hover:bg-destructive/20")}>
+                                    <TableCell className="md:table-cell block font-mono before:content-['SKU:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.sku}</TableCell>
+                                    <TableCell className="md:table-cell block font-medium before:content-['Producto:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.productName}</TableCell>
+                                    <TableCell className="md:table-cell block text-muted-foreground before:content-['Tienda:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.store}</TableCell>
+                                    <TableCell className="md:table-cell block text-center font-bold before:content-['Stock_Actual:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                                        <div className="flex items-center justify-end md:justify-center gap-2">
                                             {item.currentStock <= LOW_STOCK_THRESHOLD && <AlertTriangle className="h-4 w-4 text-destructive" />}
                                             <span className={cn(item.currentStock <= LOW_STOCK_THRESHOLD && "text-destructive")}>
                                                 {item.currentStock}
                                             </span>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="text-right text-muted-foreground">{item.lastMovementDate}</TableCell>
+                                    <TableCell className="md:table-cell block text-muted-foreground before:content-['Último_Movimiento:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.lastMovementDate}</TableCell>
                                 </TableRow>
                             ))
                         ) : (
@@ -298,6 +299,7 @@ export default function InventoryStatusPage() {
                         )}
                     </TableBody>
                 </Table>
+              </div>
             )}
         </CardContent>
          {filteredAndSortedInventory.length > 0 && (
@@ -316,5 +318,3 @@ export default function InventoryStatusPage() {
     </div>
   );
 }
-
-    

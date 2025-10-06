@@ -30,7 +30,7 @@ const TrendIndicator = ({ value }: { value: number }) => {
     const Icon = isPositive ? TrendingUp : isNegative ? TrendingDown : ArrowRight;
 
     return (
-        <div className={`flex items-center font-semibold ${color}`}>
+        <div className={`flex items-center justify-end md:justify-center font-semibold ${color}`}>
             <Icon className="h-4 w-4 mr-1" />
             {value.toFixed(1)}%
         </div>
@@ -177,77 +177,79 @@ export default function MonthlyReportPage() {
               </div>
           </div>
         </CardHeader>
-        <CardContent className="overflow-auto max-h-[70vh] p-2">
+        <CardContent className="p-2">
             {isLoading ? (
                 <div className="flex items-center justify-center h-64">
                     <Loader className="h-8 w-8 animate-spin text-primary" />
                 </div>
             ) : (
-                <Table>
-                    <TableHeader className="sticky top-0 bg-card">
-                        <TableRow>
-                            <TableHead>
-                                <Button variant="ghost" onClick={() => handleSort('productName')}>
-                                    Producto {renderSortArrow('productName')}
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button variant="ghost" onClick={() => handleSort('currentStock')}>
-                                    Stock Actual {renderSortArrow('currentStock')}
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button variant="ghost" onClick={() => handleSort('monthlySales')}>
-                                    Ventas (Últ. Mes) {renderSortArrow('monthlySales')}
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button variant="ghost" onClick={() => handleSort('previousMonthSales')}>
-                                    Ventas (Mes Ant.) {renderSortArrow('previousMonthSales')}
-                                </Button>
-                            </TableHead>
-                             <TableHead className="text-center">
-                                <Button variant="ghost" onClick={() => handleSort('salesTrend')}>
-                                    Tendencia {renderSortArrow('salesTrend')}
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-right">
-                                <Button variant="ghost" onClick={() => handleSort('suggestedPurchase')}>
-                                    Compra Sugerida {renderSortArrow('suggestedPurchase')}
-                                </Button>
-                            </TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {visibleData.length > 0 ? (
-                            visibleData.map(item => (
-                                <TableRow key={item.sku}>
-                                    <TableCell className="font-medium">
-                                        <div className="flex flex-col">
-                                            <span>{item.productName}</span>
-                                            <span className="text-xs text-muted-foreground font-mono">{item.sku}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-center font-bold">{item.currentStock}</TableCell>
-                                    <TableCell className="text-center font-bold text-primary">{item.monthlySales}</TableCell>
-                                    <TableCell className="text-center">{item.previousMonthSales}</TableCell>
-                                    <TableCell className="text-center">
-                                        <TrendIndicator value={item.salesTrend} />
-                                    </TableCell>
-                                    <TableCell className={cn("text-right font-bold", item.suggestedPurchase > 0 && "text-amber-500")}>
-                                        {item.suggestedPurchase > 0 ? item.suggestedPurchase : '—'}
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>
+                                    <Button variant="ghost" onClick={() => handleSort('productName')}>
+                                        Producto {renderSortArrow('productName')}
+                                    </Button>
+                                </TableHead>
+                                <TableHead className="text-center">
+                                    <Button variant="ghost" onClick={() => handleSort('currentStock')}>
+                                        Stock Actual {renderSortArrow('currentStock')}
+                                    </Button>
+                                </TableHead>
+                                <TableHead className="text-center">
+                                    <Button variant="ghost" onClick={() => handleSort('monthlySales')}>
+                                        Ventas (Últ. Mes) {renderSortArrow('monthlySales')}
+                                    </Button>
+                                </TableHead>
+                                <TableHead className="text-center">
+                                    <Button variant="ghost" onClick={() => handleSort('previousMonthSales')}>
+                                        Ventas (Mes Ant.) {renderSortArrow('previousMonthSales')}
+                                    </Button>
+                                </TableHead>
+                                 <TableHead className="text-center">
+                                    <Button variant="ghost" onClick={() => handleSort('salesTrend')}>
+                                        Tendencia {renderSortArrow('salesTrend')}
+                                    </Button>
+                                </TableHead>
+                                <TableHead className="text-right">
+                                    <Button variant="ghost" onClick={() => handleSort('suggestedPurchase')}>
+                                        Compra Sugerida {renderSortArrow('suggestedPurchase')}
+                                    </Button>
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {visibleData.length > 0 ? (
+                                visibleData.map(item => (
+                                    <TableRow key={item.sku} className="md:table-row block mb-4 md:mb-0 border-b md:border-none">
+                                        <TableCell className="md:table-cell block font-medium before:content-['Producto:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">
+                                            <div className="flex flex-col">
+                                                <span>{item.productName}</span>
+                                                <span className="text-xs text-muted-foreground font-mono">{item.sku}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="md:table-cell block text-center font-bold before:content-['Stock_Actual:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{item.currentStock}</TableCell>
+                                        <TableCell className="md:table-cell block text-center font-bold text-primary before:content-['Ventas_Últ._Mes:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{item.monthlySales}</TableCell>
+                                        <TableCell className="md:table-cell block text-center before:content-['Ventas_Mes_Ant.:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{item.previousMonthSales}</TableCell>
+                                        <TableCell className="md:table-cell block text-center before:content-['Tendencia:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                                            <TrendIndicator value={item.salesTrend} />
+                                        </TableCell>
+                                        <TableCell className={cn("md:table-cell block text-right font-bold before:content-['Compra_Sugerida:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none", item.suggestedPurchase > 0 && "text-amber-500")}>
+                                            {item.suggestedPurchase > 0 ? item.suggestedPurchase : '—'}
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                 <TableRow>
+                                    <TableCell colSpan={6} className="h-24 text-center">
+                                        No se encontraron productos que coincidan con la búsqueda.
                                     </TableCell>
                                 </TableRow>
-                            ))
-                        ) : (
-                             <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center">
-                                    No se encontraron productos que coincidan con la búsqueda.
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             )}
         </CardContent>
          {filteredAndSortedData.length > visibleItemsCount && (
@@ -261,5 +263,3 @@ export default function MonthlyReportPage() {
     </div>
   );
 }
-
-    

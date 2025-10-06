@@ -295,7 +295,7 @@ export default function InventoryDetailPage() {
                     <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Flujo de Inventario (Entradas vs. Salidas)</CardTitle>
                     <CardDescription>Unidades que entran y salen del inventario por día para {selectedStore === 'all' ? 'todas las tiendas' : `la tienda ${selectedStore}`}.</CardDescription>
                 </CardHeader>
-                <CardContent className="aspect-video">
+                <CardContent className="min-h-[400px]">
                   <ChartContainer config={{
                       Entradas: { label: "Entradas", color: "hsl(var(--chart-1))" },
                       Salidas: { label: "Salidas", color: "hsl(var(--chart-2))" },
@@ -339,7 +339,7 @@ export default function InventoryDetailPage() {
                     return (
                         <div key={urgency}>
                             <h3 className="font-semibold mb-2" style={{ color: URGENCY_COLORS[urgency] || 'inherit' }}>{urgency} ({items.length} productos)</h3>
-                            <div className="aspect-video">
+                            <div className="min-h-[400px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={items} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" />
@@ -379,7 +379,7 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5 text-green-500" />Top 10 Productos por Entradas</CardTitle>
                         <CardDescription>Productos con mayor cantidad de unidades ingresadas.</CardDescription>
                     </CardHeader>
-                    <CardContent className="aspect-video">
+                    <CardContent className="min-h-[400px]">
                         <ChartContainer config={{ movements: { label: "Entradas", color: "hsl(var(--chart-1))" } }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={(displayMetrics?.mostIncomingProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
@@ -399,7 +399,7 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5 text-red-500" />Top 10 Productos por Rotación (Salidas)</CardTitle>
                         <CardDescription>Productos con mayor cantidad de movimientos de salida.</CardDescription>
                     </CardHeader>
-                    <CardContent className="aspect-video">
+                    <CardContent className="min-h-[400px]">
                         <ChartContainer config={{ movements: { label: "Salidas", color: "hsl(var(--chart-2))" } }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={(displayMetrics?.mostMovedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
@@ -421,7 +421,7 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Undo2 className="mr-2 h-5 w-5" />Top 10 Productos Más Devueltos</CardTitle>
                         <CardDescription>Productos con la mayor cantidad de unidades devueltas por clientes.</CardDescription>
                     </CardHeader>
-                    <CardContent className="aspect-video">
+                    <CardContent className="min-h-[400px]">
                         <ChartContainer config={{ returns: { label: "Devoluciones", color: "hsl(var(--chart-5))" } }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={(displayMetrics?.mostReturnedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
@@ -441,7 +441,7 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Actividad del Equipo de Inventario</CardTitle>
                         <CardDescription>Movimientos de entrada y salida procesados por cada miembro del equipo (Global).</CardDescription>
                     </CardHeader>
-                    <CardContent className="aspect-video">
+                    <CardContent className="min-h-[400px]">
                        <ChartContainer config={{
                             entries: { label: "Entradas", color: "hsl(var(--chart-1))" },
                             exits: { label: "Salidas", color: "hsl(var(--chart-2))" },
@@ -466,61 +466,63 @@ export default function InventoryDetailPage() {
                 <CardTitle className="flex items-center"><Undo2 className="mr-2 h-5 w-5" />Detalle de Devoluciones de Clientes</CardTitle>
                 <CardDescription>Listado de movimientos de inventario registrados como "DEVOLUCION DE CLIENTE".</CardDescription>
               </CardHeader>
-              <CardContent className="overflow-auto max-h-[70vh] p-2">
-                <Table>
-                  <TableHeader className="sticky top-0 bg-card">
-                    <TableRow>
-                      <TableHead>
-                        <Button variant="ghost" onClick={() => handleReturnsSort('date')}>
-                            Fecha {renderReturnsSortArrow('date')}
-                        </Button>
-                      </TableHead>
-                      <TableHead>
-                        <Button variant="ghost" onClick={() => handleReturnsSort('productName')}>
-                            Producto Devuelto {renderReturnsSortArrow('productName')}
-                        </Button>
-                      </TableHead>
-                      <TableHead className="text-center">
-                        <Button variant="ghost" onClick={() => handleReturnsSort('quantity')}>
-                            Cantidad {renderReturnsSortArrow('quantity')}
-                        </Button>
-                      </TableHead>
-                      <TableHead>
-                        <Button variant="ghost" onClick={() => handleReturnsSort('user')}>
-                            Usuario {renderReturnsSortArrow('user')}
-                        </Button>
-                      </TableHead>
-                      <TableHead>
-                        <Button variant="ghost" onClick={() => handleReturnsSort('orderNumber')}>
-                            N° de Pedido {renderReturnsSortArrow('orderNumber')}
-                        </Button>
-                      </TableHead>
-                      <TableHead>
-                        <Button variant="ghost" onClick={() => handleReturnsSort('store')}>
-                            Tienda {renderReturnsSortArrow('store')}
-                        </Button>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sortedReturns.length > 0 ? (
-                        sortedReturns.map((item, index) => (
-                        <TableRow key={`${item.date}-${item.productName}-${index}`}>
-                            <TableCell className="font-medium">{item.date}</TableCell>
-                            <TableCell>{item.productName}</TableCell>
-                            <TableCell className="text-center font-bold">{item.quantity}</TableCell>
-                            <TableCell>{item.user}</TableCell>
-                            <TableCell>{item.orderNumber}</TableCell>
-                            <TableCell className="font-medium">{item.store}</TableCell>
-                        </TableRow>
-                        ))
-                    ) : (
+              <CardContent className="p-2">
+                <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
                         <TableRow>
-                            <TableCell colSpan={6} className="h-24 text-center">No se encontraron devoluciones para el período seleccionado.</TableCell>
+                          <TableHead>
+                            <Button variant="ghost" onClick={() => handleReturnsSort('date')}>
+                                Fecha {renderReturnsSortArrow('date')}
+                            </Button>
+                          </TableHead>
+                          <TableHead>
+                            <Button variant="ghost" onClick={() => handleReturnsSort('productName')}>
+                                Producto Devuelto {renderReturnsSortArrow('productName')}
+                            </Button>
+                          </TableHead>
+                          <TableHead className="text-center">
+                            <Button variant="ghost" onClick={() => handleReturnsSort('quantity')}>
+                                Cantidad {renderReturnsSortArrow('quantity')}
+                            </Button>
+                          </TableHead>
+                          <TableHead>
+                            <Button variant="ghost" onClick={() => handleReturnsSort('user')}>
+                                Usuario {renderReturnsSortArrow('user')}
+                            </Button>
+                          </TableHead>
+                          <TableHead>
+                            <Button variant="ghost" onClick={() => handleReturnsSort('orderNumber')}>
+                                N° de Pedido {renderReturnsSortArrow('orderNumber')}
+                            </Button>
+                          </TableHead>
+                          <TableHead>
+                            <Button variant="ghost" onClick={() => handleReturnsSort('store')}>
+                                Tienda {renderReturnsSortArrow('store')}
+                            </Button>
+                          </TableHead>
                         </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {sortedReturns.length > 0 ? (
+                            sortedReturns.map((item, index) => (
+                            <TableRow key={`${item.date}-${item.productName}-${index}`} className="md:table-row block mb-4 md:mb-0 border-b md:border-none">
+                                <TableCell className="md:table-cell block font-medium before:content-['Fecha:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.date}</TableCell>
+                                <TableCell className="md:table-cell block before:content-['Producto:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.productName}</TableCell>
+                                <TableCell className="md:table-cell block text-center font-bold before:content-['Cantidad:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{item.quantity}</TableCell>
+                                <TableCell className="md:table-cell block before:content-['Usuario:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.user}</TableCell>
+                                <TableCell className="md:table-cell block before:content-['N°_Pedido:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.orderNumber}</TableCell>
+                                <TableCell className="md:table-cell block font-medium before:content-['Tienda:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.store}</TableCell>
+                            </TableRow>
+                            ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={6} className="h-24 text-center">No se encontraron devoluciones para el período seleccionado.</TableCell>
+                            </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                </div>
               </CardContent>
             </Card>
         </div>
@@ -528,5 +530,3 @@ export default function InventoryDetailPage() {
     </div>
   );
 }
-
-    

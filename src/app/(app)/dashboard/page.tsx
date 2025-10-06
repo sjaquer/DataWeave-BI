@@ -383,54 +383,56 @@ export default function Dashboard() {
                 />
             </div>
             <Card>
-                <CardContent className="overflow-auto max-h-96 p-0">
-                    <Table>
-                        <TableHeader className="sticky top-0 bg-card">
-                            <TableRow>
-                                <TableHead>
-                                    <Button variant="ghost" onClick={() => handleSort('name')}>
-                                        Producto {renderSortArrow('name')}
-                                    </Button>
-                                </TableHead>
-                                <TableHead className="text-center">
-                                    <Button variant="ghost" onClick={() => handleSort('requested')}>
-                                        Pedidos {renderSortArrow('requested')}
-                                    </Button>
-                                </TableHead>
-                                <TableHead className="text-center">
-                                    <Button variant="ghost" onClick={() => handleSort('confirmed')}>
-                                        Confirmados {renderSortArrow('confirmed')}
-                                    </Button>
-                                </TableHead>
-                                <TableHead className="text-right w-[200px]">
-                                    <Button variant="ghost" onClick={() => handleSort('confirmationRate')}>
-                                        Tasa de Confirmación {renderSortArrow('confirmationRate')}
-                                    </Button>
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {visibleData.length > 0 ? (
-                                visibleData.map(p => (
-                                    <TableRow key={p.name}>
-                                        <TableCell className="font-medium">{p.name}</TableCell>
-                                        <TableCell className="text-center">{p.requested}</TableCell>
-                                        <TableCell className="text-center text-green-500 font-semibold">{p.confirmed}</TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <span className="font-mono font-semibold w-12">{p.confirmationRate.toFixed(1)}%</span>
-                                                <Progress value={p.confirmationRate} className={cn("h-2 w-24", getRateColor(p.confirmationRate))} />
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            ) : (
+                <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
                                 <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">No se encontraron productos.</TableCell>
+                                    <TableHead>
+                                        <Button variant="ghost" onClick={() => handleSort('name')}>
+                                            Producto {renderSortArrow('name')}
+                                        </Button>
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                        <Button variant="ghost" onClick={() => handleSort('requested')}>
+                                            Pedidos {renderSortArrow('requested')}
+                                        </Button>
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                        <Button variant="ghost" onClick={() => handleSort('confirmed')}>
+                                            Confirmados {renderSortArrow('confirmed')}
+                                        </Button>
+                                    </TableHead>
+                                    <TableHead className="text-right w-[200px]">
+                                        <Button variant="ghost" onClick={() => handleSort('confirmationRate')}>
+                                            Tasa de Confirmación {renderSortArrow('confirmationRate')}
+                                        </Button>
+                                    </TableHead>
                                 </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                            </TableHeader>
+                            <TableBody>
+                                {visibleData.length > 0 ? (
+                                    visibleData.map(p => (
+                                        <TableRow key={p.name} className="md:table-row block mb-4 md:mb-0 border-b md:border-none">
+                                            <TableCell className="md:table-cell block font-medium before:content-['Producto:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{p.name}</TableCell>
+                                            <TableCell className="md:table-cell block text-center before:content-['Pedidos:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{p.requested}</TableCell>
+                                            <TableCell className="md:table-cell block text-center text-green-500 font-semibold before:content-['Confirmados:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{p.confirmed}</TableCell>
+                                            <TableCell className="md:table-cell block text-right before:content-['Tasa_de_Confirmación:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <span className="font-mono font-semibold w-12">{p.confirmationRate.toFixed(1)}%</span>
+                                                    <Progress value={p.confirmationRate} className={cn("h-2 w-24", getRateColor(p.confirmationRate))} />
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="h-24 text-center">No se encontraron productos.</TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </CardContent>
                  {filteredAndSortedData.length > visibleItemsCount && (
                     <CardFooter className="flex justify-center pt-4">
@@ -659,7 +661,7 @@ export default function Dashboard() {
                 <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Rendimiento Comparativo de Tiendas (Pedidos Confirmados)</CardTitle>
                 <CardDescription>Evolución de los pedidos confirmados por día para las tiendas principales.</CardDescription>
             </CardHeader>
-            <CardContent className="aspect-video">
+            <CardContent className="min-h-[400px]">
                 <ChartContainer
                     config={{
                         dearel: { label: "Dearel", color: "hsl(var(--chart-1))" },
@@ -729,7 +731,7 @@ export default function Dashboard() {
                     <CardTitle className="flex items-center"><PieChartIcon className="mr-2 h-5 w-5" />Distribución de Pedidos Confirmados por Tienda</CardTitle>
                     <CardDescription>Porcentaje de contribución de cada tienda al total de pedidos confirmados.</CardDescription>
                 </CardHeader>
-                <CardContent className="aspect-video">
+                <CardContent className="min-h-[400px]">
                    {storeMetrics && storeMetrics.filter(s => s.confirmedOrders > 0).length > 0 ? (
                      <ChartContainer config={{
                         ...storeMetrics?.reduce((acc, store, index) => {
@@ -782,7 +784,7 @@ export default function Dashboard() {
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
                   <CardDescription>{selectedStore === 'all' ? 'Top 10 provincias con más pedidos y su gasto total.' : `Top 10 provincias para la tienda ${capitalize(selectedStore)}.`}</CardDescription>
               </CardHeader>
-              <CardContent className="aspect-video">
+              <CardContent className="min-h-[400px]">
                 <ChartContainer config={{
                     totalOrders: { label: "Pedidos Totales", color: "hsl(var(--chart-1))" },
                     totalSpent: { label: "Gasto Total", color: "hsl(var(--chart-2))" },
@@ -869,5 +871,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-    

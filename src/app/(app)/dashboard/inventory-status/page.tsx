@@ -182,20 +182,18 @@ export default function InventoryStatusPage() {
                       <Loader className="h-8 w-8 animate-spin text-primary" />
                   </div>
               ) : lowStockProducts.length > 0 ? (
-                <div style={{ height: `${Math.max(400, lowStockProducts.length * 40)}px` }}>
-                  <ChartContainer config={{ currentStock: { label: "Stock", color: "hsl(var(--destructive))" } }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={lowStockProducts} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis type="number" />
-                              <YAxis dataKey="productName" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
-                              <Tooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--destructive) / 0.1)' }}/>
-                              <Legend />
-                              <Bar dataKey="currentStock" name="Stock Actual" fill="hsl(var(--destructive))" radius={[0, 4, 4, 0]} />
-                          </BarChart>
-                      </ResponsiveContainer>
-                  </ChartContainer>
-                </div>
+                <ChartContainer config={{ currentStock: { label: "Stock", color: "hsl(var(--destructive))" } }}>
+                    <ResponsiveContainer width="100%" height={Math.max(400, lowStockProducts.length * 40)}>
+                        <BarChart data={lowStockProducts} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis type="number" />
+                            <YAxis dataKey="productName" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
+                            <Tooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--destructive) / 0.1)' }}/>
+                            <Legend />
+                            <Bar dataKey="currentStock" name="Stock Actual" fill="hsl(var(--destructive))" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </ChartContainer>
               ) : (
                   <div className="flex items-center justify-center h-full min-h-[400px]">
                       <p className="text-muted-foreground">¡Felicidades! No hay productos con bajo stock.</p>

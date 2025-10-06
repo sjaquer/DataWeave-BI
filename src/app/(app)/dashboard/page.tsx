@@ -382,8 +382,8 @@ export default function Dashboard() {
                     className="pl-10 w-full"
                 />
             </div>
-            <Card className="h-96">
-                <CardContent className="overflow-auto h-full p-0">
+            <Card>
+                <CardContent className="overflow-auto max-h-96 p-0">
                     <Table>
                         <TableHeader className="sticky top-0 bg-card">
                             <TableRow>
@@ -659,7 +659,7 @@ export default function Dashboard() {
                 <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Rendimiento Comparativo de Tiendas (Pedidos Confirmados)</CardTitle>
                 <CardDescription>Evolución de los pedidos confirmados por día para las tiendas principales.</CardDescription>
             </CardHeader>
-            <CardContent className="h-96">
+            <CardContent className="aspect-video">
                 <ChartContainer
                     config={{
                         dearel: { label: "Dearel", color: "hsl(var(--chart-1))" },
@@ -729,7 +729,7 @@ export default function Dashboard() {
                     <CardTitle className="flex items-center"><PieChartIcon className="mr-2 h-5 w-5" />Distribución de Pedidos Confirmados por Tienda</CardTitle>
                     <CardDescription>Porcentaje de contribución de cada tienda al total de pedidos confirmados.</CardDescription>
                 </CardHeader>
-                <CardContent className="h-96">
+                <CardContent className="aspect-video">
                    {storeMetrics && storeMetrics.filter(s => s.confirmedOrders > 0).length > 0 ? (
                      <ChartContainer config={{
                         ...storeMetrics?.reduce((acc, store, index) => {
@@ -782,7 +782,7 @@ export default function Dashboard() {
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
                   <CardDescription>{selectedStore === 'all' ? 'Top 10 provincias con más pedidos y su gasto total.' : `Top 10 provincias para la tienda ${capitalize(selectedStore)}.`}</CardDescription>
               </CardHeader>
-              <CardContent className="h-96">
+              <CardContent className="aspect-video">
                 <ChartContainer config={{
                     totalOrders: { label: "Pedidos Totales", color: "hsl(var(--chart-1))" },
                     totalSpent: { label: "Gasto Total", color: "hsl(var(--chart-2))" },
@@ -870,3 +870,4 @@ export default function Dashboard() {
   );
 }
 
+    

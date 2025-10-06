@@ -176,7 +176,7 @@ export default function InventoryStatusPage() {
               <CardTitle className="flex items-center"><BarChartHorizontal className="mr-2 h-5 w-5 text-destructive" />Top 10 Productos con Bajo Stock</CardTitle>
               <CardDescription>Productos con {LOW_STOCK_THRESHOLD} o menos unidades en stock. ¡Requieren atención!</CardDescription>
           </CardHeader>
-          <CardContent className="h-[400px]">
+          <CardContent className="aspect-video">
               {isLoading ? (
                   <div className="flex items-center justify-center h-full">
                       <Loader className="h-8 w-8 animate-spin text-primary" />
@@ -317,3 +317,4 @@ export default function InventoryStatusPage() {
   );
 }
 
+    

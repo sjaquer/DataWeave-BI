@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart2, Briefcase, Calendar, Home, Inbox, Layers, MapPin, Settings, ShoppingCart, Users, FolderKanban } from 'lucide-react';
+import { BarChart2, Briefcase, Calendar, Home, Inbox, Layers, MapPin, Settings, ShoppingCart, Users, FolderKanban, PanelLeft } from 'lucide-react';
 
 import {
   Sidebar,
@@ -20,6 +20,8 @@ import {
 } from '@/components/ui/sidebar';
 import { Logo } from '@/components/icons';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 const menuItems = [
   { path: '/dashboard', icon: Home, label: 'Dashboard' },
@@ -34,8 +36,8 @@ const menuItems = [
 
 function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  // Usamos el hook useSidebar para controlar el estado del menú en móviles
-  const { isMobile, setOpenMobile } = useSidebar();
+  // Usamos el hook useSidebar para controlar el estado del menú
+  const { isMobile, setOpenMobile, toggleSidebar, state } = useSidebar();
 
   const handleLinkClick = () => {
     // Si estamos en un dispositivo móvil, cerramos el menú al hacer clic
@@ -48,11 +50,20 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
     <>
       <Sidebar>
         <SidebarContent>
-          <SidebarHeader>
+          <SidebarHeader className="justify-between">
               <div className="flex items-center gap-2">
                   <Logo className="size-7 text-primary" />
-                  <span className="text-xl font-semibold">DataWeave</span>
+                   <span className={cn("text-xl font-semibold", state === 'collapsed' && 'hidden')}>DataWeave</span>
               </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0 md:flex hidden"
+                onClick={toggleSidebar}
+              >
+                <PanelLeft />
+                <span className="sr-only">Toggle Sidebar</span>
+              </Button>
           </SidebarHeader>
           <SidebarMenu>
             {menuItems.map((item) => (
@@ -74,10 +85,10 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             <Avatar className="size-7">
               <AvatarImage src="https://picsum.photos/seed/user-avatar/100/100" alt="User" />
-              <AvatarFallback>U</AvatarFallback>
+              <AvatarFallback>N</AvatarFallback>
             </Avatar>
-            <span className="text-sm font-medium text-sidebar-foreground/80">
-              Usuario
+            <span className="text-sm font-medium text-sidebar-foreground/80 group-data-[collapsible=icon]:hidden">
+              User
             </span>
           </div>
         </SidebarFooter>

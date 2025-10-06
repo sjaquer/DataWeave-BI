@@ -661,68 +661,64 @@ export default function Dashboard() {
                 <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Rendimiento Comparativo de Tiendas (Pedidos Confirmados)</CardTitle>
                 <CardDescription>Evolución de los pedidos confirmados por día para las tiendas principales.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <div className="min-w-[600px] h-[400px]">
-                <ChartContainer
-                    config={{
-                        dearel: { label: "Dearel", color: "hsl(var(--chart-1))" },
-                        blumi: { label: "Blumi", color: "hsl(var(--chart-2))" },
-                        novi: { label: "Novi", color: "hsl(var(--chart-3))" },
-                        trazto: { label: "Trazto", color: "hsl(var(--chart-4))" },
-                        cumbre: { label: "Cumbre", color: "hsl(var(--chart-5))" },
-                    }}
-                >
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={dailyStorePerformance} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" />
-                            <YAxis />
-                             <Tooltip
-                                content={({ active, payload, label }) => {
-                                    if (active && payload && payload.length && dailyStorePerformance) {
-                                        const currentIndex = dailyStorePerformance.findIndex(d => d.date === label);
-                                        const prevData = currentIndex > 0 ? dailyStorePerformance[currentIndex - 1] : null;
+            <CardContent className="h-[400px]">
+              <ChartContainer
+                  config={{
+                      dearel: { label: "Dearel", color: "hsl(var(--chart-1))" },
+                      blumi: { label: "Blumi", color: "hsl(var(--chart-2))" },
+                      novi: { label: "Novi", color: "hsl(var(--chart-3))" },
+                      trazto: { label: "Trazto", color: "hsl(var(--chart-4))" },
+                      cumbre: { label: "Cumbre", color: "hsl(var(--chart-5))" },
+                  }}
+              >
+                  <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={dailyStorePerformance} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
+                          <YAxis />
+                           <Tooltip
+                              content={({ active, payload, label }) => {
+                                  if (active && payload && payload.length && dailyStorePerformance) {
+                                      const currentIndex = dailyStorePerformance.findIndex(d => d.date === label);
+                                      const prevData = currentIndex > 0 ? dailyStorePerformance[currentIndex - 1] : null;
 
-                                        return (
-                                            <div className="p-2 text-xs bg-background border rounded-lg shadow-lg">
-                                                <p className="font-bold mb-2">{label}</p>
-                                                {payload.map((p, i) => {
-                                                    const storeName = p.dataKey as string;
-                                                    const currentValue = p.value as number;
-                                                    const prevValue = prevData ? (prevData[storeName] as number) : null;
-                                                    let variation = "N/A";
-                                                    if (prevValue !== null && prevValue !== 0) {
-                                                        const diff = ((currentValue - prevValue) / prevValue) * 100;
-                                                        variation = `${diff > 0 ? '+' : ''}${diff.toFixed(1)}%`;
-                                                    } else if (prevValue === 0 && currentValue > 0) {
-                                                        variation = "+100%";
-                                                    }
-                                                    
-                                                    const color = p.color || `hsl(var(--chart-${i + 1}))`;
+                                      return (
+                                          <div className="p-2 text-xs bg-background border rounded-lg shadow-lg">
+                                              <p className="font-bold mb-2">{label}</p>
+                                              {payload.map((p, i) => {
+                                                  const storeName = p.dataKey as string;
+                                                  const currentValue = p.value as number;
+                                                  const prevValue = prevData ? (prevData[storeName] as number) : null;
+                                                  let variation = "N/A";
+                                                  if (prevValue !== null && prevValue !== 0) {
+                                                      const diff = ((currentValue - prevValue) / prevValue) * 100;
+                                                      variation = `${diff > 0 ? '+' : ''}${diff.toFixed(1)}%`;
+                                                  } else if (prevValue === 0 && currentValue > 0) {
+                                                      variation = "+100%";
+                                                  }
+                                                  
+                                                  const color = p.color || `hsl(var(--chart-${i + 1}))`;
 
-                                                    return (
-                                                        <div key={storeName} className="flex justify-between items-center gap-4">
-                                                            <span style={{ color }}>● {capitalize(storeName)}: {currentValue}</span>
-                                                            <span className={`font-mono text-right ${variation.startsWith('+') ? 'text-green-500' : variation.startsWith('-') ? 'text-red-500' : 'text-muted-foreground'}`}>{variation}</span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                }}
-                            />
-                            <Legend />
-                            {MAIN_STORES.map(store => (
-                                <Line key={store} type="monotone" dataKey={store} stroke={`var(--color-${store})`} strokeWidth={2} dot={false} />
-                            ))}
-                        </LineChart>
-                    </ResponsiveContainer>
-                </ChartContainer>
-                </div>
-              </div>
+                                                  return (
+                                                      <div key={storeName} className="flex justify-between items-center gap-4">
+                                                          <span style={{ color }}>● {capitalize(storeName)}: {currentValue}</span>
+                                                          <span className={`font-mono text-right ${variation.startsWith('+') ? 'text-green-500' : variation.startsWith('-') ? 'text-red-500' : 'text-muted-foreground'}`}>{variation}</span>
+                                                      </div>
+                                                  );
+                                              })}
+                                          </div>
+                                      );
+                                  }
+                                  return null;
+                              }}
+                          />
+                          <Legend />
+                          {MAIN_STORES.map(store => (
+                              <Line key={store} type="monotone" dataKey={store} stroke={`var(--color-${store})`} strokeWidth={2} dot={false} />
+                          ))}
+                      </LineChart>
+                  </ResponsiveContainer>
+              </ChartContainer>
             </CardContent>
           </Card>
         </>
@@ -735,10 +731,8 @@ export default function Dashboard() {
                     <CardTitle className="flex items-center"><PieChartIcon className="mr-2 h-5 w-5" />Distribución de Pedidos Confirmados por Tienda</CardTitle>
                     <CardDescription>Porcentaje de contribución de cada tienda al total de pedidos confirmados.</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="h-[400px]">
                    {storeMetrics && storeMetrics.filter(s => s.confirmedOrders > 0).length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <div className="min-w-[400px] h-[400px]">
                      <ChartContainer config={{
                         ...storeMetrics?.reduce((acc, store, index) => {
                           acc[store.name] = { label: store.name, color: COLORS[index % COLORS.length] };
@@ -776,8 +770,6 @@ export default function Dashboard() {
                           </PieChart>
                       </ResponsiveContainer>
                      </ChartContainer>
-                     </div>
-                    </div>
                    ) : (
                     <div className="flex items-center justify-center h-full">
                         <p className="text-muted-foreground">No hay datos de pedidos confirmados para mostrar en el gráfico.</p>
@@ -792,9 +784,7 @@ export default function Dashboard() {
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
                   <CardDescription>{selectedStore === 'all' ? 'Top 10 provincias con más pedidos y su gasto total.' : `Top 10 provincias para la tienda ${capitalize(selectedStore)}.`}</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <div className="min-w-[600px] h-[400px]">
+              <CardContent className="h-[400px]">
                 <ChartContainer config={{
                     totalOrders: { label: "Pedidos Totales", color: "hsl(var(--chart-1))" },
                     totalSpent: { label: "Gasto Total", color: "hsl(var(--chart-2))" },
@@ -802,7 +792,7 @@ export default function Dashboard() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={(provinceMetrics || []).slice(0, 10)} margin={{ top: 20, right: 20, left: 20, bottom: 60 }}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" />
+                        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" interval="preserveStartEnd" />
                         <YAxis yAxisId="left" orientation="left" stroke="hsl(var(--primary))" fontSize={12} />
                         <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-1))" fontSize={12} />
                         <Tooltip 
@@ -821,8 +811,6 @@ export default function Dashboard() {
                       </BarChart>
                   </ResponsiveContainer>
                 </ChartContainer>
-                  </div>
-                </div>
               </CardContent>
                <div className="p-4 pt-0 text-center">
                   <Link href="/dashboard/provinces" passHref>

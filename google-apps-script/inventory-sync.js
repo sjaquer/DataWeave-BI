@@ -9,8 +9,8 @@
 // =========================================
 const CONFIG = {
   // URL del webhook que creamos en tu aplicación Next.js.
-  // ¡¡¡IMPORTANTE!!! Debes reemplazar esta URL por la URL de producción de tu aplicación.
-  WEBHOOK_URL: 'https://dataweave-bi.vercel.app/api/webhooks/inventory',
+  // ¡¡¡IMPORTANTE!!! Debes reemplazar esta URL por la URL de producción de tu aplicación de Firebase App Hosting.
+  WEBHOOK_URL: 'https://TU_NUEVO_DOMINIO_DE_FIREBASE_AQUI/api/webhooks/inventory',
 
   // Nombre de la hoja que contiene los datos de movimientos de inventario.
   SHEET_NAME: 'MOVIMIENTOS_INVENTARIO',
@@ -218,3 +218,5 @@ function handleResponse(response, sheet, rowNumbers, statusColIndex) {
     ui.alert(errorMsg); // Siempre alertamos en caso de error.
   }
 }
+
+    

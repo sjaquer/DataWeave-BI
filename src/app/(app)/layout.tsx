@@ -36,11 +36,9 @@ const menuItems = [
 
 function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  // Usamos el hook useSidebar para controlar el estado del menú
   const { isMobile, setOpenMobile, toggleSidebar, state } = useSidebar();
 
   const handleLinkClick = () => {
-    // Si estamos en un dispositivo móvil, cerramos el menú al hacer clic
     if (isMobile) {
       setOpenMobile(false);
     }
@@ -87,9 +85,6 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
               <AvatarImage src="https://picsum.photos/seed/user-avatar/100/100" alt="User" />
               <AvatarFallback>N</AvatarFallback>
             </Avatar>
-            <span className="text-sm font-medium text-sidebar-foreground/80 group-data-[collapsible=icon]:hidden">
-              User
-            </span>
           </div>
         </SidebarFooter>
       </Sidebar>

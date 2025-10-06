@@ -40,12 +40,14 @@ const capitalize = (s: string) => {
 export default function DailyDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
-  const [date, setDate] = useState<DateRange | undefined>(() => {
-    const today = new Date();
-    return { from: today, to: today };
-  });
+  const [date, setDate] = useState<DateRange | undefined>(undefined);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'date', direction: 'descending' });
   const { toast } = useToast();
+
+  useEffect(() => {
+    const today = new Date();
+    setDate({ from: today, to: today });
+  }, []);
 
   const handleDatePreset = (preset: string) => {
     const to = new Date();
@@ -89,6 +91,7 @@ export default function DailyDetailPage() {
   }, []);
 
   const fetchMetrics = useCallback(async (forceRefresh = false) => {
+    if (!date) return; // No hacer fetch si la fecha no está lista
     setIsLoading(true);
     const cacheKeyWithDate = `${CACHE_KEY}_${date?.from?.toISOString()}_${date?.to?.toISOString()}`;
 
@@ -432,3 +435,5 @@ export default function DailyDetailPage() {
     </div>
   );
 }
+
+    

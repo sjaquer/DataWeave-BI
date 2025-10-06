@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -661,7 +660,7 @@ export default function Dashboard() {
                 <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Rendimiento Comparativo de Tiendas (Pedidos Confirmados)</CardTitle>
                 <CardDescription>Evolución de los pedidos confirmados por día para las tiendas principales.</CardDescription>
             </CardHeader>
-            <CardContent className="h-[400px]">
+            <CardContent className="min-h-[400px]">
               <ChartContainer
                   config={{
                       dearel: { label: "Dearel", color: "hsl(var(--chart-1))" },
@@ -731,7 +730,7 @@ export default function Dashboard() {
                     <CardTitle className="flex items-center"><PieChartIcon className="mr-2 h-5 w-5" />Distribución de Pedidos Confirmados por Tienda</CardTitle>
                     <CardDescription>Porcentaje de contribución de cada tienda al total de pedidos confirmados.</CardDescription>
                 </CardHeader>
-                <CardContent className="h-[400px]">
+                <CardContent className="min-h-[400px]">
                    {storeMetrics && storeMetrics.filter(s => s.confirmedOrders > 0).length > 0 ? (
                      <ChartContainer config={{
                         ...storeMetrics?.reduce((acc, store, index) => {
@@ -784,7 +783,7 @@ export default function Dashboard() {
                   <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
                   <CardDescription>{selectedStore === 'all' ? 'Top 10 provincias con más pedidos y su gasto total.' : `Top 10 provincias para la tienda ${capitalize(selectedStore)}.`}</CardDescription>
               </CardHeader>
-              <CardContent className="h-[400px]">
+              <CardContent className="min-h-[400px]">
                 <ChartContainer config={{
                     totalOrders: { label: "Pedidos Totales", color: "hsl(var(--chart-1))" },
                     totalSpent: { label: "Gasto Total", color: "hsl(var(--chart-2))" },

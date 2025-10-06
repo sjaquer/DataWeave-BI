@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -182,7 +181,7 @@ export default function InventoryStatusPage() {
                       <Loader className="h-8 w-8 animate-spin text-primary" />
                   </div>
               ) : lowStockProducts.length > 0 ? (
-                <div className="h-[400px]">
+                <div style={{ height: `${Math.max(400, lowStockProducts.length * 40)}px` }}>
                   <ChartContainer config={{ currentStock: { label: "Stock", color: "hsl(var(--destructive))" } }}>
                       <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={lowStockProducts} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
@@ -197,7 +196,7 @@ export default function InventoryStatusPage() {
                   </ChartContainer>
                 </div>
               ) : (
-                  <div className="flex items-center justify-center h-full">
+                  <div className="flex items-center justify-center h-full min-h-[400px]">
                       <p className="text-muted-foreground">¡Felicidades! No hay productos con bajo stock.</p>
                   </div>
               )}

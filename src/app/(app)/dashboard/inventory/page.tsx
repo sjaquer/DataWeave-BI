@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -294,23 +295,25 @@ export default function InventoryDetailPage() {
                     <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Flujo de Inventario (Entradas vs. Salidas)</CardTitle>
                     <CardDescription>Unidades que entran y salen del inventario por día para {selectedStore === 'all' ? 'todas las tiendas' : `la tienda ${selectedStore}`}.</CardDescription>
                 </CardHeader>
-                <CardContent className="min-h-[400px]">
-                  <ChartContainer config={{
-                      Entradas: { label: "Entradas", color: "hsl(var(--chart-1))" },
-                      Salidas: { label: "Salidas", color: "hsl(var(--chart-2))" },
-                    }}>
-                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={displayMetrics?.inventoryFlowTrend || []} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                         <CartesianGrid strokeDasharray="3 3" />
-                         <XAxis dataKey="date" tick={{ fontSize: 12 }} interval="preserveStartEnd"/>
-                         <YAxis />
-                         <Tooltip content={<ChartTooltipContent />} />
-                         <Legend />
-                         <Line type="monotone" dataKey="Entradas" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
-                         <Line type="monotone" dataKey="Salidas" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
-                      </LineChart>
-                     </ResponsiveContainer>
-                   </ChartContainer>
+                <CardContent className="min-h-[400px] overflow-x-auto">
+                  <div className="min-w-[600px] h-full">
+                    <ChartContainer config={{
+                        Entradas: { label: "Entradas", color: "hsl(var(--chart-1))" },
+                        Salidas: { label: "Salidas", color: "hsl(var(--chart-2))" },
+                      }}>
+                       <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={displayMetrics?.inventoryFlowTrend || []} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                           <CartesianGrid strokeDasharray="3 3" />
+                           <XAxis dataKey="date" tick={{ fontSize: 12 }} interval="preserveStartEnd"/>
+                           <YAxis />
+                           <Tooltip content={<ChartTooltipContent />} />
+                           <Legend />
+                           <Line type="monotone" dataKey="Entradas" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
+                           <Line type="monotone" dataKey="Salidas" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
+                        </LineChart>
+                       </ResponsiveContainer>
+                     </ChartContainer>
+                  </div>
                 </CardContent>
             </Card>
 
@@ -340,33 +343,35 @@ export default function InventoryDetailPage() {
                     return (
                         <div key={urgency}>
                             <h3 className="font-semibold mb-2" style={{ color: URGENCY_COLORS[urgency] || 'inherit' }}>{urgency} ({items.length} productos)</h3>
-                            <div className="w-full" style={{ height: `${containerHeight}px` }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={items} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis type="number" dataKey="daysLeft" />
-                                        <YAxis dataKey="productName" type="category" width={120} tick={{ fontSize: 12 }} interval={0} />
-                                        <Tooltip 
-                                            cursor={{ fill: 'hsl(var(--muted))' }}
-                                            content={({ active, payload }) => {
-                                                if (active && payload && payload.length) {
-                                                    const data: PurchaseForecastItem = payload[0].payload;
-                                                    return (
-                                                        <div className="p-2 text-xs bg-background border rounded-lg shadow-lg">
-                                                            <p className="font-bold mb-2">{data.productName}</p>
-                                                            <p><span className="font-semibold">Días de Stock Restantes:</span> {data.daysLeft}</p>
-                                                            <p><span className="font-semibold">Stock Actual:</span> {data.currentStock}</p>
-                                                            <p><span className="font-semibold">Ventas (30d):</span> {data.last30dSales}</p>
-                                                            <p className="text-primary font-bold"><span className="font-semibold">Compra Sugerida:</span> {data.suggestedPurchase}</p>
-                                                        </div>
-                                                    );
-                                                }
-                                                return null;
-                                            }}
-                                        />
-                                        <Bar dataKey="daysLeft" name="Días de Stock Restantes" fill={URGENCY_COLORS[urgency]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
+                            <div className="w-full overflow-x-auto" style={{ height: `${containerHeight}px` }}>
+                                <div className="min-w-[600px] h-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={items} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis type="number" dataKey="daysLeft" />
+                                            <YAxis dataKey="productName" type="category" width={120} tick={{ fontSize: 12 }} interval={0} />
+                                            <Tooltip 
+                                                cursor={{ fill: 'hsl(var(--muted))' }}
+                                                content={({ active, payload }) => {
+                                                    if (active && payload && payload.length) {
+                                                        const data: PurchaseForecastItem = payload[0].payload;
+                                                        return (
+                                                            <div className="p-2 text-xs bg-background border rounded-lg shadow-lg">
+                                                                <p className="font-bold mb-2">{data.productName}</p>
+                                                                <p><span className="font-semibold">Días de Stock Restantes:</span> {data.daysLeft}</p>
+                                                                <p><span className="font-semibold">Stock Actual:</span> {data.currentStock}</p>
+                                                                <p><span className="font-semibold">Ventas (30d):</span> {data.last30dSales}</p>
+                                                                <p className="text-primary font-bold"><span className="font-semibold">Compra Sugerida:</span> {data.suggestedPurchase}</p>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                }}
+                                            />
+                                            <Bar dataKey="daysLeft" name="Días de Stock Restantes" fill={URGENCY_COLORS[urgency]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
                             </div>
                         </div>
                     )
@@ -380,19 +385,21 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5 text-green-500" />Top 10 Productos por Entradas</CardTitle>
                         <CardDescription>Productos con mayor cantidad de unidades ingresadas.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px]">
-                      <ChartContainer config={{ movements: { label: "Entradas", color: "hsl(var(--chart-1))" } }}>
-                          <ResponsiveContainer width="100%" height={Math.max(400, (displayMetrics?.mostIncomingProducts?.slice(0, 10).length || 0) * 40)}>
-                              <BarChart data={(displayMetrics?.mostIncomingProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis type="number" />
-                                  <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
-                                  <Tooltip content={<ChartTooltipContent />} />
-                                  <Legend />
-                                  <Bar dataKey="movements" name="Entradas" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
-                              </BarChart>
-                          </ResponsiveContainer>
-                      </ChartContainer>
+                    <CardContent className="min-h-[400px] overflow-x-auto">
+                        <div style={{ height: `${Math.max(400, (displayMetrics?.mostIncomingProducts?.slice(0, 10).length || 0) * 40)}px`, minWidth: '600px' }}>
+                          <ChartContainer config={{ movements: { label: "Entradas", color: "hsl(var(--chart-1))" } }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                  <BarChart data={(displayMetrics?.mostIncomingProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
+                                      <CartesianGrid strokeDasharray="3 3" />
+                                      <XAxis type="number" />
+                                      <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
+                                      <Tooltip content={<ChartTooltipContent />} />
+                                      <Legend />
+                                      <Bar dataKey="movements" name="Entradas" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
+                                  </BarChart>
+                              </ResponsiveContainer>
+                          </ChartContainer>
+                        </div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -400,19 +407,21 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5 text-red-500" />Top 10 Productos por Rotación (Salidas)</CardTitle>
                         <CardDescription>Productos con mayor cantidad de movimientos de salida.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px]">
-                      <ChartContainer config={{ movements: { label: "Salidas", color: "hsl(var(--chart-2))" } }}>
-                          <ResponsiveContainer width="100%" height={Math.max(400, (displayMetrics?.mostMovedProducts?.slice(0, 10).length || 0) * 40)}>
-                              <BarChart data={(displayMetrics?.mostMovedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis type="number" />
-                                  <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
-                                  <Tooltip content={<ChartTooltipContent />} />
-                                  <Legend />
-                                  <Bar dataKey="movements" name="Salidas" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
-                              </BarChart>
-                          </ResponsiveContainer>
-                      </ChartContainer>
+                    <CardContent className="min-h-[400px] overflow-x-auto">
+                        <div style={{ height: `${Math.max(400, (displayMetrics?.mostMovedProducts?.slice(0, 10).length || 0) * 40)}px`, minWidth: '600px' }}>
+                          <ChartContainer config={{ movements: { label: "Salidas", color: "hsl(var(--chart-2))" } }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                  <BarChart data={(displayMetrics?.mostMovedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
+                                      <CartesianGrid strokeDasharray="3 3" />
+                                      <XAxis type="number" />
+                                      <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
+                                      <Tooltip content={<ChartTooltipContent />} />
+                                      <Legend />
+                                      <Bar dataKey="movements" name="Salidas" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
+                                  </BarChart>
+                              </ResponsiveContainer>
+                          </ChartContainer>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
@@ -422,19 +431,21 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Undo2 className="mr-2 h-5 w-5" />Top 10 Productos Más Devueltos</CardTitle>
                         <CardDescription>Productos con la mayor cantidad de unidades devueltas por clientes.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px]">
-                      <ChartContainer config={{ returns: { label: "Devoluciones", color: "hsl(var(--chart-5))" } }}>
-                          <ResponsiveContainer width="100%" height={Math.max(400, (displayMetrics?.mostReturnedProducts?.slice(0, 10).length || 0) * 40)}>
-                              <BarChart data={(displayMetrics?.mostReturnedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis type="number" />
-                                  <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
-                                  <Tooltip content={<ChartTooltipContent />} />
-                                  <Legend />
-                                  <Bar dataKey="returns" name="Devoluciones" fill="hsl(var(--chart-5))" radius={[0, 4, 4, 0]} />
-                              </BarChart>
-                          </ResponsiveContainer>
-                      </ChartContainer>
+                    <CardContent className="min-h-[400px] overflow-x-auto">
+                        <div style={{ height: `${Math.max(400, (displayMetrics?.mostReturnedProducts?.slice(0, 10).length || 0) * 40)}px`, minWidth: '600px' }}>
+                          <ChartContainer config={{ returns: { label: "Devoluciones", color: "hsl(var(--chart-5))" } }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                  <BarChart data={(displayMetrics?.mostReturnedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
+                                      <CartesianGrid strokeDasharray="3 3" />
+                                      <XAxis type="number" />
+                                      <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
+                                      <Tooltip content={<ChartTooltipContent />} />
+                                      <Legend />
+                                      <Bar dataKey="returns" name="Devoluciones" fill="hsl(var(--chart-5))" radius={[0, 4, 4, 0]} />
+                                  </BarChart>
+                              </ResponsiveContainer>
+                          </ChartContainer>
+                        </div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -442,23 +453,25 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Actividad del Equipo de Inventario</CardTitle>
                         <CardDescription>Movimientos de entrada y salida procesados por cada miembro del equipo (Global).</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px]">
-                       <ChartContainer config={{
-                            entries: { label: "Entradas", color: "hsl(var(--chart-1))" },
-                            exits: { label: "Salidas", color: "hsl(var(--chart-2))" },
-                         }}>
-                         <ResponsiveContainer width="100%" height={Math.max(400, (displayMetrics?.inventoryPersonnelMetrics?.length || 0) * 50)}>
-                           <BarChart data={displayMetrics?.inventoryPersonnelMetrics || []} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis type="number" stacked />
-                              <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
-                              <Tooltip content={<ChartTooltipContent />} />
-                              <Legend />
-                              <Bar dataKey="entries" name="Entradas" fill="hsl(var(--chart-1))" stackId="a" />
-                              <Bar dataKey="exits" name="Salidas" fill="hsl(var(--chart-2))" stackId="a" />
-                           </BarChart>
-                         </ResponsiveContainer>
-                       </ChartContainer>
+                    <CardContent className="min-h-[400px] overflow-x-auto">
+                        <div style={{ height: `${Math.max(400, (displayMetrics?.inventoryPersonnelMetrics?.length || 0) * 50)}px`, minWidth: '600px' }}>
+                           <ChartContainer config={{
+                                entries: { label: "Entradas", color: "hsl(var(--chart-1))" },
+                                exits: { label: "Salidas", color: "hsl(var(--chart-2))" },
+                             }}>
+                             <ResponsiveContainer width="100%" height="100%">
+                               <BarChart data={displayMetrics?.inventoryPersonnelMetrics || []} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                                  <CartesianGrid strokeDasharray="3 3" />
+                                  <XAxis type="number" stacked />
+                                  <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
+                                  <Tooltip content={<ChartTooltipContent />} />
+                                  <Legend />
+                                  <Bar dataKey="entries" name="Entradas" fill="hsl(var(--chart-1))" stackId="a" />
+                                  <Bar dataKey="exits" name="Salidas" fill="hsl(var(--chart-2))" stackId="a" />
+                               </BarChart>
+                             </ResponsiveContainer>
+                           </ChartContainer>
+                        </div>
                     </CardContent>
                 </Card>
             </div>

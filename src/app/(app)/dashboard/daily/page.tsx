@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -327,19 +328,21 @@ export default function DailyDetailPage() {
                         <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Pedidos Totales</CardTitle>
                         <CardDescription>Evolución del total de pedidos (confirmados y no confirmados) en el período.</CardDescription>
                     </CardHeader>
-                    <CardContent className="h-[250px]">
-                      <ChartContainer config={{ totalOrders: { label: "Pedidos Totales", color: "hsl(var(--primary))" } }}>
-                          <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="date" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
-                                  <YAxis />
-                                  <Tooltip content={<ChartTooltipContent />} />
-                                  <Legend />
-                                  <Line type="monotone" dataKey="totalOrders" name="Pedidos Totales" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                              </LineChart>
-                          </ResponsiveContainer>
-                      </ChartContainer>
+                    <CardContent className="h-[250px] overflow-x-auto">
+                      <div className="min-w-[600px] h-full">
+                        <ChartContainer config={{ totalOrders: { label: "Pedidos Totales", color: "hsl(var(--primary))" } }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
+                                    <YAxis />
+                                    <Tooltip content={<ChartTooltipContent />} />
+                                    <Legend />
+                                    <Line type="monotone" dataKey="totalOrders" name="Pedidos Totales" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                      </div>
                     </CardContent>
                 </Card>
                 <Card className="lg:col-span-1">
@@ -347,23 +350,25 @@ export default function DailyDetailPage() {
                         <CardTitle className="flex items-center"><CheckCircle className="mr-2 h-5 w-5 text-green-500" /> <XCircle className="mr-2 h-5 w-5 text-red-500" />Composición de Pedidos</CardTitle>
                         <CardDescription>Desglose de pedidos confirmados vs. no confirmados por día.</CardDescription>
                     </CardHeader>
-                    <CardContent className="h-[250px]">
-                      <ChartContainer config={{ 
-                          confirmed: { label: "Confirmados", color: "hsl(var(--chart-1))" },
-                          unconfirmed: { label: "No Confirmados", color: "hsl(var(--chart-3))" }
-                      }}>
-                          <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="date" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
-                                  <YAxis />
-                                  <Tooltip content={<ChartTooltipContent />} />
-                                  <Legend />
-                                  <Line type="monotone" dataKey="confirmed" name="Confirmados" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
-                                  <Line type="monotone" dataKey="unconfirmed" name="No Confirmados" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={false} />
-                              </LineChart>
-                          </ResponsiveContainer>
-                      </ChartContainer>
+                    <CardContent className="h-[250px] overflow-x-auto">
+                      <div className="min-w-[600px] h-full">
+                        <ChartContainer config={{ 
+                            confirmed: { label: "Confirmados", color: "hsl(var(--chart-1))" },
+                            unconfirmed: { label: "No Confirmados", color: "hsl(var(--chart-3))" }
+                        }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
+                                    <YAxis />
+                                    <Tooltip content={<ChartTooltipContent />} />
+                                    <Legend />
+                                    <Line type="monotone" dataKey="confirmed" name="Confirmados" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
+                                    <Line type="monotone" dataKey="unconfirmed" name="No Confirmados" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                      </div>
                     </CardContent>
                 </Card>
                  <Card className="lg:col-span-1">
@@ -371,19 +376,21 @@ export default function DailyDetailPage() {
                         <CardTitle className="flex items-center"><Percent className="mr-2 h-5 w-5" />Tendencia de Tasa de Confirmación</CardTitle>
                         <CardDescription>Evolución del porcentaje de pedidos confirmados sobre el total.</CardDescription>
                     </CardHeader>
-                    <CardContent className="h-[250px]">
-                      <ChartContainer config={{ confirmationRate: { label: "Tasa de Confirmación", color: "hsl(var(--chart-2))" } }}>
-                          <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="date" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
-                                  <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
-                                  <Tooltip content={<ChartTooltipContent formatter={(value) => `${(value as number).toFixed(2)}%`} />} />
-                                  <Legend />
-                                  <Line type="monotone" dataKey="confirmationRate" name="Tasa de Confirmación" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
-                              </LineChart>
-                          </ResponsiveContainer>
-                      </ChartContainer>
+                    <CardContent className="h-[250px] overflow-x-auto">
+                      <div className="min-w-[600px] h-full">
+                        <ChartContainer config={{ confirmationRate: { label: "Tasa de Confirmación", color: "hsl(var(--chart-2))" } }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
+                                    <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                                    <Tooltip content={<ChartTooltipContent formatter={(value) => `${(value as number).toFixed(2)}%`} />} />
+                                    <Legend />
+                                    <Line type="monotone" dataKey="confirmationRate" name="Tasa de Confirmación" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                      </div>
                     </CardContent>
                 </Card>
             </div>

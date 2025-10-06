@@ -176,24 +176,26 @@ export default function InventoryStatusPage() {
               <CardTitle className="flex items-center"><BarChartHorizontal className="mr-2 h-5 w-5 text-destructive" />Top 10 Productos con Bajo Stock</CardTitle>
               <CardDescription>Productos con {LOW_STOCK_THRESHOLD} o menos unidades en stock. ¡Requieren atención!</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
               {isLoading ? (
                   <div className="flex items-center justify-center min-h-[400px]">
                       <Loader className="h-8 w-8 animate-spin text-primary" />
                   </div>
               ) : lowStockProducts.length > 0 ? (
-                <ChartContainer config={{ currentStock: { label: "Stock", color: "hsl(var(--destructive))" } }}>
-                    <ResponsiveContainer width="100%" height={Math.max(400, lowStockProducts.length * 40)}>
-                        <BarChart data={lowStockProducts} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis type="number" />
-                            <YAxis dataKey="productName" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
-                            <Tooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--destructive) / 0.1)' }}/>
-                            <Legend />
-                            <Bar dataKey="currentStock" name="Stock Actual" fill="hsl(var(--destructive))" radius={[0, 4, 4, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </ChartContainer>
+                <div style={{ height: `${Math.max(400, lowStockProducts.length * 40)}px`, minWidth: '600px' }}>
+                    <ChartContainer config={{ currentStock: { label: "Stock", color: "hsl(var(--destructive))" } }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={lowStockProducts} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis type="number" />
+                                <YAxis dataKey="productName" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
+                                <Tooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--destructive) / 0.1)' }}/>
+                                <Legend />
+                                <Bar dataKey="currentStock" name="Stock Actual" fill="hsl(var(--destructive))" radius={[0, 4, 4, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </ChartContainer>
+                </div>
               ) : (
                   <div className="flex items-center justify-center h-full min-h-[400px]">
                       <p className="text-muted-foreground">¡Felicidades! No hay productos con bajo stock.</p>
@@ -318,5 +320,3 @@ export default function InventoryStatusPage() {
     </div>
   );
 }
-
-    

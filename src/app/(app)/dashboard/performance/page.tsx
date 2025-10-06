@@ -548,5 +548,3 @@ export default function AdvisorPerformancePage() {
     </div>
   );
 }
-
-    

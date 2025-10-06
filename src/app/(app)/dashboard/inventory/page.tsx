@@ -295,12 +295,14 @@ export default function InventoryDetailPage() {
                     <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Flujo de Inventario (Entradas vs. Salidas)</CardTitle>
                     <CardDescription>Unidades que entran y salen del inventario por día para {selectedStore === 'all' ? 'todas las tiendas' : `la tienda ${selectedStore}`}.</CardDescription>
                 </CardHeader>
-                <CardContent className="min-h-[400px] relative">
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[600px] h-[400px] relative">
                   <ChartContainer config={{
                       Entradas: { label: "Entradas", color: "hsl(var(--chart-1))" },
                       Salidas: { label: "Salidas", color: "hsl(var(--chart-2))" },
                     }}>
-                     <ResponsiveContainer width="100%" height={400}>
+                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={displayMetrics?.inventoryFlowTrend || []} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                          <CartesianGrid strokeDasharray="3 3" />
                          <XAxis dataKey="date" />
@@ -312,6 +314,8 @@ export default function InventoryDetailPage() {
                       </LineChart>
                      </ResponsiveContainer>
                    </ChartContainer>
+                   </div>
+                  </div>
                 </CardContent>
             </Card>
 
@@ -341,7 +345,7 @@ export default function InventoryDetailPage() {
                     return (
                         <div key={urgency}>
                             <h3 className="font-semibold mb-2" style={{ color: URGENCY_COLORS[urgency] || 'inherit' }}>{urgency} ({items.length} productos)</h3>
-                            <div className="w-full h-auto max-h-[500px] overflow-y-auto pr-4">
+                            <div className="w-full h-auto max-h-[500px] overflow-auto pr-4">
                                 <ResponsiveContainer width="100%" height={containerHeight}>
                                     <BarChart data={items} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" />
@@ -381,9 +385,11 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5 text-green-500" />Top 10 Productos por Entradas</CardTitle>
                         <CardDescription>Productos con mayor cantidad de unidades ingresadas.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px] relative">
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <div className="min-w-[600px] h-[400px] relative">
                         <ChartContainer config={{ movements: { label: "Entradas", color: "hsl(var(--chart-1))" } }}>
-                            <ResponsiveContainer width="100%" height={400}>
+                            <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={(displayMetrics?.mostIncomingProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
@@ -394,6 +400,8 @@ export default function InventoryDetailPage() {
                                 </BarChart>
                             </ResponsiveContainer>
                         </ChartContainer>
+                        </div>
+                      </div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -401,9 +409,11 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5 text-red-500" />Top 10 Productos por Rotación (Salidas)</CardTitle>
                         <CardDescription>Productos con mayor cantidad de movimientos de salida.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px] relative">
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <div className="min-w-[600px] h-[400px] relative">
                         <ChartContainer config={{ movements: { label: "Salidas", color: "hsl(var(--chart-2))" } }}>
-                            <ResponsiveContainer width="100%" height={400}>
+                            <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={(displayMetrics?.mostMovedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
@@ -414,6 +424,8 @@ export default function InventoryDetailPage() {
                                 </BarChart>
                             </ResponsiveContainer>
                         </ChartContainer>
+                        </div>
+                      </div>
                     </CardContent>
                 </Card>
             </div>
@@ -423,9 +435,11 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Undo2 className="mr-2 h-5 w-5" />Top 10 Productos Más Devueltos</CardTitle>
                         <CardDescription>Productos con la mayor cantidad de unidades devueltas por clientes.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px] relative">
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <div className="min-w-[600px] h-[400px] relative">
                         <ChartContainer config={{ returns: { label: "Devoluciones", color: "hsl(var(--chart-5))" } }}>
-                            <ResponsiveContainer width="100%" height={400}>
+                            <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={(displayMetrics?.mostReturnedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
@@ -436,6 +450,8 @@ export default function InventoryDetailPage() {
                                 </BarChart>
                             </ResponsiveContainer>
                         </ChartContainer>
+                        </div>
+                      </div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -443,12 +459,14 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Actividad del Equipo de Inventario</CardTitle>
                         <CardDescription>Movimientos de entrada y salida procesados por cada miembro del equipo (Global).</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px] relative">
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <div className="min-w-[600px] h-[400px] relative">
                        <ChartContainer config={{
                             entries: { label: "Entradas", color: "hsl(var(--chart-1))" },
                             exits: { label: "Salidas", color: "hsl(var(--chart-2))" },
                          }}>
-                         <ResponsiveContainer width="100%" height={400}>
+                         <ResponsiveContainer width="100%" height="100%">
                            <BarChart data={displayMetrics?.inventoryPersonnelMetrics || []} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                               <CartesianGrid strokeDasharray="3 3" />
                               <XAxis type="number" stacked />
@@ -460,6 +478,8 @@ export default function InventoryDetailPage() {
                            </BarChart>
                          </ResponsiveContainer>
                        </ChartContainer>
+                       </div>
+                      </div>
                     </CardContent>
                 </Card>
             </div>
@@ -470,7 +490,7 @@ export default function InventoryDetailPage() {
               </CardHeader>
               <CardContent className="p-0 sm:p-2">
                 <div className="overflow-x-auto">
-                    <Table className="min-w-full">
+                    <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>
@@ -532,5 +552,3 @@ export default function InventoryDetailPage() {
     </div>
   );
 }
-
-    

@@ -381,9 +381,11 @@ export default function AdvisorPerformancePage() {
                         <CardTitle className="flex items-center"><BarChartHorizontal className="mr-2 h-5 w-5" />Comparativa de Intentos de Llamada</CardTitle>
                         <CardDescription>Total de llamadas salientes realizadas por cada asesor.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px] relative">
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <div className="min-w-[600px] h-[400px] relative">
                          <ChartContainer config={{ totalCalls: { label: "Intentos", color: "hsl(var(--chart-2))" } }}>
-                            <ResponsiveContainer width="100%" height={400}>
+                            <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30}}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
@@ -393,6 +395,8 @@ export default function AdvisorPerformancePage() {
                                 </BarChart>
                             </ResponsiveContainer>
                         </ChartContainer>
+                        </div>
+                      </div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -400,9 +404,11 @@ export default function AdvisorPerformancePage() {
                         <CardTitle className="flex items-center"><CheckCircle className="mr-2 h-5 w-5" />Comparativa de Llamadas Efectivas</CardTitle>
                         <CardDescription>Total de llamadas contestadas por cada asesor.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px] relative">
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <div className="min-w-[600px] h-[400px] relative">
                         <ChartContainer config={{ effectiveCalls: { label: "Efectivas", color: "hsl(var(--chart-1))" } }}>
-                            <ResponsiveContainer width="100%" height={400}>
+                            <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30}}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
@@ -412,6 +418,8 @@ export default function AdvisorPerformancePage() {
                                 </BarChart>
                             </ResponsiveContainer>
                         </ChartContainer>
+                        </div>
+                      </div>
                     </CardContent>
                 </Card>
             </div>
@@ -420,9 +428,11 @@ export default function AdvisorPerformancePage() {
                     <CardTitle className="flex items-center"><Clock className="mr-2 h-5 w-5" />Comparativa de Minutos en Llamada</CardTitle>
                     <CardDescription>Total de minutos que cada asesor ha pasado en llamadas.</CardDescription>
                 </CardHeader>
-                <CardContent className="min-h-[400px] relative">
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[600px] h-[400px] relative">
                     <ChartContainer config={{ totalMinutes: { label: "Minutos", color: "hsl(var(--chart-4))" } }}>
-                        <ResponsiveContainer width="100%" height={400}>
+                        <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30}}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis type="number" />
@@ -432,6 +442,8 @@ export default function AdvisorPerformancePage() {
                             </BarChart>
                         </ResponsiveContainer>
                     </ChartContainer>
+                    </div>
+                  </div>
                 </CardContent>
             </Card>
 
@@ -442,7 +454,7 @@ export default function AdvisorPerformancePage() {
                 </CardHeader>
                 <CardContent className="p-0 sm:p-2">
                   <div className="overflow-x-auto">
-                    <Table className="min-w-full">
+                    <Table>
                       <TableHeader>
                           <TableRow>
                               <TableHead>
@@ -533,5 +545,3 @@ export default function AdvisorPerformancePage() {
     </div>
   );
 }
-
-    

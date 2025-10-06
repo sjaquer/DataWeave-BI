@@ -210,7 +210,7 @@ export default function DailyDetailPage() {
 
     return (
       <div className="overflow-x-auto">
-        <Table className="min-w-full">
+        <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-[120px]">
@@ -329,9 +329,11 @@ export default function DailyDetailPage() {
                         <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Pedidos Totales</CardTitle>
                         <CardDescription>Evolución del total de pedidos (confirmados y no confirmados) en el período.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[250px] relative">
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <div className="min-w-[600px] h-[250px] relative">
                          <ChartContainer config={{ totalOrders: { label: "Pedidos Totales", color: "hsl(var(--primary))" } }}>
-                            <ResponsiveContainer width="100%" height={250}>
+                            <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" tick={{ fontSize: 12 }} />
@@ -342,6 +344,8 @@ export default function DailyDetailPage() {
                                 </LineChart>
                             </ResponsiveContainer>
                         </ChartContainer>
+                        </div>
+                      </div>
                     </CardContent>
                 </Card>
                 <Card className="lg:col-span-1">
@@ -349,12 +353,14 @@ export default function DailyDetailPage() {
                         <CardTitle className="flex items-center"><CheckCircle className="mr-2 h-5 w-5 text-green-500" /> <XCircle className="mr-2 h-5 w-5 text-red-500" />Composición de Pedidos</CardTitle>
                         <CardDescription>Desglose de pedidos confirmados vs. no confirmados por día.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[250px] relative">
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <div className="min-w-[600px] h-[250px] relative">
                         <ChartContainer config={{ 
                             confirmed: { label: "Confirmados", color: "hsl(var(--chart-1))" },
                             unconfirmed: { label: "No Confirmados", color: "hsl(var(--chart-3))" }
                         }}>
-                            <ResponsiveContainer width="100%" height={250}>
+                            <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" tick={{ fontSize: 12 }} />
@@ -366,6 +372,8 @@ export default function DailyDetailPage() {
                                 </LineChart>
                             </ResponsiveContainer>
                         </ChartContainer>
+                        </div>
+                      </div>
                     </CardContent>
                 </Card>
                  <Card className="lg:col-span-1">
@@ -373,9 +381,11 @@ export default function DailyDetailPage() {
                         <CardTitle className="flex items-center"><Percent className="mr-2 h-5 w-5" />Tendencia de Tasa de Confirmación</CardTitle>
                         <CardDescription>Evolución del porcentaje de pedidos confirmados sobre el total.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[250px] relative">
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <div className="min-w-[600px] h-[250px] relative">
                         <ChartContainer config={{ confirmationRate: { label: "Tasa de Confirmación", color: "hsl(var(--chart-2))" } }}>
-                            <ResponsiveContainer width="100%" height={250}>
+                            <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" tick={{ fontSize: 12 }} />
@@ -386,6 +396,8 @@ export default function DailyDetailPage() {
                                 </LineChart>
                             </ResponsiveContainer>
                         </ChartContainer>
+                        </div>
+                      </div>
                     </CardContent>
                 </Card>
             </div>
@@ -438,5 +450,3 @@ export default function DailyDetailPage() {
     </div>
   );
 }
-
-    

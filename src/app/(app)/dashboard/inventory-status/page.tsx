@@ -176,14 +176,16 @@ export default function InventoryStatusPage() {
               <CardTitle className="flex items-center"><BarChartHorizontal className="mr-2 h-5 w-5 text-destructive" />Top 10 Productos con Bajo Stock</CardTitle>
               <CardDescription>Productos con {LOW_STOCK_THRESHOLD} o menos unidades en stock. ¡Requieren atención!</CardDescription>
           </CardHeader>
-          <CardContent className="min-h-[400px] relative">
+          <CardContent>
               {isLoading ? (
-                  <div className="flex items-center justify-center h-full">
+                  <div className="flex items-center justify-center min-h-[400px]">
                       <Loader className="h-8 w-8 animate-spin text-primary" />
                   </div>
               ) : lowStockProducts.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <div className="min-w-[600px] h-[400px] relative">
                   <ChartContainer config={{ currentStock: { label: "Stock", color: "hsl(var(--destructive))" } }}>
-                      <ResponsiveContainer width="100%" height={400}>
+                      <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={lowStockProducts} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                               <CartesianGrid strokeDasharray="3 3" />
                               <XAxis type="number" />
@@ -194,6 +196,8 @@ export default function InventoryStatusPage() {
                           </BarChart>
                       </ResponsiveContainer>
                   </ChartContainer>
+                  </div>
+                </div>
               ) : (
                   <div className="flex items-center justify-center h-full">
                       <p className="text-muted-foreground">¡Felicidades! No hay productos con bajo stock.</p>
@@ -242,7 +246,7 @@ export default function InventoryStatusPage() {
                 </div>
             ) : (
               <div className="overflow-x-auto">
-                <Table className="min-w-full">
+                <Table>
                     <TableHeader>
                         <TableRow>
                             <TableHead>
@@ -318,5 +322,3 @@ export default function InventoryStatusPage() {
     </div>
   );
 }
-
-    

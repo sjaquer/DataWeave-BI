@@ -282,7 +282,7 @@ export default function ProvincesDetailPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-                <Table className="min-w-full">
+                <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>
@@ -344,5 +344,3 @@ export default function ProvincesDetailPage() {
     </div>
   );
 }
-
-    

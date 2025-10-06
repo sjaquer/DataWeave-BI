@@ -184,7 +184,7 @@ export default function MonthlyReportPage() {
                 </div>
             ) : (
                 <div className="overflow-x-auto">
-                    <Table className="min-w-full">
+                    <Table>
                         <TableHeader>
                             <TableRow>
                                 <TableHead>
@@ -263,5 +263,3 @@ export default function MonthlyReportPage() {
     </div>
   );
 }
-
-    

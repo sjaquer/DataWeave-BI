@@ -257,7 +257,7 @@ export default function MetaCampaignsPage() {
                 </div>
                ) : (
                 <div className="overflow-x-auto">
-                    <Table className="min-w-full">
+                    <Table>
                         <TableHeader>
                             <TableRow>
                                 <TableHead><Button variant="ghost" onClick={() => handleSort('name')}>Campaña {renderSortArrow('name')}</Button></TableHead>
@@ -305,5 +305,3 @@ export default function MetaCampaignsPage() {
     </div>
   );
 }
-
-    

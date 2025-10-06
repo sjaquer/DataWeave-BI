@@ -336,7 +336,7 @@ export default function AdvisorPerformancePage() {
       </div>
       
       {isLoading ? (
-        <div className="flex items-center justify-center h-96">
+        <div className="flex items-center justify-center min-h-[400px]">
           <Loader className="h-8 w-8 animate-spin text-primary" />
           <p className="ml-4 text-muted-foreground">Calculando rendimiento...</p>
         </div>
@@ -381,9 +381,9 @@ export default function AdvisorPerformancePage() {
                         <CardTitle className="flex items-center"><BarChartHorizontal className="mr-2 h-5 w-5" />Comparativa de Intentos de Llamada</CardTitle>
                         <CardDescription>Total de llamadas salientes realizadas por cada asesor.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px]">
+                    <CardContent className="min-h-[400px] relative">
                          <ChartContainer config={{ totalCalls: { label: "Intentos", color: "hsl(var(--chart-2))" } }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height={400}>
                                 <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30}}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
@@ -400,9 +400,9 @@ export default function AdvisorPerformancePage() {
                         <CardTitle className="flex items-center"><CheckCircle className="mr-2 h-5 w-5" />Comparativa de Llamadas Efectivas</CardTitle>
                         <CardDescription>Total de llamadas contestadas por cada asesor.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px]">
+                    <CardContent className="min-h-[400px] relative">
                         <ChartContainer config={{ effectiveCalls: { label: "Efectivas", color: "hsl(var(--chart-1))" } }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height={400}>
                                 <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30}}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
@@ -420,9 +420,9 @@ export default function AdvisorPerformancePage() {
                     <CardTitle className="flex items-center"><Clock className="mr-2 h-5 w-5" />Comparativa de Minutos en Llamada</CardTitle>
                     <CardDescription>Total de minutos que cada asesor ha pasado en llamadas.</CardDescription>
                 </CardHeader>
-                <CardContent className="min-h-[400px]">
+                <CardContent className="min-h-[400px] relative">
                     <ChartContainer config={{ totalMinutes: { label: "Minutos", color: "hsl(var(--chart-4))" } }}>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height={400}>
                             <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30}}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis type="number" />
@@ -440,9 +440,9 @@ export default function AdvisorPerformancePage() {
                     <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Detalle de Rendimiento por Asesor</CardTitle>
                     <CardDescription>Resumen detallado de la actividad de llamadas salientes.</CardDescription>
                 </CardHeader>
-                <CardContent className="p-2">
+                <CardContent className="p-0 sm:p-2">
                   <div className="overflow-x-auto">
-                    <Table>
+                    <Table className="min-w-full">
                       <TableHeader>
                           <TableRow>
                               <TableHead>
@@ -474,42 +474,42 @@ export default function AdvisorPerformancePage() {
                       <TableBody>
                           {sortedPerformanceData.length > 0 ? (
                           sortedPerformanceData.map((agent) => (
-                              <TableRow key={agent.id} className="md:table-row block mb-4 md:mb-0 border-b md:border-none">
-                                  <TableCell className="md:table-cell block font-bold before:content-['Asesor:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{agent.name} ({agent.id})</TableCell>
-                                  <TableCell className="md:table-cell block text-center before:content-['Intentos:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                              <TableRow key={agent.id}>
+                                  <TableCell className="font-bold whitespace-nowrap">{agent.name} ({agent.id})</TableCell>
+                                  <TableCell className="text-center">
                                       <Badge variant="outline" className={cn("text-base font-bold", getCallCountColor(agent.totalCalls))}>
                                           {agent.totalCalls}
                                       </Badge>
                                   </TableCell>
-                                  <TableCell className="md:table-cell block text-center font-semibold text-green-500 before:content-['Efectivas:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
-                                      <div className="flex items-center justify-end md:justify-center gap-2">
+                                  <TableCell className="text-center font-semibold text-green-500">
+                                      <div className="flex items-center justify-center gap-2">
                                           <CheckCircle className="h-4 w-4" />
                                           {agent.effectiveCalls}
                                       </div>
                                   </TableCell>
-                                  <TableCell className="md:table-cell block text-center font-mono font-semibold before:content-['Efectividad:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                                  <TableCell className="text-center font-mono font-semibold">
                                   {agent.effectivenessRate.toFixed(1)}%
                                   </TableCell>
-                                  <TableCell className="md:table-cell block text-center before:content-['Minutos_Totales:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
-                                      <div className="flex items-center justify-end md:justify-center gap-2">
+                                  <TableCell className="text-center">
+                                      <div className="flex items-center justify-center gap-2">
                                           <Clock className="h-4 w-4 text-muted-foreground" />
                                           {Math.ceil(agent.totalSeconds / 60)} min
                                       </div>
                                   </TableCell>
-                                  <TableCell className="md:table-cell block text-center before:content-['Duración_Promedio:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
-                                      <div className="flex items-center justify-end md:justify-center gap-2">
+                                  <TableCell className="text-center">
+                                      <div className="flex items-center justify-center gap-2">
                                           <Timer className="h-4 w-4 text-muted-foreground" />
                                           {agent.averageCallDuration.toFixed(0)} s
                                       </div>
                                   </TableCell>
-                                  <TableCell className="md:table-cell block text-center font-mono before:content-['Primera_Llamada:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
-                                  <div className="flex items-center justify-end md:justify-center gap-2 text-green-500">
+                                  <TableCell className="text-center font-mono">
+                                  <div className="flex items-center justify-center gap-2 text-green-500">
                                       <PlayCircle className="h-4 w-4" />
                                       {agent.firstCallTime || "N/A"}
                                   </div>
                                   </TableCell>
-                                  <TableCell className="md:table-cell block text-right font-mono before:content-['Última_Llamada:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
-                                  <div className="flex items-center justify-end md:justify-end gap-2 text-red-500">
+                                  <TableCell className="text-right font-mono">
+                                  <div className="flex items-center justify-end gap-2 text-red-500">
                                       <StopCircle className="h-4 w-4" />
                                       {agent.lastCallTime || "N/A"}
                                   </div>
@@ -533,3 +533,5 @@ export default function AdvisorPerformancePage() {
     </div>
   );
 }
+
+    

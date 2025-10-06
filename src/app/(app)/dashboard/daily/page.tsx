@@ -45,6 +45,7 @@ export default function DailyDetailPage() {
   const { toast } = useToast();
 
   useEffect(() => {
+    // Set initial date range to today on client side to avoid hydration errors
     const today = new Date();
     setDate({ from: today, to: today });
   }, []);
@@ -148,7 +149,9 @@ export default function DailyDetailPage() {
   }, [date, processAndSetMetrics, toast]);
 
   useEffect(() => {
-    fetchMetrics(false);
+     if(date) {
+        fetchMetrics(false);
+     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
@@ -207,7 +210,7 @@ export default function DailyDetailPage() {
 
     return (
       <div className="overflow-x-auto">
-        <Table>
+        <Table className="min-w-full">
           <TableHeader>
             <TableRow>
               <TableHead className="w-[120px]">
@@ -240,21 +243,21 @@ export default function DailyDetailPage() {
           <TableBody>
             {dataToRender.length > 0 ? (
               dataToRender.map((metric) => (
-                <TableRow key={metric.date} className="md:table-row block mb-4 md:mb-0 border-b md:border-none">
-                  <TableCell className="md:table-cell block font-medium before:content-['Fecha:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">
+                <TableRow key={metric.date}>
+                  <TableCell className="font-medium whitespace-nowrap">
                       {metric.date}
                   </TableCell>
-                  <TableCell className="md:table-cell block text-center before:content-['Pedidos_Totales:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                  <TableCell className="text-center">
                       {metric.totalOrders}
                   </TableCell>
-                  <TableCell className="md:table-cell block text-center text-green-500 font-semibold before:content-['Confirmados:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                  <TableCell className="text-center text-green-500 font-semibold">
                       {metric.confirmed}
                   </TableCell>
-                  <TableCell className="md:table-cell block text-center text-red-500 font-semibold before:content-['No_Confirmados:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                  <TableCell className="text-center text-red-500 font-semibold">
                       {metric.unconfirmed}
                   </TableCell>
-                  <TableCell className="md:table-cell block text-right before:content-['Tasa_de_Confirmación:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
-                    <div className="flex items-center justify-end gap-3">
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-3 whitespace-nowrap">
                       <span className="font-medium text-sm w-16">{metric.confirmationRate.toFixed(2)}%</span>
                       <Progress value={metric.confirmationRate} className="h-2 w-[100px]" />
                     </div>
@@ -326,9 +329,9 @@ export default function DailyDetailPage() {
                         <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Pedidos Totales</CardTitle>
                         <CardDescription>Evolución del total de pedidos (confirmados y no confirmados) en el período.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[250px]">
+                    <CardContent className="min-h-[250px] relative">
                          <ChartContainer config={{ totalOrders: { label: "Pedidos Totales", color: "hsl(var(--primary))" } }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height={250}>
                                 <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" tick={{ fontSize: 12 }} />
@@ -346,12 +349,12 @@ export default function DailyDetailPage() {
                         <CardTitle className="flex items-center"><CheckCircle className="mr-2 h-5 w-5 text-green-500" /> <XCircle className="mr-2 h-5 w-5 text-red-500" />Composición de Pedidos</CardTitle>
                         <CardDescription>Desglose de pedidos confirmados vs. no confirmados por día.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[250px]">
+                    <CardContent className="min-h-[250px] relative">
                         <ChartContainer config={{ 
                             confirmed: { label: "Confirmados", color: "hsl(var(--chart-1))" },
                             unconfirmed: { label: "No Confirmados", color: "hsl(var(--chart-3))" }
                         }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height={250}>
                                 <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" tick={{ fontSize: 12 }} />
@@ -370,9 +373,9 @@ export default function DailyDetailPage() {
                         <CardTitle className="flex items-center"><Percent className="mr-2 h-5 w-5" />Tendencia de Tasa de Confirmación</CardTitle>
                         <CardDescription>Evolución del porcentaje de pedidos confirmados sobre el total.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[250px]">
+                    <CardContent className="min-h-[250px] relative">
                         <ChartContainer config={{ confirmationRate: { label: "Tasa de Confirmación", color: "hsl(var(--chart-2))" } }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height={250}>
                                 <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" tick={{ fontSize: 12 }} />
@@ -393,7 +396,7 @@ export default function DailyDetailPage() {
                     <CardTitle>Desglose Diario por Tienda</CardTitle>
                     <CardDescription>Usa las pestañas para filtrar los datos por una tienda específica o ver el total.</CardDescription>
                 </CardHeader>
-                <CardContent className="p-2">
+                <CardContent className="p-0 sm:p-2">
                     <Tabs defaultValue="all" className="w-full">
                         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 sticky top-0 bg-card z-10 p-1 h-auto">
                             <TabsTrigger value="all">General</TabsTrigger>

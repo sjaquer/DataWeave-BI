@@ -275,14 +275,14 @@ export default function ProvincesDetailPage() {
           <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Métricas por Provincia</CardTitle>
           <CardDescription>Desglose completo de pedidos y gasto para {selectedStore === 'all' ? 'todas las tiendas' : `la tienda ${selectedStore}`}.</CardDescription>
         </CardHeader>
-        <CardContent className="p-2">
+        <CardContent className="p-0 sm:p-2">
           {isLoading ? (
-            <div className="flex items-center justify-center h-64">
+            <div className="flex items-center justify-center min-h-[400px]">
                 <Loader className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
             <div className="overflow-x-auto">
-                <Table>
+                <Table className="min-w-full">
                   <TableHeader>
                     <TableRow>
                       <TableHead>
@@ -315,13 +315,13 @@ export default function ProvincesDetailPage() {
                   <TableBody>
                     {sortedMetrics.length > 0 ? (
                       sortedMetrics.filter(p => p.totalOrders > 0).map((p) => (
-                        <TableRow key={p.name} className="md:table-row block mb-4 md:mb-0 border-b md:border-none">
-                          <TableCell className="md:table-cell block font-medium before:content-['Provincia:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{p.name}</TableCell>
-                          <TableCell className="md:table-cell block text-center before:content-['Pedidos_Totales:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{p.totalOrders}</TableCell>
-                          <TableCell className="md:table-cell block text-center text-green-500 font-semibold before:content-['Pedidos_Confirmados:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{p.confirmedOrders}</TableCell>
-                          <TableCell className="md:table-cell block text-right font-medium before:content-['Gasto_Total:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{p.totalSpent.toFixed(2)}</TableCell>
-                          <TableCell className="md:table-cell block text-right before:content-['Tasa_de_Confirmación:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
-                            <div className="flex items-center justify-end gap-3">
+                        <TableRow key={p.name}>
+                          <TableCell className="font-medium whitespace-nowrap">{p.name}</TableCell>
+                          <TableCell className="text-center whitespace-nowrap">{p.totalOrders}</TableCell>
+                          <TableCell className="text-center text-green-500 font-semibold whitespace-nowrap">{p.confirmedOrders}</TableCell>
+                          <TableCell className="text-right font-medium whitespace-nowrap">{p.totalSpent.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-3 whitespace-nowrap">
                               <span className="font-medium text-sm w-16">{p.confirmationRate.toFixed(2)}%</span>
                               <Progress value={p.confirmationRate} className="h-2 w-[100px]" />
                             </div>
@@ -344,3 +344,5 @@ export default function ProvincesDetailPage() {
     </div>
   );
 }
+
+    

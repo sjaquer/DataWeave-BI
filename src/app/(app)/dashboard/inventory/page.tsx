@@ -285,7 +285,7 @@ export default function InventoryDetailPage() {
       </div>
       
       {isLoading ? (
-        <div className="flex items-center justify-center h-96">
+        <div className="flex items-center justify-center min-h-[400px]">
             <Loader className="h-8 w-8 animate-spin text-primary" />
         </div>
       ) : (
@@ -295,12 +295,12 @@ export default function InventoryDetailPage() {
                     <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Flujo de Inventario (Entradas vs. Salidas)</CardTitle>
                     <CardDescription>Unidades que entran y salen del inventario por día para {selectedStore === 'all' ? 'todas las tiendas' : `la tienda ${selectedStore}`}.</CardDescription>
                 </CardHeader>
-                <CardContent className="min-h-[400px]">
+                <CardContent className="min-h-[400px] relative">
                   <ChartContainer config={{
                       Entradas: { label: "Entradas", color: "hsl(var(--chart-1))" },
                       Salidas: { label: "Salidas", color: "hsl(var(--chart-2))" },
                     }}>
-                     <ResponsiveContainer width="100%" height="100%">
+                     <ResponsiveContainer width="100%" height={400}>
                       <LineChart data={displayMetrics?.inventoryFlowTrend || []} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                          <CartesianGrid strokeDasharray="3 3" />
                          <XAxis dataKey="date" />
@@ -336,11 +336,13 @@ export default function InventoryDetailPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {Object.entries(forecastDataByUrgency).filter(([, items]) => items.length > 0).map(([urgency, items]) => {
+                    const barHeight = 40;
+                    const containerHeight = Math.max(400, items.length * barHeight);
                     return (
                         <div key={urgency}>
                             <h3 className="font-semibold mb-2" style={{ color: URGENCY_COLORS[urgency] || 'inherit' }}>{urgency} ({items.length} productos)</h3>
-                            <div className="min-h-[400px]">
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div className="w-full h-auto max-h-[500px] overflow-y-auto pr-4">
+                                <ResponsiveContainer width="100%" height={containerHeight}>
                                     <BarChart data={items} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis type="number" dataKey="daysLeft" />
@@ -379,9 +381,9 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5 text-green-500" />Top 10 Productos por Entradas</CardTitle>
                         <CardDescription>Productos con mayor cantidad de unidades ingresadas.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px]">
+                    <CardContent className="min-h-[400px] relative">
                         <ChartContainer config={{ movements: { label: "Entradas", color: "hsl(var(--chart-1))" } }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height={400}>
                                 <BarChart data={(displayMetrics?.mostIncomingProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
@@ -399,9 +401,9 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5 text-red-500" />Top 10 Productos por Rotación (Salidas)</CardTitle>
                         <CardDescription>Productos con mayor cantidad de movimientos de salida.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px]">
+                    <CardContent className="min-h-[400px] relative">
                         <ChartContainer config={{ movements: { label: "Salidas", color: "hsl(var(--chart-2))" } }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height={400}>
                                 <BarChart data={(displayMetrics?.mostMovedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
@@ -421,9 +423,9 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Undo2 className="mr-2 h-5 w-5" />Top 10 Productos Más Devueltos</CardTitle>
                         <CardDescription>Productos con la mayor cantidad de unidades devueltas por clientes.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px]">
+                    <CardContent className="min-h-[400px] relative">
                         <ChartContainer config={{ returns: { label: "Devoluciones", color: "hsl(var(--chart-5))" } }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height={400}>
                                 <BarChart data={(displayMetrics?.mostReturnedProducts || []).slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis type="number" />
@@ -441,12 +443,12 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Actividad del Equipo de Inventario</CardTitle>
                         <CardDescription>Movimientos de entrada y salida procesados por cada miembro del equipo (Global).</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px]">
+                    <CardContent className="min-h-[400px] relative">
                        <ChartContainer config={{
                             entries: { label: "Entradas", color: "hsl(var(--chart-1))" },
                             exits: { label: "Salidas", color: "hsl(var(--chart-2))" },
                          }}>
-                         <ResponsiveContainer width="100%" height="100%">
+                         <ResponsiveContainer width="100%" height={400}>
                            <BarChart data={displayMetrics?.inventoryPersonnelMetrics || []} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                               <CartesianGrid strokeDasharray="3 3" />
                               <XAxis type="number" stacked />
@@ -466,9 +468,9 @@ export default function InventoryDetailPage() {
                 <CardTitle className="flex items-center"><Undo2 className="mr-2 h-5 w-5" />Detalle de Devoluciones de Clientes</CardTitle>
                 <CardDescription>Listado de movimientos de inventario registrados como "DEVOLUCION DE CLIENTE".</CardDescription>
               </CardHeader>
-              <CardContent className="p-2">
+              <CardContent className="p-0 sm:p-2">
                 <div className="overflow-x-auto">
-                    <Table>
+                    <Table className="min-w-full">
                       <TableHeader>
                         <TableRow>
                           <TableHead>
@@ -506,13 +508,13 @@ export default function InventoryDetailPage() {
                       <TableBody>
                         {sortedReturns.length > 0 ? (
                             sortedReturns.map((item, index) => (
-                            <TableRow key={`${item.date}-${item.productName}-${index}`} className="md:table-row block mb-4 md:mb-0 border-b md:border-none">
-                                <TableCell className="md:table-cell block font-medium before:content-['Fecha:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.date}</TableCell>
-                                <TableCell className="md:table-cell block before:content-['Producto:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.productName}</TableCell>
-                                <TableCell className="md:table-cell block text-center font-bold before:content-['Cantidad:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{item.quantity}</TableCell>
-                                <TableCell className="md:table-cell block before:content-['Usuario:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.user}</TableCell>
-                                <TableCell className="md:table-cell block before:content-['N°_Pedido:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.orderNumber}</TableCell>
-                                <TableCell className="md:table-cell block font-medium before:content-['Tienda:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">{item.store}</TableCell>
+                            <TableRow key={`${item.date}-${item.productName}-${index}`}>
+                                <TableCell className="font-medium whitespace-nowrap">{item.date}</TableCell>
+                                <TableCell className="whitespace-nowrap">{item.productName}</TableCell>
+                                <TableCell className="text-center font-bold">{item.quantity}</TableCell>
+                                <TableCell className="whitespace-nowrap">{item.user}</TableCell>
+                                <TableCell className="whitespace-nowrap">{item.orderNumber}</TableCell>
+                                <TableCell className="font-medium whitespace-nowrap">{item.store}</TableCell>
                             </TableRow>
                             ))
                         ) : (
@@ -530,3 +532,5 @@ export default function InventoryDetailPage() {
     </div>
   );
 }
+
+    

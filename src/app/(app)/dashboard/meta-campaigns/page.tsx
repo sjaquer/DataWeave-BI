@@ -250,14 +250,14 @@ export default function MetaCampaignsPage() {
                 <CardTitle>Detalle de Campañas</CardTitle>
                 <CardDescription>Análisis individual del rendimiento de cada campaña activa en el período.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0 sm:p-2">
               {isLoading ? (
                 <div className="flex items-center justify-center h-64">
                     <Loader className="h-8 w-8 animate-spin text-primary" />
                 </div>
                ) : (
                 <div className="overflow-x-auto">
-                    <Table>
+                    <Table className="min-w-full">
                         <TableHeader>
                             <TableRow>
                                 <TableHead><Button variant="ghost" onClick={() => handleSort('name')}>Campaña {renderSortArrow('name')}</Button></TableHead>
@@ -272,23 +272,23 @@ export default function MetaCampaignsPage() {
                         <TableBody>
                         {sortedCampaigns.length > 0 ? (
                             sortedCampaigns.map((c) => (
-                                <TableRow key={c.id} className="md:table-row block mb-4 md:mb-0 border-b md:border-none">
-                                    <TableCell className="md:table-cell block font-medium before:content-['Campaña:'] before:font-bold before:mr-2 md:before:content-none text-right md:text-left">
+                                <TableRow key={c.id}>
+                                    <TableCell className="font-medium whitespace-nowrap">
                                         <div className="flex flex-col">
                                             <span>{c.name}</span>
                                             <span className="text-xs text-muted-foreground">{c.objective}</span>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="md:table-cell block text-center before:content-['Estado:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">
+                                    <TableCell className="text-center">
                                         <span className={cn("px-2 py-1 rounded-full text-xs font-semibold", getStatusBadge(c.status))}>
                                             {c.status}
                                         </span>
                                     </TableCell>
-                                    <TableCell className="md:table-cell block font-mono text-right before:content-['Gasto:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">S/ {c.spend.toFixed(2)}</TableCell>
-                                    <TableCell className="md:table-cell block font-mono text-right before:content-['Impresiones:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{c.impressions.toLocaleString()}</TableCell>
-                                    <TableCell className="md:table-cell block font-mono text-right before:content-['Clics:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{c.clicks.toLocaleString()}</TableCell>
-                                    <TableCell className="md:table-cell block font-mono text-right before:content-['CPC:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">S/ {c.cpc.toFixed(2)}</TableCell>
-                                    <TableCell className="md:table-cell block font-mono text-right before:content-['CTR:'] before:font-bold before:mr-2 md:before:content-none before:float-left md:before:float-none">{c.ctr.toFixed(2)}%</TableCell>
+                                    <TableCell className="font-mono text-right whitespace-nowrap">S/ {c.spend.toFixed(2)}</TableCell>
+                                    <TableCell className="font-mono text-right whitespace-nowrap">{c.impressions.toLocaleString()}</TableCell>
+                                    <TableCell className="font-mono text-right whitespace-nowrap">{c.clicks.toLocaleString()}</TableCell>
+                                    <TableCell className="font-mono text-right whitespace-nowrap">S/ {c.cpc.toFixed(2)}</TableCell>
+                                    <TableCell className="font-mono text-right whitespace-nowrap">{c.ctr.toFixed(2)}%</TableCell>
                                 </TableRow>
                             ))
                         ) : (
@@ -305,3 +305,5 @@ export default function MetaCampaignsPage() {
     </div>
   );
 }
+
+    

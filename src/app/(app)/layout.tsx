@@ -80,12 +80,10 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
-          <div className="flex items-center gap-2">
-            <Avatar className="size-7">
-              <AvatarImage src="https://picsum.photos/seed/user-avatar/100/100" alt="User" />
-              <AvatarFallback>N</AvatarFallback>
-            </Avatar>
-          </div>
+          <Avatar className="size-7">
+            <AvatarImage src="https://picsum.photos/seed/user-avatar/100/100" alt="User" />
+            <AvatarFallback>N</AvatarFallback>
+          </Avatar>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>

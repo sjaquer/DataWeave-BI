@@ -382,19 +382,17 @@ export default function AdvisorPerformancePage() {
                         <CardDescription>Total de llamadas salientes realizadas por cada asesor.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                         <div style={{ height: `${Math.max(400, chartData.length * 50)}px` }}>
+                         <ResponsiveContainer width="100%" height={Math.max(400, chartData.length * 50)}>
                             <ChartContainer config={{ totalCalls: { label: "Intentos", color: "hsl(var(--chart-2))" } }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis type="number" />
-                                        <YAxis dataKey="name" type="category" width={60} tick={{ fontSize: 12 }} interval={0} />
-                                        <Tooltip content={<ChartTooltipContent />} cursor={{fill: "hsl(var(--muted))"}}/>
-                                        <Bar dataKey="totalCalls" name="Intentos" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
+                                <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis type="number" />
+                                    <YAxis dataKey="name" type="category" width={60} tick={{ fontSize: 12 }} interval={0} />
+                                    <Tooltip content={<ChartTooltipContent />} cursor={{fill: "hsl(var(--muted))"}}/>
+                                    <Bar dataKey="totalCalls" name="Intentos" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
+                                </BarChart>
                             </ChartContainer>
-                        </div>
+                        </ResponsiveContainer>
                     </CardContent>
                 </Card>
                 <Card>
@@ -403,19 +401,17 @@ export default function AdvisorPerformancePage() {
                         <CardDescription>Total de llamadas contestadas por cada asesor.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div style={{ height: `${Math.max(400, chartData.length * 50)}px` }}>
+                        <ResponsiveContainer width="100%" height={Math.max(400, chartData.length * 50)}>
                             <ChartContainer config={{ effectiveCalls: { label: "Efectivas", color: "hsl(var(--chart-1))" } }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis type="number" />
-                                        <YAxis dataKey="name" type="category" width={60} tick={{ fontSize: 12 }} interval={0} />
-                                        <Tooltip content={<ChartTooltipContent />} cursor={{fill: "hsl(var(--muted))"}} />
-                                        <Bar dataKey="effectiveCalls" name="Efectivas" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
+                                <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis type="number" />
+                                    <YAxis dataKey="name" type="category" width={60} tick={{ fontSize: 12 }} interval={0} />
+                                    <Tooltip content={<ChartTooltipContent />} cursor={{fill: "hsl(var(--muted))"}} />
+                                    <Bar dataKey="effectiveCalls" name="Efectivas" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
+                                </BarChart>
                             </ChartContainer>
-                        </div>
+                        </ResponsiveContainer>
                     </CardContent>
                 </Card>
             </div>
@@ -425,19 +421,17 @@ export default function AdvisorPerformancePage() {
                     <CardDescription>Total de minutos que cada asesor ha pasado en llamadas.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div style={{ height: `${Math.max(400, chartData.length * 50)}px` }}>
+                    <ResponsiveContainer width="100%" height={Math.max(400, chartData.length * 50)}>
                         <ChartContainer config={{ totalMinutes: { label: "Minutos", color: "hsl(var(--chart-4))" } }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis type="number" />
-                                    <YAxis dataKey="name" type="category" width={60} tick={{ fontSize: 12 }} interval={0} />
-                                    <Tooltip content={<ChartTooltipContent />} cursor={{fill: "hsl(var(--muted))"}}/>
-                                    <Bar dataKey="totalMinutes" name="Minutos Totales" fill="hsl(var(--chart-4))" radius={[0, 4, 4, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
+                            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis type="number" />
+                                <YAxis dataKey="name" type="category" width={60} tick={{ fontSize: 12 }} interval={0} />
+                                <Tooltip content={<ChartTooltipContent />} cursor={{fill: "hsl(var(--muted))"}}/>
+                                <Bar dataKey="totalMinutes" name="Minutos Totales" fill="hsl(var(--chart-4))" radius={[0, 4, 4, 0]} />
+                            </BarChart>
                         </ChartContainer>
-                    </div>
+                    </ResponsiveContainer>
                 </CardContent>
             </Card>
 

@@ -33,14 +33,17 @@ export default function ProvincesDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [fullMetrics, setFullMetrics] = useState<GetMetricsOutput | null>(null);
   const [displayMetrics, setDisplayMetrics] = useState<ProvinceMetric[]>([]);
-  const [date, setDate] = useState<DateRange | undefined>(() => {
-    const today = new Date();
-    return { from: today, to: today };
-  });
+  const [date, setDate] = useState<DateRange | undefined>(undefined);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'totalOrders', direction: 'descending' });
   const [selectedStore, setSelectedStore] = useState('all');
   const [availableStores, setAvailableStores] = useState<StoreMetric[]>([]);
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Set initial date range to today on client side to avoid hydration errors
+    const today = new Date();
+    setDate({ from: today, to: today });
+  }, []);
 
   const handleDatePreset = (preset: string) => {
     const to = new Date();
@@ -166,7 +169,9 @@ export default function ProvincesDetailPage() {
   }, [date, processAndSetMetrics, toast, selectedStore]);
   
   useEffect(() => {
-    fetchMetrics(false);
+    if (date) {
+      fetchMetrics(false);
+    }
   }, [date, fetchMetrics]);
   
   useEffect(() => {
@@ -337,5 +342,3 @@ export default function ProvincesDetailPage() {
     </div>
   );
 }
-
-    

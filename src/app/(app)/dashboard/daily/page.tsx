@@ -19,13 +19,15 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { DailyMetric, GetMetricsOutput, GetMetricsInput } from "@/ai/schemas/getMetricsSchema";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
 const CACHE_KEY = 'dashboardMetricsCache_daily';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
 const MAIN_STORES = ["dearel", "blumi", "novi", "trazto", "cumbre"];
+const ITEMS_PER_PAGE = 15;
+
 
 type SortConfig = {
     key: keyof DailyMetric | 'totalOrders';
@@ -42,6 +44,7 @@ export default function DailyDetailPage() {
   const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
   const [date, setDate] = useState<DateRange | undefined>(undefined);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'date', direction: 'descending' });
+  const [visibleItemsCount, setVisibleItemsCount] = useState(ITEMS_PER_PAGE);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -160,6 +163,7 @@ export default function DailyDetailPage() {
       direction = 'descending';
     }
     setSortConfig({ key, direction });
+    setVisibleItemsCount(ITEMS_PER_PAGE);
   };
 
   const sortedMetrics = useMemo(() => {
@@ -192,87 +196,118 @@ export default function DailyDetailPage() {
     return <ArrowDown className="ml-2 h-4 w-4" />;
   };
 
-  const renderDailyMetricsTable = (metrics: DailyMetric[], storeId?: string) => {
-    const dataToRender = storeId
-      ? metrics.map(m => {
-          const storeData = m.byStore?.[storeId] || { confirmed: 0, unconfirmed: 0 };
-          const total = storeData.confirmed + storeData.unconfirmed;
-          return {
-            date: m.date,
-            confirmed: storeData.confirmed,
-            unconfirmed: storeData.unconfirmed,
-            totalOrders: total,
-            confirmationRate: total > 0 ? (storeData.confirmed / total) * 100 : 0,
-          };
-        }).filter(m => m.totalOrders > 0)
-      : sortedMetrics;
+  const DailyMetricsTable = ({ metrics, storeId }: { metrics: DailyMetric[], storeId?: string }) => {
+    const dataToRender = useMemo(() => {
+      let data = storeId
+        ? metrics.map(m => {
+            const storeData = m.byStore?.[storeId] || { confirmed: 0, unconfirmed: 0 };
+            const total = storeData.confirmed + storeData.unconfirmed;
+            return {
+              date: m.date,
+              confirmed: storeData.confirmed,
+              unconfirmed: storeData.unconfirmed,
+              totalOrders: total,
+              confirmationRate: total > 0 ? (storeData.confirmed / total) * 100 : 0,
+            };
+          }).filter(m => m.totalOrders > 0)
+        : metrics;
+      
+       if (sortConfig !== null) {
+            data.sort((a, b) => {
+                const key = sortConfig.key as keyof typeof a;
+                const aValue = key === 'date' ? new Date(a.date.split('-').reverse().join('-')).getTime() : a[key] as number;
+                const bValue = key === 'date' ? new Date(b.date.split('-').reverse().join('-')).getTime() : b[key] as number;
+
+                if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
+                if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
+                return 0;
+            });
+        }
+      return data;
+    }, [metrics, storeId, sortConfig]);
+
+    const visibleData = useMemo(() => {
+      return dataToRender.slice(0, visibleItemsCount);
+    }, [dataToRender, visibleItemsCount]);
 
     return (
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[120px]">
-                <Button variant="ghost" onClick={() => handleSort('date')}>
-                  Fecha {renderSortArrow('date')}
-                </Button>
-              </TableHead>
-              <TableHead className="text-center">
-                <Button variant="ghost" onClick={() => handleSort('totalOrders')}>
-                  Pedidos Totales {renderSortArrow('totalOrders')}
-                </Button>
-              </TableHead>
-              <TableHead className="text-center">
-                 <Button variant="ghost" onClick={() => handleSort('confirmed')}>
-                  Confirmados {renderSortArrow('confirmed')}
-                </Button>
-              </TableHead>
-              <TableHead className="text-center">
-                <Button variant="ghost" onClick={() => handleSort('unconfirmed')}>
-                  No Confirmados {renderSortArrow('unconfirmed')}
-                </Button>
-              </TableHead>
-              <TableHead className="w-[220px] text-right">
-                <Button variant="ghost" onClick={() => handleSort('confirmationRate')}>
-                  Tasa de Confirmación {renderSortArrow('confirmationRate')}
-                </Button>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {dataToRender.length > 0 ? (
-              dataToRender.map((metric) => (
-                <TableRow key={metric.date}>
-                  <TableCell className="font-medium whitespace-nowrap">
-                      {metric.date}
-                  </TableCell>
-                  <TableCell className="text-center">
-                      {metric.totalOrders}
-                  </TableCell>
-                  <TableCell className="text-center text-green-500 font-semibold">
-                      {metric.confirmed}
-                  </TableCell>
-                  <TableCell className="text-center text-red-500 font-semibold">
-                      {metric.unconfirmed}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-3 whitespace-nowrap">
-                      <span className="font-medium text-sm w-16">{metric.confirmationRate.toFixed(2)}%</span>
-                      <Progress value={metric.confirmationRate} className="h-2 w-[100px]" />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">No se encontraron datos de pedidos para esta selección.</TableCell>
-              </TableRow>
+      <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+                <Table>
+                <TableHeader>
+                    <TableRow>
+                    <TableHead className="w-[120px]">
+                        <Button variant="ghost" onClick={() => handleSort('date')}>
+                        Fecha {renderSortArrow('date')}
+                        </Button>
+                    </TableHead>
+                    <TableHead className="text-center">
+                        <Button variant="ghost" onClick={() => handleSort('totalOrders')}>
+                        Pedidos Totales {renderSortArrow('totalOrders')}
+                        </Button>
+                    </TableHead>
+                    <TableHead className="text-center">
+                        <Button variant="ghost" onClick={() => handleSort('confirmed')}>
+                        Confirmados {renderSortArrow('confirmed')}
+                        </Button>
+                    </TableHead>
+                    <TableHead className="text-center">
+                        <Button variant="ghost" onClick={() => handleSort('unconfirmed')}>
+                        No Confirmados {renderSortArrow('unconfirmed')}
+                        </Button>
+                    </TableHead>
+                    <TableHead className="w-[220px] text-right">
+                        <Button variant="ghost" onClick={() => handleSort('confirmationRate')}>
+                        Tasa de Confirmación {renderSortArrow('confirmationRate')}
+                        </Button>
+                    </TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {visibleData.length > 0 ? (
+                    visibleData.map((metric) => (
+                        <TableRow key={metric.date}>
+                        <TableCell className="font-medium whitespace-nowrap">
+                            {metric.date}
+                        </TableCell>
+                        <TableCell className="text-center">
+                            {metric.totalOrders}
+                        </TableCell>
+                        <TableCell className="text-center text-green-500 font-semibold">
+                            {metric.confirmed}
+                        </TableCell>
+                        <TableCell className="text-center text-red-500 font-semibold">
+                            {metric.unconfirmed}
+                        </TableCell>
+                        <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-3 whitespace-nowrap">
+                            <span className="font-medium text-sm w-16">{metric.confirmationRate.toFixed(2)}%</span>
+                            <Progress value={metric.confirmationRate} className="h-2 w-[100px]" />
+                            </div>
+                        </TableCell>
+                        </TableRow>
+                    ))
+                    ) : (
+                    <TableRow>
+                        <TableCell colSpan={5} className="h-24 text-center">No se encontraron datos de pedidos para esta selección.</TableCell>
+                    </TableRow>
+                    )}
+                </TableBody>
+                </Table>
+            </div>
+          </CardContent>
+           {dataToRender.length > visibleItemsCount && (
+                <CardFooter className="flex items-center justify-center pt-4">
+                    <Button onClick={() => setVisibleItemsCount(prev => prev + ITEMS_PER_PAGE)}>
+                        Cargar más
+                    </Button>
+                </CardFooter>
             )}
-          </TableBody>
-        </Table>
-      </div>
+      </Card>
     );
   };
+
 
   return (
     <div className="space-y-8">
@@ -402,7 +437,7 @@ export default function DailyDetailPage() {
                     <CardDescription>Usa las pestañas para filtrar los datos por una tienda específica o ver el total.</CardDescription>
                 </CardHeader>
                 <CardContent className="p-0 sm:p-2">
-                    <Tabs defaultValue="all" className="w-full">
+                    <Tabs defaultValue="all" className="w-full" onValueChange={() => setVisibleItemsCount(ITEMS_PER_PAGE)}>
                         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 sticky top-0 bg-card z-10 p-1 h-auto">
                             <TabsTrigger value="all">General</TabsTrigger>
                             {MAIN_STORES.map(store => (
@@ -411,15 +446,15 @@ export default function DailyDetailPage() {
                             <TabsTrigger value="others">Otras</TabsTrigger>
                         </TabsList>
                         <TabsContent value="all" className="mt-4">
-                            {renderDailyMetricsTable(sortedMetrics)}
+                            <DailyMetricsTable metrics={sortedMetrics} />
                         </TabsContent>
                         {MAIN_STORES.map(store => (
                             <TabsContent key={store} value={store} className="mt-4">
-                                {renderDailyMetricsTable(sortedMetrics, store)}
+                                <DailyMetricsTable metrics={sortedMetrics} storeId={store} />
                             </TabsContent>
                         ))}
-                        <TabsContent value="others" className="mt-4">
-                            {renderDailyMetricsTable(sortedMetrics.map(m => {
+                         <TabsContent value="others" className="mt-4">
+                            <DailyMetricsTable metrics={sortedMetrics.map(m => {
                                 const otherStoresData = Object.keys(m.byStore || {}).filter(s => !MAIN_STORES.includes(s.toLowerCase())).reduce((acc, key) => {
                                     acc.confirmed += m.byStore![key].confirmed;
                                     acc.unconfirmed += m.byStore![key].unconfirmed;
@@ -428,12 +463,13 @@ export default function DailyDetailPage() {
                                 const total = otherStoresData.confirmed + otherStoresData.unconfirmed;
                                 return {
                                     ...m,
+                                    date: m.date,
                                     confirmed: otherStoresData.confirmed,
                                     unconfirmed: otherStoresData.unconfirmed,
                                     totalOrders: total,
                                     confirmationRate: total > 0 ? (otherStoresData.confirmed / total) * 100 : 0
                                 };
-                            }).filter(m => m.totalOrders > 0))}
+                            }).filter(m => m.totalOrders > 0)} />
                         </TabsContent>
                     </Tabs>
                 </CardContent>
@@ -443,3 +479,5 @@ export default function DailyDetailPage() {
     </div>
   );
 }
+
+    

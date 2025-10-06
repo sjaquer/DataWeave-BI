@@ -18,11 +18,12 @@ import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { ProvinceMetric, GetMetricsOutput, GetMetricsInput, StoreMetric } from "@/ai/schemas/getMetricsSchema";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
 const CACHE_KEY = 'dashboardMetricsCache_provinces';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
+const ITEMS_PER_PAGE = 20;
 
 type SortConfig = {
   key: keyof ProvinceMetric;
@@ -37,6 +38,8 @@ export default function ProvincesDetailPage() {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'totalOrders', direction: 'descending' });
   const [selectedStore, setSelectedStore] = useState('all');
   const [availableStores, setAvailableStores] = useState<StoreMetric[]>([]);
+  const [visibleItemsCount, setVisibleItemsCount] = useState(ITEMS_PER_PAGE);
+
   const { toast } = useToast();
 
   useEffect(() => {
@@ -108,6 +111,7 @@ export default function ProvincesDetailPage() {
     }));
 
     setDisplayMetrics(finalMetrics);
+    setVisibleItemsCount(ITEMS_PER_PAGE);
 
     if (fullMetrics === null) {
       setFullMetrics(data);
@@ -187,6 +191,7 @@ export default function ProvincesDetailPage() {
       direction = 'descending';
     }
     setSortConfig({ key, direction });
+    setVisibleItemsCount(ITEMS_PER_PAGE);
   };
 
   const sortedMetrics = useMemo(() => {
@@ -211,6 +216,10 @@ export default function ProvincesDetailPage() {
     }
     return sortableItems;
   }, [displayMetrics, sortConfig]);
+
+  const visibleMetrics = useMemo(() => {
+    return sortedMetrics.slice(0, visibleItemsCount);
+  }, [sortedMetrics, visibleItemsCount]);
 
   const renderSortArrow = (key: keyof ProvinceMetric) => {
     if (!sortConfig || sortConfig.key !== key) return null;
@@ -313,8 +322,8 @@ export default function ProvincesDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedMetrics.length > 0 ? (
-                      sortedMetrics.filter(p => p.totalOrders > 0).map((p) => (
+                    {visibleMetrics.length > 0 ? (
+                      visibleMetrics.filter(p => p.totalOrders > 0).map((p) => (
                         <TableRow key={p.name}>
                           <TableCell className="font-medium whitespace-nowrap">{p.name}</TableCell>
                           <TableCell className="text-center whitespace-nowrap">{p.totalOrders}</TableCell>
@@ -340,7 +349,16 @@ export default function ProvincesDetailPage() {
             </div>
           )}
         </CardContent>
+         {sortedMetrics.length > visibleItemsCount && (
+          <CardFooter className="flex items-center justify-center pt-4">
+              <Button onClick={() => setVisibleItemsCount(prev => prev + ITEMS_PER_PAGE)}>
+                  Cargar más
+              </Button>
+          </CardFooter>
+        )}
       </Card>
     </div>
   );
 }
+
+    

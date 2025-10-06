@@ -7,7 +7,7 @@ import { subDays } from "date-fns";
 
 import { Loader, RefreshCw, Truck, Users, LineChart as LineChartIcon, Undo2, ArrowDown, ArrowUp, HelpCircle, Lightbulb } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LineChart, Line } from "recharts";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,6 +20,8 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 
 const CACHE_KEY = 'dashboardMetricsCache_inventory';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
+const ITEMS_PER_PAGE = 15;
+
 
 type ReturnsSortConfig = {
     key: keyof CustomerReturn;
@@ -40,6 +42,7 @@ export default function InventoryDetailPage() {
   const [displayMetrics, setDisplayMetrics] = useState<GetMetricsOutput | null>(null);
   const [date, setDate] = useState<DateRange | undefined>(undefined);
   const [selectedStore, setSelectedStore] = useState('all');
+  const [visibleItemsCount, setVisibleItemsCount] = useState(ITEMS_PER_PAGE);
   
   const [returnsSortConfig, setReturnsSortConfig] = useState<ReturnsSortConfig | null>({ key: 'date', direction: 'descending' });
 
@@ -181,6 +184,7 @@ export default function InventoryDetailPage() {
         };
 
         setDisplayMetrics(newDisplayMetrics);
+        setVisibleItemsCount(ITEMS_PER_PAGE);
 
     }, [fullMetrics]);
 
@@ -196,6 +200,7 @@ export default function InventoryDetailPage() {
       direction = 'descending';
     }
     setReturnsSortConfig({ key, direction });
+    setVisibleItemsCount(ITEMS_PER_PAGE);
   };
   
   const sortedReturns = useMemo(() => {
@@ -219,6 +224,10 @@ export default function InventoryDetailPage() {
     }
     return sortableItems;
   }, [displayMetrics?.customerReturns, returnsSortConfig]);
+  
+  const visibleReturns = useMemo(() => {
+    return sortedReturns.slice(0, visibleItemsCount);
+  }, [sortedReturns, visibleItemsCount]);
 
   const renderReturnsSortArrow = (key: ReturnsSortConfig['key']) => {
     if (returnsSortConfig?.key !== key) return null;
@@ -295,8 +304,8 @@ export default function InventoryDetailPage() {
                     <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Tendencia de Flujo de Inventario (Entradas vs. Salidas)</CardTitle>
                     <CardDescription>Unidades que entran y salen del inventario por día para {selectedStore === 'all' ? 'todas las tiendas' : `la tienda ${selectedStore}`}.</CardDescription>
                 </CardHeader>
-                <CardContent className="min-h-[400px] overflow-x-auto">
-                  <div className="min-w-[600px] h-full">
+                <CardContent className="overflow-x-auto">
+                  <div className="min-w-[600px] h-[400px]">
                     <ChartContainer config={{
                         Entradas: { label: "Entradas", color: "hsl(var(--chart-1))" },
                         Salidas: { label: "Salidas", color: "hsl(var(--chart-2))" },
@@ -343,8 +352,8 @@ export default function InventoryDetailPage() {
                     return (
                         <div key={urgency}>
                             <h3 className="font-semibold mb-2" style={{ color: URGENCY_COLORS[urgency] || 'inherit' }}>{urgency} ({items.length} productos)</h3>
-                            <div className="w-full overflow-x-auto" style={{ height: `${containerHeight}px` }}>
-                                <div className="min-w-[600px] h-full">
+                            <div className="w-full overflow-x-auto">
+                                <div className="min-w-[600px]" style={{ height: `${containerHeight}px` }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={items} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
                                             <CartesianGrid strokeDasharray="3 3" />
@@ -385,7 +394,7 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5 text-green-500" />Top 10 Productos por Entradas</CardTitle>
                         <CardDescription>Productos con mayor cantidad de unidades ingresadas.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px] overflow-x-auto">
+                    <CardContent className="overflow-x-auto">
                         <div style={{ height: `${Math.max(400, (displayMetrics?.mostIncomingProducts?.slice(0, 10).length || 0) * 40)}px`, minWidth: '600px' }}>
                           <ChartContainer config={{ movements: { label: "Entradas", color: "hsl(var(--chart-1))" } }}>
                               <ResponsiveContainer width="100%" height="100%">
@@ -407,7 +416,7 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5 text-red-500" />Top 10 Productos por Rotación (Salidas)</CardTitle>
                         <CardDescription>Productos con mayor cantidad de movimientos de salida.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px] overflow-x-auto">
+                    <CardContent className="overflow-x-auto">
                         <div style={{ height: `${Math.max(400, (displayMetrics?.mostMovedProducts?.slice(0, 10).length || 0) * 40)}px`, minWidth: '600px' }}>
                           <ChartContainer config={{ movements: { label: "Salidas", color: "hsl(var(--chart-2))" } }}>
                               <ResponsiveContainer width="100%" height="100%">
@@ -431,7 +440,7 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Undo2 className="mr-2 h-5 w-5" />Top 10 Productos Más Devueltos</CardTitle>
                         <CardDescription>Productos con la mayor cantidad de unidades devueltas por clientes.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px] overflow-x-auto">
+                    <CardContent className="overflow-x-auto">
                         <div style={{ height: `${Math.max(400, (displayMetrics?.mostReturnedProducts?.slice(0, 10).length || 0) * 40)}px`, minWidth: '600px' }}>
                           <ChartContainer config={{ returns: { label: "Devoluciones", color: "hsl(var(--chart-5))" } }}>
                               <ResponsiveContainer width="100%" height="100%">
@@ -453,7 +462,7 @@ export default function InventoryDetailPage() {
                         <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Actividad del Equipo de Inventario</CardTitle>
                         <CardDescription>Movimientos de entrada y salida procesados por cada miembro del equipo (Global).</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-[400px] overflow-x-auto">
+                    <CardContent className="overflow-x-auto">
                         <div style={{ height: `${Math.max(400, (displayMetrics?.inventoryPersonnelMetrics?.length || 0) * 50)}px`, minWidth: '600px' }}>
                            <ChartContainer config={{
                                 entries: { label: "Entradas", color: "hsl(var(--chart-1))" },
@@ -518,8 +527,8 @@ export default function InventoryDetailPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {sortedReturns.length > 0 ? (
-                            sortedReturns.map((item, index) => (
+                        {visibleReturns.length > 0 ? (
+                            visibleReturns.map((item, index) => (
                             <TableRow key={`${item.date}-${item.productName}-${index}`}>
                                 <TableCell className="font-medium whitespace-nowrap">{item.date}</TableCell>
                                 <TableCell className="whitespace-nowrap">{item.productName}</TableCell>
@@ -538,9 +547,18 @@ export default function InventoryDetailPage() {
                     </Table>
                 </div>
               </CardContent>
+                {sortedReturns.length > visibleItemsCount && (
+                    <CardFooter className="flex items-center justify-center pt-4">
+                        <Button onClick={() => setVisibleItemsCount(prev => prev + ITEMS_PER_PAGE)}>
+                            Cargar más
+                        </Button>
+                    </CardFooter>
+                )}
             </Card>
         </div>
       )}
     </div>
   );
 }
+
+    

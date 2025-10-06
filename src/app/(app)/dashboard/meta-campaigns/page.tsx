@@ -7,7 +7,7 @@ import { format, subDays } from "date-fns";
 import { es } from "date-fns/locale";
 
 import { Loader, RefreshCw, Calendar as CalendarIcon, DollarSign, MousePointerClick, TrendingUp, Percent, ArrowUp, ArrowDown } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -16,6 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+
+const ITEMS_PER_PAGE = 15;
 
 // --- Tipos de Datos (simulados por ahora) ---
 interface MetaCampaign {
@@ -41,6 +43,7 @@ export default function MetaCampaignsPage() {
   const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'spend', direction: 'descending' });
   const [date, setDate] = useState<DateRange | undefined>(undefined);
+  const [visibleItemsCount, setVisibleItemsCount] = useState(ITEMS_PER_PAGE);
 
   const { toast } = useToast();
 
@@ -80,6 +83,7 @@ export default function MetaCampaignsPage() {
       }
       
       setCampaigns(data.campaigns || []);
+      setVisibleItemsCount(ITEMS_PER_PAGE);
 
       toast({
           title: "Datos de Campañas Cargados",
@@ -112,6 +116,7 @@ export default function MetaCampaignsPage() {
       direction = 'descending';
     }
     setSortConfig({ key, direction });
+    setVisibleItemsCount(ITEMS_PER_PAGE);
   };
 
   const renderSortArrow = (key: SortConfig['key']) => {
@@ -141,6 +146,10 @@ export default function MetaCampaignsPage() {
     }
     return sortableItems;
   }, [campaigns, sortConfig]);
+
+  const visibleCampaigns = useMemo(() => {
+    return sortedCampaigns.slice(0, visibleItemsCount);
+  }, [sortedCampaigns, visibleItemsCount]);
 
   const globalMetrics = useMemo(() => {
     const totalSpend = campaigns.reduce((acc, c) => acc + c.spend, 0);
@@ -270,8 +279,8 @@ export default function MetaCampaignsPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                        {sortedCampaigns.length > 0 ? (
-                            sortedCampaigns.map((c) => (
+                        {visibleCampaigns.length > 0 ? (
+                            visibleCampaigns.map((c) => (
                                 <TableRow key={c.id}>
                                     <TableCell className="font-medium whitespace-nowrap">
                                         <div className="flex flex-col">
@@ -301,7 +310,16 @@ export default function MetaCampaignsPage() {
                 </div>
               )}
             </CardContent>
+            {sortedCampaigns.length > visibleItemsCount && (
+                <CardFooter className="flex items-center justify-center pt-4">
+                    <Button onClick={() => setVisibleItemsCount(prev => prev + ITEMS_PER_PAGE)}>
+                        Cargar más
+                    </Button>
+                </CardFooter>
+            )}
         </Card>
     </div>
   );
 }
+
+    

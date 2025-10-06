@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp, Timer, PlayCircle, StopCircle, PhoneForwarded, PhoneOutgoing, BarChartHorizontal } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -20,6 +20,7 @@ import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
+const ITEMS_PER_PAGE = 15;
 
 // --- Tipos de Datos ---
 interface ZadarmaCall {
@@ -66,6 +67,7 @@ export default function AdvisorPerformancePage() {
   const [performanceData, setPerformanceData] = useState<AdvisorPerformance[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'totalCalls', direction: 'descending' });
   const [date, setDate] = useState<DateRange | undefined>(undefined);
+  const [visibleItemsCount, setVisibleItemsCount] = useState(ITEMS_PER_PAGE);
 
   const { toast } = useToast();
   
@@ -212,6 +214,7 @@ export default function AdvisorPerformancePage() {
       });
 
       setPerformanceData(finalPerformanceData);
+      setVisibleItemsCount(ITEMS_PER_PAGE);
 
       if (forceRefresh) {
         toast({
@@ -264,12 +267,17 @@ export default function AdvisorPerformancePage() {
     return sortableItems;
   }, [performanceData, sortConfig]);
 
+    const visiblePerformanceData = useMemo(() => {
+        return sortedPerformanceData.slice(0, visibleItemsCount);
+    }, [sortedPerformanceData, visibleItemsCount]);
+
   const handleSort = (key: SortConfig['key']) => {
     let direction: 'ascending' | 'descending' = 'ascending';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
       direction = 'descending';
     }
     setSortConfig({ key, direction });
+    setVisibleItemsCount(ITEMS_PER_PAGE);
   };
 
   const renderSortArrow = (key: SortConfig['key']) => {
@@ -472,8 +480,8 @@ export default function AdvisorPerformancePage() {
                           </TableRow>
                       </TableHeader>
                       <TableBody>
-                          {sortedPerformanceData.length > 0 ? (
-                          sortedPerformanceData.map((agent) => (
+                          {visiblePerformanceData.length > 0 ? (
+                          visiblePerformanceData.map((agent) => (
                               <TableRow key={agent.id}>
                                   <TableCell className="font-bold whitespace-nowrap">{agent.name} ({agent.id})</TableCell>
                                   <TableCell className="text-center">
@@ -527,9 +535,18 @@ export default function AdvisorPerformancePage() {
                     </Table>
                   </div>
                 </CardContent>
+                {sortedPerformanceData.length > visibleItemsCount && (
+                    <CardFooter className="flex items-center justify-center pt-4">
+                        <Button onClick={() => setVisibleItemsCount(prev => prev + ITEMS_PER_PAGE)}>
+                            Cargar más
+                        </Button>
+                    </CardFooter>
+                )}
             </Card>
         </div>
       )}
     </div>
   );
 }
+
+    

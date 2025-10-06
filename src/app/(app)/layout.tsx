@@ -16,6 +16,7 @@ import {
   SidebarTrigger,
   SidebarProvider,
   SidebarInset,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { Logo } from '@/components/icons';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -31,12 +32,20 @@ const menuItems = [
   { path: '/dashboard/returns', icon: Layers, label: 'Análisis Mensual' },
 ];
 
-
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // Usamos el hook useSidebar para controlar el estado del menú en móviles
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  const handleLinkClick = () => {
+    // Si estamos en un dispositivo móvil, cerramos el menú al hacer clic
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   return (
-    <SidebarProvider>
+    <>
       <Sidebar>
         <SidebarContent>
           <SidebarHeader>
@@ -48,7 +57,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <SidebarMenu>
             {menuItems.map((item) => (
                 <SidebarMenuItem key={item.path}>
-                    <Link href={item.path}>
+                    <Link href={item.path} onClick={handleLinkClick}>
                         <SidebarMenuButton
                             isActive={pathname === item.path}
                             icon={item.icon}
@@ -83,6 +92,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </header>
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </SidebarInset>
+    </>
+  );
+}
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <SidebarProvider>
+      <AppLayoutContent>{children}</AppLayoutContent>
     </SidebarProvider>
   );
 }

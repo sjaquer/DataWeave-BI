@@ -330,8 +330,7 @@ export default function DailyDetailPage() {
                         <CardDescription>Evolución del total de pedidos (confirmados y no confirmados) en el período.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="overflow-x-auto">
-                        <div className="min-w-[600px] h-[250px] relative">
+                      <div className="h-[250px] relative">
                          <ChartContainer config={{ totalOrders: { label: "Pedidos Totales", color: "hsl(var(--primary))" } }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
@@ -344,7 +343,6 @@ export default function DailyDetailPage() {
                                 </LineChart>
                             </ResponsiveContainer>
                         </ChartContainer>
-                        </div>
                       </div>
                     </CardContent>
                 </Card>
@@ -354,8 +352,7 @@ export default function DailyDetailPage() {
                         <CardDescription>Desglose de pedidos confirmados vs. no confirmados por día.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="overflow-x-auto">
-                        <div className="min-w-[600px] h-[250px] relative">
+                      <div className="h-[250px] relative">
                         <ChartContainer config={{ 
                             confirmed: { label: "Confirmados", color: "hsl(var(--chart-1))" },
                             unconfirmed: { label: "No Confirmados", color: "hsl(var(--chart-3))" }
@@ -372,7 +369,6 @@ export default function DailyDetailPage() {
                                 </LineChart>
                             </ResponsiveContainer>
                         </ChartContainer>
-                        </div>
                       </div>
                     </CardContent>
                 </Card>
@@ -382,8 +378,7 @@ export default function DailyDetailPage() {
                         <CardDescription>Evolución del porcentaje de pedidos confirmados sobre el total.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="overflow-x-auto">
-                        <div className="min-w-[600px] h-[250px] relative">
+                      <div className="h-[250px] relative">
                         <ChartContainer config={{ confirmationRate: { label: "Tasa de Confirmación", color: "hsl(var(--chart-2))" } }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
@@ -396,7 +391,6 @@ export default function DailyDetailPage() {
                                 </LineChart>
                             </ResponsiveContainer>
                         </ChartContainer>
-                        </div>
                       </div>
                     </CardContent>
                 </Card>

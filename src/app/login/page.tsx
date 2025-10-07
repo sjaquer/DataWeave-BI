@@ -84,12 +84,6 @@ export default function LoginPage() {
               {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
             </Button>
           </form>
-
-          <div className="mt-4 text-center text-sm text-muted-foreground">
-            <p>Credenciales de demostración:</p>
-            <p className="font-mono text-xs mt-1">gerente@dataweave.com / gerente123</p>
-            <p className="font-mono text-xs">empleado@dataweave.com / empleado123</p>
-          </div>
         </CardContent>
       </Card>
     </div>

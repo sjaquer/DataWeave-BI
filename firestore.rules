@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -8,7 +7,7 @@ service cloud.firestore {
     match /users/{userId} {
       // Los usuarios solo pueden leer su propia información
       allow read: if request.auth != null && request.auth.uid == userId;
-      // Solo los administradores pueden escribir (crear usuarios desde el servidor)
+      // Los usuarios pueden actualizar su propia información
       allow write: if request.auth != null && request.auth.uid == userId;
     }
     
@@ -16,40 +15,21 @@ service cloud.firestore {
     match /shopify_orders/{orderId} {
       // Usuarios autenticados pueden leer todos los pedidos
       allow read: if request.auth != null;
-      // Solo usuarios autenticados pueden escribir (las operaciones del servidor usan Admin SDK)
+      // Solo usuarios autenticados pueden escribir
+      // (las operaciones del servidor usan Admin SDK y bypassean estas reglas)
       allow write: if request.auth != null;
     }
     
     // Reglas para movimientos de inventario
     match /inventory_movements/{movementId} {
-      // Usuarios autenticados pueden leer
+      // Usuarios autenticados pueden leer todos los movimientos
       allow read: if request.auth != null;
       // Solo usuarios autenticados pueden escribir
       allow write: if request.auth != null;
     }
 
-    // Regla de respaldo para cualquier otro documento.
-    // Por defecto, denegar todo para mayor seguridad.
-    match /{document=**} {
-      allow read, write: if false;
-    }
-  }
-}
-;
-
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Permite que los clientes (el dashboard en el navegador) lean
-    // y los servidores (webhooks, cargas CSV) escriban en la colección de pedidos.
-    match /shopify_orders/{orderId} {
-      // Por ahora, permitimos la lectura y escritura para cualquier usuario autenticado.
-      // Puedes restringir esto más en el futuro si es necesario.
-      // Las escrituras desde el servidor (Admin SDK) bypassan estas reglas de todas formas.
-      allow read, write: if request.auth != null; // Cambiado para seguridad básica
-    }
-
-    // Regla de respaldo para cualquier otro documento.
-    // Por defecto, denegar todo para mayor seguridad.
+    // Regla de respaldo para cualquier otro documento
+    // Por defecto, denegar todo para mayor seguridad
     match /{document=**} {
       allow read, write: if false;
     }

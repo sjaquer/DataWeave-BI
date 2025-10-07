@@ -3,29 +3,68 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Función helper para obtener el rol del usuario
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    // Función para verificar si el usuario es gerente
+    function isGerente() {
+      return request.auth != null && getUserRole() == 'gerente';
+    }
+    
+    // Función para verificar si el usuario es encargado (logística)
+    function isEncargado() {
+      return request.auth != null && getUserRole() == 'encargado';
+    }
+    
+    // Función para verificar si el usuario es callcenter
+    function isCallCenter() {
+      return request.auth != null && getUserRole() == 'callcenter';
+    }
+    
+    // Función para verificar si el usuario es marketing
+    function isMarketing() {
+      return request.auth != null && getUserRole() == 'marketing';
+    }
+    
     // Reglas para la colección de usuarios
     match /users/{userId} {
       // Los usuarios solo pueden leer su propia información
       allow read: if request.auth != null && request.auth.uid == userId;
-      // Los usuarios pueden actualizar su propia información
-      allow write: if request.auth != null && request.auth.uid == userId;
+      // Los usuarios pueden actualizar su propia información (excepto el rol)
+      allow update: if request.auth != null && 
+                       request.auth.uid == userId &&
+                       request.resource.data.role == resource.data.role;
+      // Solo gerentes pueden crear nuevos usuarios
+      allow create: if isGerente();
+      // Los usuarios no pueden eliminarse a sí mismos
+      allow delete: if false;
     }
     
     // Reglas para pedidos de Shopify
     match /shopify_orders/{orderId} {
-      // Usuarios autenticados pueden leer todos los pedidos
-      allow read: if request.auth != null;
-      // Solo usuarios autenticados pueden escribir
-      // (las operaciones del servidor usan Admin SDK y bypassean estas reglas)
-      allow write: if request.auth != null;
+      // Lectura según rol:
+      // - Gerente: todos los pedidos
+      // - Encargado: todos los pedidos (logística)
+      // - CallCenter: todos los pedidos (atención al cliente)
+      // - Marketing: solo pedidos confirmados (análisis de productos)
+      allow read: if request.auth != null && 
+                     (isGerente() || isEncargado() || isCallCenter() || 
+                      (isMarketing() && resource.data.isConfirmed == true));
+      
+      // Escritura solo para gerente y encargado (logística)
+      allow write: if request.auth != null && (isGerente() || isEncargado());
     }
     
     // Reglas para movimientos de inventario
     match /inventory_movements/{movementId} {
-      // Usuarios autenticados pueden leer todos los movimientos
-      allow read: if request.auth != null;
-      // Solo usuarios autenticados pueden escribir
-      allow write: if request.auth != null;
+      // Lectura para roles con acceso a inventario
+      allow read: if request.auth != null && 
+                     (isGerente() || isEncargado() || isMarketing());
+      
+      // Escritura solo para gerente y encargado (gestión de inventario)
+      allow write: if request.auth != null && (isGerente() || isEncargado());
     }
 
     // Regla de respaldo para cualquier otro documento

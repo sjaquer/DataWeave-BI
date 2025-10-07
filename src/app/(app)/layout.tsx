@@ -33,17 +33,62 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-// Definir qué elementos del menú requieren rol de gerente
+// Definir qué elementos del menú son accesibles por cada rol
 const menuItems = [
-  { path: '/dashboard', icon: Home, label: 'Dashboard', requiresManager: false },
-  { path: '/dashboard/shipments', icon: TruckIcon, label: 'Envíos', requiresManager: false },
-  { path: '/dashboard/performance', icon: Users, label: 'Rendimiento', requiresManager: true },
-  { path: '/dashboard/meta-campaigns', icon: Briefcase, label: 'Campañas Meta', requiresManager: true },
-  { path: '/dashboard/provinces', icon: MapPin, label: 'Provincias', requiresManager: false },
-  { path: '/dashboard/daily', icon: Calendar, label: 'Análisis Diario', requiresManager: false },
-  { path: '/dashboard/inventory', icon: FolderKanban, label: 'Análisis Inventario', requiresManager: true },
-  { path: '/dashboard/inventory-status', icon: Inbox, label: 'Estado Inventario', requiresManager: false },
-  { path: '/dashboard/returns', icon: Layers, label: 'Análisis Mensual', requiresManager: true },
+  { 
+    path: '/dashboard', 
+    icon: Home, 
+    label: 'Dashboard', 
+    roles: ['gerente', 'encargado', 'callcenter', 'marketing'] // Todos
+  },
+  { 
+    path: '/dashboard/shipments', 
+    icon: TruckIcon, 
+    label: 'Envíos', 
+    roles: ['gerente', 'encargado'] // Logística
+  },
+  { 
+    path: '/dashboard/performance', 
+    icon: Users, 
+    label: 'Rendimiento', 
+    roles: ['gerente'] // Solo gerente
+  },
+  { 
+    path: '/dashboard/meta-campaigns', 
+    icon: Briefcase, 
+    label: 'Campañas Meta', 
+    roles: ['gerente', 'marketing'] // Marketing
+  },
+  { 
+    path: '/dashboard/provinces', 
+    icon: MapPin, 
+    label: 'Provincias', 
+    roles: ['gerente', 'encargado', 'callcenter'] // Logística y clientes
+  },
+  { 
+    path: '/dashboard/daily', 
+    icon: Calendar, 
+    label: 'Análisis Diario', 
+    roles: ['gerente', 'marketing'] // Gerente y marketing
+  },
+  { 
+    path: '/dashboard/inventory', 
+    icon: FolderKanban, 
+    label: 'Análisis Inventario', 
+    roles: ['gerente', 'encargado'] // Logística
+  },
+  { 
+    path: '/dashboard/inventory-status', 
+    icon: Inbox, 
+    label: 'Estado Inventario', 
+    roles: ['gerente', 'encargado', 'marketing'] // Logística y productos
+  },
+  { 
+    path: '/dashboard/returns', 
+    icon: Layers, 
+    label: 'Análisis Mensual', 
+    roles: ['gerente'] // Solo gerente
+  },
 ];
 
 function AppLayoutContent({ children }: { children: React.ReactNode }) {
@@ -93,10 +138,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
 
   // Filtrar elementos del menú basados en el rol del usuario
   const filteredMenuItems = menuItems.filter(item => {
-    if (item.requiresManager && userProfile.role !== 'gerente') {
-      return false;
-    }
-    return true;
+    return item.roles.includes(userProfile.role);
   });
 
   return (

@@ -11,7 +11,7 @@ import {
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
-export type UserRole = 'gerente' | 'empleado';
+export type UserRole = 'gerente' | 'encargado' | 'callcenter' | 'marketing';
 
 export interface UserProfile {
   uid: string;
@@ -52,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUserProfile({
               uid: user.uid,
               email: user.email || '',
-              role: data.role || 'empleado',
+              role: data.role || 'callcenter',
               displayName: data.displayName || user.email,
               createdAt: data.createdAt?.toDate(),
             });
@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const defaultProfile: UserProfile = {
               uid: user.uid,
               email: user.email || '',
-              role: 'empleado',
+              role: 'callcenter',
               displayName: user.email,
             };
             

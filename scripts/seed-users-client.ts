@@ -8,6 +8,7 @@
  * npx tsx scripts/seed-users-client.ts
  */
 
+import 'dotenv/config';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -20,6 +21,17 @@ const firebaseConfig = {
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
+
+// Validar que las variables estén configuradas
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  console.error('❌ Error: Variables de entorno de Firebase no configuradas.');
+  console.error('   Asegúrate de tener un archivo .env con:');
+  console.error('   - NEXT_PUBLIC_FIREBASE_API_KEY');
+  console.error('   - NEXT_PUBLIC_FIREBASE_PROJECT_ID');
+  console.error('   - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN');
+  console.error('   etc.');
+  process.exit(1);
+}
 
 // Inicializar Firebase
 const app = initializeApp(firebaseConfig);

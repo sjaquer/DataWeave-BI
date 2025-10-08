@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -11,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { format, subDays, startOfDay, endOfDay, isWithinInterval } from "date-fns";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 interface ShipmentData {
   orderName: string;
@@ -154,9 +156,9 @@ export default function ShipmentsPage() {
         courier,
         envios: data.count,
         ingresos: data.totalRevenue,
-        promedio: data.totalRevenue / data.count,
+        promedio: data.count > 0 ? data.totalRevenue / data.count : 0,
         provincias: data.provinces.size,
-        porcentaje: (data.count / filteredShipments.length) * 100,
+        porcentaje: filteredShipments.length > 0 ? (data.count / filteredShipments.length) * 100 : 0,
       }))
       .sort((a, b) => b.envios - a.envios);
   };
@@ -188,10 +190,11 @@ export default function ShipmentsPage() {
           ))}
         </div>
         <div className="grid gap-6 md:grid-cols-2">
-          {[1, 2].map((i) => (
-            <Skeleton key={i} className="h-96" />
-          ))}
+          <Skeleton className="h-96 md:col-span-2" />
+          <Skeleton className="h-96" />
+          <Skeleton className="h-96" />
         </div>
+        <Skeleton className="h-64" />
       </div>
     );
   }
@@ -210,12 +213,16 @@ export default function ShipmentsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Análisis de Envíos</h1>
-        <p className="text-muted-foreground">
-          Monitoreo y análisis de pedidos confirmados - Últimos 30 días
-        </p>
+      <div className="flex items-center gap-4">
+        <SidebarTrigger className="md:hidden" />
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Análisis de Envíos</h1>
+          <p className="text-muted-foreground">
+            Monitoreo y análisis de pedidos confirmados - Últimos 30 días
+          </p>
+        </div>
       </div>
+
 
       {filteredShipments.length === 0 && (
         <Alert>
@@ -235,7 +242,7 @@ export default function ShipmentsPage() {
           <CardContent>
             <div className="text-2xl font-bold">{totalShipments.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              {totalProducts} productos enviados
+              {totalProducts.toLocaleString()} productos enviados
             </p>
           </CardContent>
         </Card>
@@ -247,7 +254,7 @@ export default function ShipmentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${totalRevenue.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              S/ {totalRevenue.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <p className="text-xs text-muted-foreground">De envíos confirmados</p>
           </CardContent>
@@ -260,7 +267,7 @@ export default function ShipmentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${avgOrderValue.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              S/ {avgOrderValue.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <p className="text-xs text-muted-foreground">Por pedido</p>
           </CardContent>
@@ -300,17 +307,17 @@ export default function ShipmentsPage() {
                     textAnchor="end"
                     height={70}
                   />
-                  <YAxis yAxisId="left" />
-                  <YAxis yAxisId="right" orientation="right" />
+                  <YAxis yAxisId="left" stroke="#8884d8" />
+                  <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
                   <Tooltip 
                     formatter={(value: number, name: string) => [
-                      name === 'envios' ? value : `$${value.toFixed(2)}`,
+                      name === 'envios' ? value : `S/ ${value.toFixed(2)}`,
                       name === 'envios' ? 'Envíos' : 'Ingresos'
                     ]}
                   />
                   <Legend />
                   <Bar yAxisId="left" dataKey="envios" fill="#8884d8" name="Envíos" />
-                  <Bar yAxisId="right" dataKey="ingresos" fill="#82ca9d" name="Ingresos ($)" />
+                  <Bar yAxisId="right" dataKey="ingresos" fill="#82ca9d" name="Ingresos (S/)" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -347,10 +354,11 @@ export default function ShipmentsPage() {
                   </Pie>
                   <Tooltip 
                     formatter={(value: number, name: string, props: any) => [
-                      `${value} envíos - $${props.payload.revenue.toFixed(2)}`,
+                      `${value} envíos - S/ ${props.payload.revenue.toFixed(2)}`,
                       'Total'
                     ]}
                   />
+                  <Legend/>
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -379,7 +387,7 @@ export default function ShipmentsPage() {
                     width={100}
                     tick={{ fontSize: 12 }}
                   />
-                  <Tooltip />
+                  <Tooltip formatter={(value: number) => [value, 'Envíos']} />
                   <Bar dataKey="value" fill="#0088FE" name="Envíos" />
                 </BarChart>
               </ResponsiveContainer>
@@ -432,10 +440,10 @@ export default function ShipmentsPage() {
                       </TableCell>
                       <TableCell className="text-right">{courier.provincias}</TableCell>
                       <TableCell className="text-right font-mono">
-                        ${courier.ingresos.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                        S/ {courier.ingresos.toLocaleString('es-PE', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        ${courier.promedio.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                        S/ {courier.promedio.toLocaleString('es-PE', { minimumFractionDigits: 2 })}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -452,3 +460,5 @@ export default function ShipmentsPage() {
     </div>
   );
 }
+
+    

@@ -96,7 +96,7 @@ export const MostMovedProductsSchema = z.object({
   movements: z.number(),
   store: z.string().optional(),
 });
-export type MostMovedProducts = z.infer<typeof MostMovedProductsSchema>;
+export type MostMovedProducts = z-infer<typeof MostMovedProductsSchema>;
 
 export const InventoryPersonnelMetricSchema = z.object({
     name: z.string(),

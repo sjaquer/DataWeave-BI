@@ -37,6 +37,8 @@ export interface DeliveredOrderInfo {
   'MONTO PENDIENTE': number;
   'FECHA ENVIADO'?: string;
   'FECHA ENTREGADO'?: string;
+  'FORMA DE PAGO'?: string; // YAPE, PLIN, AGENTE BOP, etc.
+  'USUARIO'?: string; // Quien registró la entrega
 }
 
 export interface InventoryMovement {
@@ -92,11 +94,8 @@ function normalizeOrderNumber(name: string): string {
     return match ? match[0] : name.replace(/[^0-9a-zA-Z-]/g, '');
 }
 
-function getShopifyOrderDocId(orderName: string, storeId: string): string {
-    const normalizedNumber = normalizeOrderNumber(orderName);
-    
-    // Normalizar storeId SIN crear guiones dobles
-    let normalizedStoreId = (storeId || 'sin-tienda')
+function normalizeStoreId(storeId: string): string {
+    return (storeId || 'sin-tienda')
         .toLowerCase()
         .trim()
         .replace(/perú/g, '')
@@ -104,6 +103,11 @@ function getShopifyOrderDocId(orderName: string, storeId: string): string {
         .replace(/\s+/g, '-')  // Reemplazar espacios con guion simple
         .replace(/-+/g, '-')   // Reemplazar múltiples guiones con uno solo
         .replace(/^-|-$/g, ''); // Eliminar guiones al inicio y final
+}
+
+function getShopifyOrderDocId(orderName: string, storeId: string): string {
+    const normalizedNumber = normalizeOrderNumber(orderName);
+    const normalizedStoreId = normalizeStoreId(storeId);
     
     return `${normalizedStoreId}-${normalizedNumber}`;
 }
@@ -123,8 +127,11 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
 
   const orderDocId = getShopifyOrderDocId(order.name, storeId);
   
+  // IMPORTANTE: Normalizar el storeId antes de guardarlo
+  const normalizedStoreId = normalizeStoreId(storeId);
+  
   const orderData = {
-      storeId: storeId,
+      storeId: normalizedStoreId, // ← Usar el normalizado
       orderId: order.id,
       orderName: order.name,
       createdAt: Timestamp.fromDate(orderDate),
@@ -147,7 +154,7 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
 
   try {
     await db.collection('shopify_orders').doc(orderDocId).set(orderData, { merge: true });
-    console.log(`[Firestore] Pedido ${order.name} de ${storeId} guardado/actualizado en 'shopify_orders'.`);
+    console.log(`[Firestore] Pedido ${order.name} de ${storeId} guardado/actualizado en 'shopify_orders' con ID: ${orderDocId}`);
   } catch (error) {
     console.error(`Error al procesar el nuevo pedido de Shopify en Firestore:`, error);
     throw error;
@@ -250,7 +257,7 @@ export async function updateConfirmedOrders(
         }
     }
 
-    // Merge: NO sobrescribe campos existentes, solo agrega/actualiza los especificados
+    // MERGE: Actualiza SOLO los campos especificados, preserva el resto
     batch.set(orderDocRef, confirmationData, { merge: true });
     processedCount++;
   }
@@ -259,7 +266,7 @@ export async function updateConfirmedOrders(
     await batch.commit();
   }
 
-  const message = `${processedCount} pedidos fueron actualizados como confirmados (sin sobrescribir datos de Shopify).`;
+  const message = `${processedCount} pedidos fueron actualizados con datos del sheet REPORTE_ENVIADOS (merge mode).`;
   console.log(`[Firestore] ${message}`);
   
   return { status: 'success', message };
@@ -290,17 +297,9 @@ export async function updateDeliveredOrders(
     const orderDocId = getShopifyOrderDocId(rawOrderName, storeId);
     const orderDocRef = db.collection('shopify_orders').doc(orderDocId);
     
-    // Calcular método de pago
-    const total = Number(item.TOTAL || 0);
+    // Obtener forma de pago directamente del sheet
+    const paymentMethod = item['FORMA DE PAGO'] || 'No especificado';
     const pending = Number(item['MONTO PENDIENTE'] || 0);
-    let paymentMethod = 'Desconocido';
-    if (pending === 0 && total > 0) {
-        paymentMethod = 'Adelantado'; // (Transferencia, Tarjeta, etc.)
-    } else if (pending > 0 && pending >= total) {
-        paymentMethod = 'Contra Entrega';
-    } else if (pending > 0 && pending < total) {
-        paymentMethod = 'Pago Parcial';
-    }
 
     // Calcular tiempo de entrega
     let deliveryTimeInHours = null;
@@ -324,8 +323,10 @@ export async function updateDeliveredOrders(
         paymentMethod: paymentMethod,
         pendingAmount: pending,
         deliveryTimeInHours: deliveryTimeInHours,
+        deliveredBy: item.USUARIO || 'No especificado', // Quien registró la entrega
     };
 
+    // MERGE: Actualiza SOLO los campos especificados, preserva el resto (ej: datos de Shopify)
     batch.set(orderDocRef, deliveryData, { merge: true });
     processedCount++;
   }
@@ -334,7 +335,7 @@ export async function updateDeliveredOrders(
     await batch.commit();
   }
 
-  const message = `${processedCount} registros de entrega fueron procesados y actualizados.`;
+  const message = `${processedCount} registros de entrega fueron actualizados con datos del sheet ENTREGADO (merge mode).`;
   console.log(`[Firestore] ${message}`);
   
   return { status: 'success', message };

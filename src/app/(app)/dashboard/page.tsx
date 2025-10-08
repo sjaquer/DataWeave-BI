@@ -224,14 +224,16 @@ export default function Dashboard() {
         confirmationRate: total > 0 ? (storeData.confirmed / total) * 100 : 0,
         byStore: { [lowerCaseStoreName]: storeData }
       };
-    }).filter((d): d is DailyMetric => d !== null && d.totalOrders > 0);
+    }).filter((d): d is DailyMetric => d !== null && (d as DailyMetric).totalOrders > 0);
     
     // Recalculate Misc Metrics for the store
     let globalConfirmed = 0;
     let globalUnconfirmed = 0;
     filteredDailyMetrics.forEach(dm => {
-      globalConfirmed += dm.confirmed;
-      globalUnconfirmed += dm.unconfirmed;
+      if (dm) {
+        globalConfirmed += dm.confirmed;
+        globalUnconfirmed += dm.unconfirmed;
+      }
     });
 
     const filteredStoreMetric = fullMetrics.storeMetrics.find(sm => sm.name.toLowerCase() === lowerCaseStoreName);
@@ -369,7 +371,7 @@ export default function Dashboard() {
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
              <div className="relative">
                 <PackageSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -379,7 +381,7 @@ export default function Dashboard() {
                         setSearchQuery(e.target.value);
                         setVisibleItemsCount(ITEMS_PER_PAGE);
                     }}
-                    className="pl-10 w-full"
+                    className="pl-10 w-full text-xs sm:text-sm"
                 />
             </div>
             <Card>
@@ -388,24 +390,24 @@ export default function Dashboard() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>
-                                        <Button variant="ghost" onClick={() => handleSort('name')}>
+                                    <TableHead className="min-w-[120px]">
+                                        <Button variant="ghost" size="sm" onClick={() => handleSort('name')} className="h-8 text-xs sm:text-sm">
                                             Producto {renderSortArrow('name')}
                                         </Button>
                                     </TableHead>
                                     <TableHead className="text-center">
-                                        <Button variant="ghost" onClick={() => handleSort('requested')}>
+                                        <Button variant="ghost" size="sm" onClick={() => handleSort('requested')} className="h-8 text-xs sm:text-sm">
                                             Pedidos {renderSortArrow('requested')}
                                         </Button>
                                     </TableHead>
-                                    <TableHead className="text-center">
-                                        <Button variant="ghost" onClick={() => handleSort('confirmed')}>
+                                    <TableHead className="text-center hidden sm:table-cell">
+                                        <Button variant="ghost" size="sm" onClick={() => handleSort('confirmed')} className="h-8 text-xs sm:text-sm">
                                             Confirmados {renderSortArrow('confirmed')}
                                         </Button>
                                     </TableHead>
-                                    <TableHead className="text-right w-[200px]">
-                                        <Button variant="ghost" onClick={() => handleSort('confirmationRate')}>
-                                            Tasa de Confirmación {renderSortArrow('confirmationRate')}
+                                    <TableHead className="text-right w-[140px] sm:w-[200px]">
+                                        <Button variant="ghost" size="sm" onClick={() => handleSort('confirmationRate')} className="h-8 text-xs sm:text-sm">
+                                            Tasa {renderSortArrow('confirmationRate')}
                                         </Button>
                                     </TableHead>
                                 </TableRow>
@@ -414,20 +416,22 @@ export default function Dashboard() {
                                 {visibleData.length > 0 ? (
                                     visibleData.map(p => (
                                         <TableRow key={p.name}>
-                                            <TableCell className="font-medium whitespace-nowrap">{p.name}</TableCell>
-                                            <TableCell className="text-center">{p.requested}</TableCell>
-                                            <TableCell className="text-center text-green-500 font-semibold">{p.confirmed}</TableCell>
+                                            <TableCell className="font-medium text-xs sm:text-sm">
+                                                <div className="max-w-[150px] sm:max-w-none truncate">{p.name}</div>
+                                            </TableCell>
+                                            <TableCell className="text-center text-xs sm:text-sm">{p.requested}</TableCell>
+                                            <TableCell className="text-center text-green-500 font-semibold text-xs sm:text-sm hidden sm:table-cell">{p.confirmed}</TableCell>
                                             <TableCell className="text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <span className="font-mono font-semibold w-12">{p.confirmationRate.toFixed(1)}%</span>
-                                                    <Progress value={p.confirmationRate} className={cn("h-2 w-24", getRateColor(p.confirmationRate))} />
+                                                <div className="flex items-center justify-end gap-1 sm:gap-2">
+                                                    <span className="font-mono font-semibold text-[10px] sm:text-sm w-10 sm:w-12">{p.confirmationRate.toFixed(1)}%</span>
+                                                    <Progress value={p.confirmationRate} className={cn("h-1.5 sm:h-2 w-16 sm:w-24", getRateColor(p.confirmationRate))} />
                                                 </div>
                                             </TableCell>
                                         </TableRow>
                                     ))
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="h-24 text-center">No se encontraron productos.</TableCell>
+                                        <TableCell colSpan={4} className="h-24 text-center text-xs sm:text-sm">No se encontraron productos.</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
@@ -435,8 +439,8 @@ export default function Dashboard() {
                     </div>
                 </CardContent>
                  {filteredAndSortedData.length > visibleItemsCount && (
-                    <CardFooter className="flex justify-center pt-4">
-                        <Button onClick={() => setVisibleItemsCount(prev => prev + ITEMS_PER_PAGE)}>
+                    <CardFooter className="flex justify-center pt-3 sm:pt-4">
+                        <Button size="sm" onClick={() => setVisibleItemsCount(prev => prev + ITEMS_PER_PAGE)} className="text-xs sm:text-sm">
                             Cargar más
                         </Button>
                     </CardFooter>
@@ -467,132 +471,137 @@ export default function Dashboard() {
 
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-         <div className="flex items-center gap-4">
+    <div className="space-y-4 md:space-y-8 p-2 sm:p-4 md:p-6">
+      <div className="flex flex-col gap-4">
+         <div className="flex items-center gap-2 sm:gap-4">
             <SidebarTrigger className="md:hidden"/>
-            <div>
-                <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-                <p className="text-muted-foreground">
+            <div className="flex-1">
+                <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Dashboard</h2>
+                <p className="text-xs sm:text-sm text-muted-foreground">
                     {selectedStore === 'all' ? 'Vista general de métricas clave.' : `Métricas para: ${capitalize(selectedStore)}`}
                 </p>
             </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <Select onValueChange={handleDatePreset}>
-              <SelectTrigger className="w-full sm:w-[120px]">
-                  <SelectValue placeholder="Filtro Rápido" />
-              </SelectTrigger>
-              <SelectContent>
-                  <SelectItem value="today">Hoy</SelectItem>
-                  <SelectItem value="yesterday">Ayer</SelectItem>
-                  <SelectItem value="7days">Últimos 7 días</SelectItem>
-                  <SelectItem value="30days">Últimos 30 días</SelectItem>
-                  <SelectItem value="6months">Últimos 6 meses</SelectItem>
-                  <SelectItem value="all">Ver todo</SelectItem>
-              </SelectContent>
-          </Select>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button id="date" variant={"outline"} className={cn("w-full sm:w-[260px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {date?.from ? (date.to ? (<>{format(date.from, "LLL dd, y", { locale: es })} - {format(date.to, "LLL dd, y", { locale: es })}</>) : (format(date.from, "LLL dd, y", { locale: es }))) : (<span>Selecciona un rango</span>)}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
-            </PopoverContent>
-          </Popover>
-          <Select value={selectedStore} onValueChange={setSelectedStore}>
-              <SelectTrigger className="w-full sm:w-[160px]">
-                  <SelectValue placeholder="Filtrar por Tienda" />
-              </SelectTrigger>
-              <SelectContent>
-                  <SelectItem value="all">Ver Todas las Tiendas</SelectItem>
-                  {fullMetrics?.storeMetrics.map(store => (
-                    <SelectItem key={store.name} value={store.name.toLowerCase()}>{store.name}</SelectItem>
-                  ))}
-              </SelectContent>
-          </Select>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <Button className="flex-1 sm:flex-initial" variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>
-              {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-              Actualizar
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <Select onValueChange={handleDatePreset}>
+                <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Filtro Rápido" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="today">Hoy</SelectItem>
+                    <SelectItem value="yesterday">Ayer</SelectItem>
+                    <SelectItem value="7days">7 días</SelectItem>
+                    <SelectItem value="30days">30 días</SelectItem>
+                    <SelectItem value="6months">6 meses</SelectItem>
+                    <SelectItem value="all">Todo</SelectItem>
+                </SelectContent>
+            </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button id="date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                  <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
+                  <span className="truncate text-xs sm:text-sm">
+                    {date?.from ? (date.to ? (<>{format(date.from, "dd/MM", { locale: es })} - {format(date.to, "dd/MM", { locale: es })}</>) : (format(date.from, "dd/MM/yy", { locale: es }))) : ("Rango")}
+                  </span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={1} locale={es} className="sm:hidden" />
+                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} className="hidden sm:block" />
+              </PopoverContent>
+            </Popover>
+            <Select value={selectedStore} onValueChange={setSelectedStore}>
+                <SelectTrigger className="w-full col-span-2 sm:col-span-1">
+                    <SelectValue placeholder="Filtrar Tienda" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    {fullMetrics?.storeMetrics.map(store => (
+                      <SelectItem key={store.name} value={store.name.toLowerCase()}>{store.name}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+          </div>
+          <div className="flex gap-2">
+            <Button className="flex-1" variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>
+              {isLoading ? <Loader className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              <span className="ml-2 hidden sm:inline">Actualizar</span>
             </Button>
-            <Link href="/dashboard/upload-data" passHref className="flex-1 sm:flex-initial">
+            <Link href="/dashboard/upload-data" passHref className="flex-1">
               <Button variant="outline" size="sm" className="w-full">
-                <Upload className="mr-2 h-4 w-4" />
-                Carga Manual
+                <Upload className="h-4 w-4" />
+                <span className="ml-2 hidden sm:inline">Subir Datos</span>
               </Button>
             </Link>
           </div>
         </div>
       </div>
       
-       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+       <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pedidos Totales</CardTitle>
-              <Package2 className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-xs sm:text-sm font-medium">Pedidos Totales</CardTitle>
+              <Package2 className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">{globalTotal.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">Confirmados y no confirmados.</p>
+              <div className="text-2xl sm:text-4xl font-bold">{globalTotal.toLocaleString()}</div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Confirmados y pendientes</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pedidos Confirmados</CardTitle>
-              <CheckCircle className="h-5 w-5 text-green-500" />
+              <CardTitle className="text-xs sm:text-sm font-medium">Confirmados</CardTitle>
+              <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">{(miscMetrics?.globalConfirmed ?? 0).toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">Total de pedidos completados.</p>
+              <div className="text-2xl sm:text-4xl font-bold">{(miscMetrics?.globalConfirmed ?? 0).toLocaleString()}</div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Pedidos completados</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Tasa de Confirmación</CardTitle>
-              <Percent className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-xs sm:text-sm font-medium">Tasa Confirmación</CardTitle>
+              <Percent className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className={cn("text-4xl font-bold", globalRate < 30 ? "text-red-500" : globalRate < 50 ? "text-yellow-500" : "text-green-500")}>
-                {globalRate.toFixed(2)}%
+              <div className={cn("text-2xl sm:text-4xl font-bold", globalRate < 30 ? "text-red-500" : globalRate < 50 ? "text-yellow-500" : "text-green-500")}>
+                {globalRate.toFixed(1)}%
               </div>
-               <p className="text-xs text-muted-foreground">Porcentaje de confirmados.</p>
+               <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">% de confirmados</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Gasto Promedio</CardTitle>
-              <Banknote className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-xs sm:text-sm font-medium">Gasto Promedio</CardTitle>
+              <Banknote className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">S/ {averageSpentPerOrder.toFixed(2)}</div>
-               <p className="text-xs text-muted-foreground">Promedio por pedido.</p>
+              <div className="text-2xl sm:text-4xl font-bold">S/ {averageSpentPerOrder.toFixed(0)}</div>
+               <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Por pedido</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="col-span-2 md:col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Variación Diaria</CardTitle>
-              <TrendingUp className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-xs sm:text-sm font-medium">Variación Diaria</CardTitle>
+              <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-                <div className={`text-4xl font-bold ${dailyVariation > 0 ? "text-green-500" : dailyVariation < 0 ? "text-red-500" : ""}`}>
+                <div className={`text-2xl sm:text-4xl font-bold ${dailyVariation > 0 ? "text-green-500" : dailyVariation < 0 ? "text-red-500" : ""}`}>
                     {dailyVariation > 0 ? "+" : ""}
                     {dailyVariation.toFixed(1)}%
                 </div>
-                <p className="text-xs text-muted-foreground">vs. el día anterior (Global).</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">vs. día anterior</p>
             </CardContent>
           </Card>
       </div>
       
        {selectedStore === 'all' && (
         <>
-          <div className="space-y-4 pt-6">
-              <h3 className="text-2xl font-bold tracking-tight">Resumen por Tienda</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="space-y-3 sm:space-y-4">
+              <h3 className="text-xl sm:text-2xl font-bold tracking-tight">Resumen por Tienda</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6">
                   {(storeMetrics || []).map(store => {
                       const confirmationRateColor =
                           store.confirmationRate < 30
@@ -603,51 +612,51 @@ export default function Dashboard() {
 
                       return (
                           <Card key={store.name}>
-                              <CardHeader className="flex flex-col items-start space-y-1 pb-4">
+                              <CardHeader className="flex flex-col items-start space-y-1 pb-3 sm:pb-4">
                                   <div className="w-full flex items-center justify-between">
-                                    <CardTitle className="text-xl font-bold flex items-center gap-2">
-                                        <Store className="h-5 w-5 text-primary" />
+                                    <CardTitle className="text-lg sm:text-xl font-bold flex items-center gap-2">
+                                        <Store className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                                         {store.name}
                                     </CardTitle>
                                     <div className="text-right">
-                                        <p className={`text-2xl font-bold ${confirmationRateColor}`}>{store.confirmationRate.toFixed(1)}%</p>
-                                        <p className="text-xs text-muted-foreground">Confirmación</p>
+                                        <p className={`text-xl sm:text-2xl font-bold ${confirmationRateColor}`}>{store.confirmationRate.toFixed(1)}%</p>
+                                        <p className="text-[10px] sm:text-xs text-muted-foreground">Confirmación</p>
                                     </div>
                                   </div>
-                                  <div className="w-full space-y-1">
+                                  <div className="w-full space-y-0.5 sm:space-y-1">
                                     <TrendIndicator value={store.dailyOrderVariation} text="vs día anterior" />
                                     <TrendIndicator value={store.confirmationRateTrend} text="vs día anterior" type="points" />
                                   </div>
                               </CardHeader>
-                              <CardContent className="space-y-4">
-                                <div className="grid grid-cols-3 gap-4 text-center">
+                              <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6">
+                                <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
                                     <div>
-                                        <p className="text-sm font-medium">Totales</p>
-                                        <p className="text-lg font-bold">{store.totalOrders}</p>
+                                        <p className="text-[10px] sm:text-sm font-medium">Totales</p>
+                                        <p className="text-base sm:text-lg font-bold">{store.totalOrders}</p>
                                     </div>
                                     <div>
-                                        <p className="text-sm font-medium">Confirmados</p>
-                                        <p className="text-lg font-bold text-green-500">{store.confirmedOrders}</p>
+                                        <p className="text-[10px] sm:text-sm font-medium">Confirmados</p>
+                                        <p className="text-base sm:text-lg font-bold text-green-500">{store.confirmedOrders}</p>
                                     </div>
                                     <div>
-                                        <p className="text-sm font-medium">Ticket Prom.</p>
-                                        <p className="text-lg font-bold">S/ {store.averageTicket.toFixed(2)}</p>
+                                        <p className="text-[10px] sm:text-sm font-medium">Ticket</p>
+                                        <p className="text-base sm:text-lg font-bold">S/ {store.averageTicket.toFixed(0)}</p>
                                     </div>
                                 </div>
                                 <Separator />
                                  <div>
-                                    <p className="text-sm font-medium mb-2">Top 2 Productos Comprados</p>
+                                    <p className="text-xs sm:text-sm font-medium mb-2">Top Productos</p>
                                     {store.topProducts.length > 0 ? (
-                                        <ul className="space-y-1 text-xs text-muted-foreground">
+                                        <ul className="space-y-1 text-[10px] sm:text-xs text-muted-foreground">
                                             {store.topProducts.map(p => (
-                                                <li key={p.name} className="flex justify-between items-center">
-                                                    <span className="truncate pr-2">{p.name}</span>
-                                                    <span className="font-semibold text-foreground">{p.count}</span>
+                                                <li key={p.name} className="flex justify-between items-center gap-2">
+                                                    <span className="truncate">{p.name}</span>
+                                                    <span className="font-semibold text-foreground flex-shrink-0">{p.count}</span>
                                                 </li>
                                             ))}
                                         </ul>
                                     ) : (
-                                        <p className="text-xs text-center text-muted-foreground py-2">No hay datos de productos.</p>
+                                        <p className="text-[10px] sm:text-xs text-center text-muted-foreground py-2">No hay datos</p>
                                     )}
                                 </div>
                               </CardContent>
@@ -656,14 +665,14 @@ export default function Dashboard() {
                   })}
               </div>
           </div>
-          <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center"><LineChartIcon className="mr-2 h-5 w-5" />Rendimiento Comparativo de Tiendas (Pedidos Confirmados)</CardTitle>
-                <CardDescription>Evolución de los pedidos confirmados por día para las tiendas principales.</CardDescription>
-            </CardHeader>
-            <CardContent className="min-h-[400px] overflow-x-auto">
-             <div className="min-w-[600px] h-full">
-              <ChartContainer
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base sm:text-xl flex items-center"><LineChartIcon className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />Rendimiento por Tienda</CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">Pedidos confirmados por día</CardDescription>
+                </CardHeader>
+                <CardContent className="p-2 sm:p-6">
+                 <div className="w-full h-[300px] sm:h-[400px]">
+                  <ChartContainer
                   config={{
                       dearel: { label: "Dearel", color: "hsl(var(--chart-1))" },
                       blumi: { label: "Blumi", color: "hsl(var(--chart-2))" },
@@ -674,9 +683,9 @@ export default function Dashboard() {
               >
                   <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={dailyStorePerformance} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
-                          <YAxis />
+                          <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                          <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveEnd" angle={-45} textAnchor="end" height={80} />
+                          <YAxis tick={{ fontSize: 10 }} />
                            <Tooltip
                               content={({ active, payload, label }) => {
                                   if (active && payload && payload.length && dailyStorePerformance) {
@@ -684,8 +693,8 @@ export default function Dashboard() {
                                       const prevData = currentIndex > 0 ? dailyStorePerformance[currentIndex - 1] : null;
 
                                       return (
-                                          <div className="p-2 text-xs bg-background border rounded-lg shadow-lg">
-                                              <p className="font-bold mb-2">{label}</p>
+                                          <div className="p-2 text-[10px] sm:text-xs bg-background border rounded-lg shadow-lg max-w-[200px]">
+                                              <p className="font-bold mb-1 text-xs sm:text-sm">{label}</p>
                                               {payload.map((p, i) => {
                                                   const storeName = p.dataKey as string;
                                                   const currentValue = p.value as number;
@@ -701,9 +710,9 @@ export default function Dashboard() {
                                                   const color = p.color || `hsl(var(--chart-${i + 1}))`;
 
                                                   return (
-                                                      <div key={storeName} className="flex justify-between items-center gap-4">
-                                                          <span style={{ color }}>● {capitalize(storeName)}: {currentValue}</span>
-                                                          <span className={`font-mono text-right ${variation.startsWith('+') ? 'text-green-500' : variation.startsWith('-') ? 'text-red-500' : 'text-muted-foreground'}`}>{variation}</span>
+                                                      <div key={storeName} className="flex justify-between items-center gap-2">
+                                                          <span style={{ color }} className="truncate">● {capitalize(storeName)}: {currentValue}</span>
+                                                          <span className={`font-mono text-right text-[9px] sm:text-xs ${variation.startsWith('+') ? 'text-green-500' : variation.startsWith('-') ? 'text-red-500' : 'text-muted-foreground'}`}>{variation}</span>
                                                       </div>
                                                   );
                                               })}
@@ -713,7 +722,7 @@ export default function Dashboard() {
                                   return null;
                               }}
                           />
-                          <Legend />
+                          <Legend wrapperStyle={{ fontSize: '10px' }} iconSize={8} />
                           {MAIN_STORES.map(store => (
                               <Line key={store} type="monotone" dataKey={store} stroke={`var(--color-${store})`} strokeWidth={2} dot={false} />
                           ))}
@@ -726,16 +735,16 @@ export default function Dashboard() {
         </>
        )}
        
-       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2 pt-6">
+       <div className="grid gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-2">
            {selectedStore === 'all' && (
               <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center"><PieChartIcon className="mr-2 h-5 w-5" />Distribución de Pedidos Confirmados por Tienda</CardTitle>
-                    <CardDescription>Porcentaje de contribución de cada tienda al total de pedidos confirmados.</CardDescription>
+                    <CardTitle className="text-base sm:text-xl flex items-center"><PieChartIcon className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />Distribución por Tienda</CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">% de pedidos confirmados</CardDescription>
                 </CardHeader>
-                <CardContent className="min-h-[400px] overflow-x-auto">
+                <CardContent className="p-2 sm:p-6">
                    {storeMetrics && storeMetrics.filter(s => s.confirmedOrders > 0).length > 0 ? (
-                     <div className="min-w-[600px] h-full">
+                     <div className="w-full h-[300px] sm:h-[400px]">
                      <ChartContainer config={{
                         ...storeMetrics?.reduce((acc, store, index) => {
                           acc[store.name] = { label: store.name, color: COLORS[index % COLORS.length] };
@@ -745,22 +754,22 @@ export default function Dashboard() {
                       <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                               <Tooltip content={<ChartTooltipContent nameKey="name" />} />
-                              <Legend />
+                              <Legend wrapperStyle={{ fontSize: '10px' }} iconSize={8} />
                               <Pie
                                   data={storeMetrics.filter(s => s.confirmedOrders > 0)}
                                   dataKey="confirmedOrders"
                                   nameKey="name"
                                   cx="50%"
                                   cy="50%"
-                                  outerRadius={120}
+                                  outerRadius="70%"
                                   labelLine={false}
                                   label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                                    if (!percent || percent === 0) return null;
+                                    if (!percent || percent < 0.05) return null;
                                     const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
                                     const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
                                     const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
                                     return (
-                                      <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" className="text-xs font-bold">
+                                      <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" className="text-[10px] sm:text-xs font-bold">
                                         {`${(percent * 100).toFixed(0)}%`}
                                       </text>
                                     );
@@ -775,8 +784,8 @@ export default function Dashboard() {
                      </ChartContainer>
                      </div>
                    ) : (
-                    <div className="flex items-center justify-center h-full">
-                        <p className="text-muted-foreground">No hay datos de pedidos confirmados para mostrar en el gráfico.</p>
+                    <div className="flex items-center justify-center h-[300px]">
+                        <p className="text-muted-foreground text-xs sm:text-sm">No hay datos</p>
                     </div>
                    )}
                 </CardContent>
@@ -785,63 +794,63 @@ export default function Dashboard() {
 
             <Card className={selectedStore !== 'all' ? 'col-span-2' : ''}>
               <CardHeader>
-                  <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5" />Análisis de Provincias</CardTitle>
-                  <CardDescription>{selectedStore === 'all' ? 'Top 10 provincias con más pedidos y su gasto total.' : `Top 10 provincias para la tienda ${capitalize(selectedStore)}.`}</CardDescription>
+                  <CardTitle className="text-base sm:text-xl flex items-center"><MapPin className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />Top 10 Provincias</CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">Pedidos y gasto total</CardDescription>
               </CardHeader>
-              <CardContent className="min-h-[400px] overflow-x-auto">
-               <div className="min-w-[600px] h-full">
+              <CardContent className="p-2 sm:p-6">
+               <div className="w-full h-[300px] sm:h-[400px]">
                 <ChartContainer config={{
-                    totalOrders: { label: "Pedidos Totales", color: "hsl(var(--chart-1))" },
-                    totalSpent: { label: "Gasto Total", color: "hsl(var(--chart-2))" },
+                    totalOrders: { label: "Pedidos", color: "hsl(var(--chart-1))" },
+                    totalSpent: { label: "Gasto S/", color: "hsl(var(--chart-2))" },
                 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={(provinceMetrics || []).slice(0, 10)} margin={{ top: 20, right: 20, left: 20, bottom: 60 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} angle={-45} textAnchor="end" interval="preserveStartEnd" />
-                        <YAxis yAxisId="left" orientation="left" stroke="hsl(var(--primary))" fontSize={12} />
-                        <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-1))" fontSize={12} />
+                    <BarChart data={(provinceMetrics || []).slice(0, 10)} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                        <XAxis dataKey="name" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} angle={-45} textAnchor="end" interval={0} />
+                        <YAxis yAxisId="left" orientation="left" stroke="hsl(var(--primary))" tick={{ fontSize: 9 }} />
+                        <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-1))" tick={{ fontSize: 9 }} />
                         <Tooltip 
                           content={<ChartTooltipContent 
                             formatter={(value, name) => (
-                              <div className="flex flex-col">
-                                <span className="font-bold">{name === 'totalOrders' ? 'Total Pedidos' : 'Gasto Total'}</span>
+                              <div className="flex flex-col text-xs">
+                                <span className="font-bold">{name === 'totalOrders' ? 'Pedidos' : 'Gasto'}</span>
                                 <span>{name === 'totalSpent' ? `S/ ${(value as number).toFixed(2)}` : value}</span>
                               </div>
                             )}
                           />}
                         />
-                        <Legend verticalAlign="top" />
-                        <Bar yAxisId="left" dataKey="totalOrders" name="Pedidos Totales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                        <Bar yAxisId="right" dataKey="totalSpent" name="Gasto Total (S/)" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                        <Legend verticalAlign="top" wrapperStyle={{ fontSize: '10px' }} iconSize={8} />
+                        <Bar yAxisId="left" dataKey="totalOrders" name="Pedidos" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                        <Bar yAxisId="right" dataKey="totalSpent" name="Gasto (S/)" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
                       </BarChart>
                   </ResponsiveContainer>
                 </ChartContainer>
                </div>
               </CardContent>
-               <div className="p-4 pt-0 text-center">
+               <div className="p-2 sm:p-4 pt-0 text-center">
                   <Link href="/dashboard/provinces" passHref>
-                    <Button variant="outline" className="w-full sm:w-auto">
-                        Ver Detalles por Provincia <ArrowRight className="ml-2 h-4 w-4" />
+                    <Button variant="outline" size="sm" className="w-full sm:w-auto text-xs sm:text-sm">
+                        Ver Detalles <ArrowRight className="ml-2 h-3 w-3 sm:h-4 sm:w-4" />
                     </Button>
                   </Link>
               </div>
           </Card>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6">
         <Card className="lg:col-span-2">
             <CardHeader>
-                <CardTitle className="flex items-center"><Percent className="mr-2 h-5 w-5" />Análisis de Tasa de Confirmación por Producto</CardTitle>
-                <CardDescription>Busca y filtra para analizar la efectividad de venta por producto.</CardDescription>
+                <CardTitle className="text-base sm:text-xl flex items-center"><Percent className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />Tasa de Confirmación por Producto</CardTitle>
+                <CardDescription className="text-xs sm:text-sm">Analiza la efectividad de venta por producto</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-2 sm:p-6">
                 <ProductConfirmationTable products={productConfirmationRates} />
             </CardContent>
         </Card>
         <Card>
             <CardHeader>
-                <CardTitle className="flex items-center"><ShoppingCart className="mr-2 h-5 w-5" />Top 5 Productos Más Comprados</CardTitle>
-                <CardDescription>Productos con más ventas confirmadas.</CardDescription>
+                <CardTitle className="text-base sm:text-xl flex items-center"><ShoppingCart className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />Top 5 Más Comprados</CardTitle>
+                <CardDescription className="text-xs sm:text-sm">Productos con más ventas</CardDescription>
             </CardHeader>
             <CardContent>
                 {renderProductList(mostPurchasedProducts)}
@@ -851,25 +860,25 @@ export default function Dashboard() {
 
       <Card>
           <CardHeader>
-              <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5" />Resumen de Inventario</CardTitle>
-              <CardDescription>Una vista rápida del flujo de inventario y la actividad del equipo.</CardDescription>
+              <CardTitle className="text-base sm:text-xl flex items-center"><Truck className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />Resumen de Inventario</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">Flujo de inventario y actividad del equipo</CardDescription>
           </CardHeader>
           <CardContent>
               <div className="grid grid-cols-2 gap-4 text-center">
                   <div>
-                      <p className="text-sm text-muted-foreground">Total Entradas</p>
-                      <p className="text-2xl font-bold text-green-500">{(0).toLocaleString()}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">Total Entradas</p>
+                      <p className="text-xl sm:text-2xl font-bold text-green-500">{(0).toLocaleString()}</p>
                   </div>
                   <div>
-                      <p className="text-sm text-muted-foreground">Total Salidas</p>
-                      <p className="text-2xl font-bold text-red-500">{(0).toLocaleString()}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">Total Salidas</p>
+                      <p className="text-xl sm:text-2xl font-bold text-red-500">{(0).toLocaleString()}</p>
                   </div>
               </div>
           </CardContent>
-          <div className="p-4 pt-0 text-center">
+          <div className="p-2 sm:p-4 pt-0 text-center">
               <Link href="/dashboard/inventory" passHref>
-                  <Button variant="outline" className="w-full sm:w-auto">
-                      Ver Análisis de Inventario <ArrowRight className="ml-2 h-4 w-4" />
+                  <Button variant="outline" size="sm" className="w-full sm:w-auto text-xs sm:text-sm">
+                      Ver Inventario <ArrowRight className="ml-2 h-3 w-3 sm:h-4 sm:w-4" />
                   </Button>
               </Link>
           </div>

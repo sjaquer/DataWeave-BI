@@ -7,10 +7,10 @@
 // =========================================
 const CONFIG = {
   // URL del webhook para la hoja REPORTE_ENVIADOS.
-  SHIPPED_WEBHOOK_URL: 'https://dataweave-bi-test-lqec.web.app/api/webhooks/sheets',
+  SHIPPED_WEBHOOK_URL: 'https://dataweave-bi.vercel.app/api/webhooks/sheets',
   
   // URL del webhook para la nueva hoja ENTREGADO.
-  DELIVERED_WEBHOOK_URL: 'https://dataweave-bi-test-lqec.web.app/api/webhooks/delivered',
+  DELIVERED_WEBHOOK_URL: 'https://dataweave-bi.vercel.app/api/webhooks/delivered',
 
   // Nombres de las hojas
   SHIPPED_SHEET_NAME: 'REPORTE_ENVIADOS',

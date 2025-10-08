@@ -9,12 +9,12 @@ const CONFIG = {
   // URL del webhook para la hoja REPORTE_ENVIADOS.
   SHIPPED_WEBHOOK_URL: 'https://dataweave-bi-test-lqec.web.app/api/webhooks/sheets',
   
-  // URL del webhook para la nueva hoja ENTREGADOS.
+  // URL del webhook para la nueva hoja ENTREGADO.
   DELIVERED_WEBHOOK_URL: 'https://dataweave-bi-test-lqec.web.app/api/webhooks/delivered',
 
   // Nombres de las hojas
   SHIPPED_SHEET_NAME: 'REPORTE_ENVIADOS',
-  DELIVERED_SHEET_NAME: 'ENTREGADOS',
+  DELIVERED_SHEET_NAME: 'ENTREGADO', // Corregido de "ENTREGADOS" a "ENTREGADO"
   LOG_SHEET_NAME: 'LOG_ENVIOS',
 
   // Columnas de ID único para cada hoja
@@ -37,7 +37,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
       .createMenu('Sincronización DataWeave')
       .addItem('1. Sincronizar REPORTE ENVIADOS', 'triggerShippedSync')
-      .addItem('2. Sincronizar ENTREGADOS', 'triggerDeliveredSync')
+      .addItem('2. Sincronizar ENTREGADO', 'triggerDeliveredSync')
       .addSeparator()
       .addItem('3. Activar Sincronización Automática', 'createTrigger')
       .addItem('4. Desactivar Sincronización Automática', 'deleteTriggers')
@@ -196,7 +196,13 @@ function findNewRows(mainSheet, uniqueIdColumn, sentIds, logPrefix) {
 
   for (let i = 1; i < allValues.length; i++) {
     const row = allValues[i];
-    const uniqueId = String(row[uniqueIdColumnIndex]);
+    let uniqueId = String(row[uniqueIdColumnIndex]);
+
+    // Si la columna de ID es 'ID', usamos el número de fila como fallback.
+    if (uniqueIdColumn === 'ID' && !uniqueId) {
+      uniqueId = String(i + 1); // El número de fila es i + 1
+    }
+
     const logId = `${logPrefix}-${uniqueId}`;
 
     if (uniqueId && !sentIds.has(logId)) {
@@ -206,6 +212,10 @@ function findNewRows(mainSheet, uniqueIdColumn, sentIds, logPrefix) {
           rowObject[header] = row[index];
         }
       });
+      // Si el ID es el de la fila, lo añadimos explícitamente al objeto.
+      if (uniqueIdColumn === 'ID') {
+        rowObject['ID'] = uniqueId;
+      }
       newRows.push(rowObject);
       sentIdsForLog.push(logId);
     }
@@ -260,15 +270,9 @@ function handleWebhookResponse(response, logSheet, sentIdsForLog) {
 }
 
 /**
- * Verifica si el script fue ejecutado manualmente o por un trigger.
+ * Verifica si el script fue ejecutado manually o por un trigger.
+ * @param {object} e - El objeto de evento del trigger.
  */
-function isManualExecution() {
-  try {
-    // Si no hay un trigger source, es manual.
-    const triggerSource = e.source;
-    return false;
-  } catch(e) {
-    // La variable 'e' no está definida en ejecuciones manuales, lo que causa un error.
-    return true;
-  }
+function isManualExecution(e) {
+  return !e;
 }

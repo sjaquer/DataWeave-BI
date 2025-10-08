@@ -1,3 +1,4 @@
+
 // src/app/(app)/dashboard/shipments/page.tsx
 "use client";
 
@@ -22,8 +23,8 @@ interface ShipmentData {
   province: string;
   storeId: string;
   products: Array<{ title: string; quantity?: number; price?: number }>;
-  paymentMethod: string;
-  deliveryTimeInHours?: number;
+  paymentMethod?: string; // Hacemos opcional para manejar datos antiguos
+  deliveryTimeInHours?: number | null; // Hacemos opcional y nulo
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82ca9d', '#ffc658', '#ff7c7c'];
@@ -58,8 +59,8 @@ export default function ShipmentsPage() {
             province: order.province || "N/A",
             storeId: order.storeId || "N/A",
             products: order.products || [],
-            paymentMethod: order.paymentMethod || 'Desconocido',
-            deliveryTimeInHours: order.deliveryTimeInHours,
+            paymentMethod: order.paymentMethod, // Puede ser undefined
+            deliveryTimeInHours: order.deliveryTimeInHours, // Puede ser undefined
           });
         });
 

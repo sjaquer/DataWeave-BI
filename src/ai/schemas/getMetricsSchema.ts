@@ -57,6 +57,16 @@ export const PersonnelMetricSchema = z.object({
 });
 export type PersonnelMetric = z.infer<typeof PersonnelMetricSchema>;
 
+export const CourierMetricSchema = z.object({
+  name: z.string(),
+  totalShipments: z.number(),
+  totalRevenue: z.number(),
+  averageOrderValue: z.number(),
+  provinceCount: z.number(),
+  percentageOfTotal: z.number(),
+});
+export type CourierMetric = z.infer<typeof CourierMetricSchema>;
+
 
 export const MiscMetricsSchema = z.object({
   globalConfirmed: z.number(),
@@ -173,6 +183,7 @@ export const GetMetricsOutputSchema = z.object({
     mostPurchasedProducts: z.array(ProductMetricSchema),
     productConfirmationRates: z.array(ProductConfirmationRateSchema).optional(),
     personnelMetrics: z.array(PersonnelMetricSchema),
+    courierMetrics: z.array(CourierMetricSchema).optional(),
     storeMetrics: z.array(StoreMetricSchema),
     miscMetrics: MiscMetricsSchema,
     inventoryFlowTrend: z.array(InventoryFlowTrendSchema).optional(),

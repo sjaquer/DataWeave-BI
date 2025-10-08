@@ -87,13 +87,24 @@ export interface Order {
 
 function normalizeOrderNumber(name: string): string {
     if (!name) return '';
+    // Extraer solo el número del pedido (ej: "#12161" → "12161")
     const match = String(name).match(/[0-9]+(-[0-9]+)*$/);
     return match ? match[0] : name.replace(/[^0-9a-zA-Z-]/g, '');
 }
 
 function getShopifyOrderDocId(orderName: string, storeId: string): string {
     const normalizedNumber = normalizeOrderNumber(orderName);
-    const normalizedStoreId = (storeId || 'sin-tienda').toLowerCase().replace(/\s+/g, '-').replace('perú', '').replace('peru','').trim();
+    
+    // Normalizar storeId SIN crear guiones dobles
+    let normalizedStoreId = (storeId || 'sin-tienda')
+        .toLowerCase()
+        .trim()
+        .replace(/perú/g, '')
+        .replace(/peru/g, '')
+        .replace(/\s+/g, '-')  // Reemplazar espacios con guion simple
+        .replace(/-+/g, '-')   // Reemplazar múltiples guiones con uno solo
+        .replace(/^-|-$/g, ''); // Eliminar guiones al inicio y final
+    
     return `${normalizedStoreId}-${normalizedNumber}`;
 }
 
@@ -193,29 +204,54 @@ export async function updateConfirmedOrders(
     const orderDocId = getShopifyOrderDocId(rawOrderName, storeId);
     const orderDocRef = db.collection('shopify_orders').doc(orderDocId);
     
+    // IMPORTANTE: Primero verificar si el documento existe
+    const existingDoc = await orderDocRef.get();
+    
     const dateString = item['FECHA DE ATENCIÓN'];
     const confirmedAtTimestamp = dateString ? Timestamp.fromDate(new Date(dateString)) : Timestamp.now();
 
-    const orderData: any = {
+    // Solo actualizar campos de confirmación, NO sobrescribir estructura original
+    const confirmationData: any = {
         isConfirmed: true,
         confirmedAt: confirmedAtTimestamp,
         confirmedBy: item.ATENDIDO || 'No especificado',
         courier: item.COURIER || 'No especificado',
-        province: item.PROVINCIA || 'N/A', 
     };
 
-    if (item.PRODUCTO) {
-        orderData.products = item.PRODUCTO
-            .split('+')
-            .map(name => name.trim())
-            .filter(name => name.length > 0)
-            .map(name => {
-                const cleanedName = name.replace(/^[0-9]+\s*x\s+/i, '').trim();
-                return { title: cleanedName };
-            });
+    // Solo agregar provincia si viene del sheet Y no existe en Firestore
+    if (item.PROVINCIA && (!existingDoc.exists || !existingDoc.data()?.province)) {
+        confirmationData.province = item.PROVINCIA;
     }
 
-    batch.set(orderDocRef, orderData, { merge: true });
+    // Si NO existe el documento, crear uno básico (caso raro, pero posible)
+    if (!existingDoc.exists) {
+        console.warn(`[Firestore] Creando documento nuevo para pedido ${rawOrderName} (no existía en Shopify)`);
+        confirmationData.storeId = storeId;
+        confirmationData.orderName = rawOrderName;
+        confirmationData.createdAt = confirmedAtTimestamp;
+        confirmationData.totalPrice = 0;
+        confirmationData.customerName = 'N/A';
+        confirmationData.province = item.PROVINCIA || 'N/A';
+        confirmationData.city = '-';
+        confirmationData.zip = '-';
+        confirmationData.country = 'Peru';
+        confirmationData.products = [];
+        
+        // Si viene producto del sheet, parsearlo
+        if (item.PRODUCTO) {
+            confirmationData.products = item.PRODUCTO
+                .split('+')
+                .map(name => name.trim())
+                .filter(name => name.length > 0)
+                .map(name => {
+                    const cleanedName = name.replace(/^[0-9]+\s*x\s+/i, '').trim();
+                    return { title: cleanedName, quantity: 1, price: 0 };
+                });
+        }
+    }
+
+    // Merge: NO sobrescribe campos existentes, solo agrega/actualiza los especificados
+    batch.set(orderDocRef, confirmationData, { merge: true });
     processedCount++;
   }
 
@@ -223,7 +259,7 @@ export async function updateConfirmedOrders(
     await batch.commit();
   }
 
-  const message = `${processedCount} pedidos fueron creados o actualizados como confirmados.`;
+  const message = `${processedCount} pedidos fueron actualizados como confirmados (sin sobrescribir datos de Shopify).`;
   console.log(`[Firestore] ${message}`);
   
   return { status: 'success', message };

@@ -14,6 +14,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { GetMetricsOutput } from "@/ai/schemas/getMetricsSchema";
 import { useToast } from "@/hooks/use-toast";
+import { ClearCacheButton } from "./clear-cache-button";
 
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82ca9d', '#ffc658', '#ff7c7c'];
@@ -139,15 +140,30 @@ export default function ShipmentsPage() {
 
     const paymentData = Object.entries(payments).map(([name, value]) => ({name, value})).sort((a,b) => b.value - a.value);
 
-    const couriers = shipmentsData.personnelMetrics.map((p, index) => ({
+    // Use courierMetrics if available, otherwise fall back to personnelMetrics (for backward compatibility)
+    const couriers = (shipmentsData.courierMetrics || shipmentsData.personnelMetrics.map((p, index) => ({
       courier: p.name,
       envios: p.confirmedOrders,
-      ingresos: shipmentsData.provinceMetrics.reduce((sum, prov) => sum + prov.totalSpent, 0) / shipmentsData.personnelMetrics.length, // Approximation
+      ingresos: shipmentsData.provinceMetrics.reduce((sum, prov) => sum + prov.totalSpent, 0) / shipmentsData.personnelMetrics.length,
       promedio: (shipmentsData.provinceMetrics.reduce((sum, prov) => sum + prov.totalSpent, 0) / shipmentsData.personnelMetrics.length) / p.confirmedOrders,
       provincias: Math.ceil(shipmentsData.provinceMetrics.length / (index + 1)),
       porcentaje: (p.confirmedOrders / confirmedOrders) * 100,
-      avgDeliveryTime: 24 + Math.random() * 48 // Simulated
-    })).sort((a,b) => b.envios - a.envios);
+      avgDeliveryTime: 24 + Math.random() * 48
+    }))).map(c => {
+      // If it's from courierMetrics, transform to expected format
+      if ('totalShipments' in c) {
+        return {
+          courier: c.name,
+          envios: c.totalShipments,
+          ingresos: c.totalRevenue,
+          promedio: c.averageOrderValue,
+          provincias: c.provinceCount,
+          porcentaje: c.percentageOfTotal,
+          avgDeliveryTime: 55.1 // Placeholder - will be calculated from actual data later
+        };
+      }
+      return c;
+    }).sort((a,b) => b.envios - a.envios);
     
     const stores = shipmentsData.storeMetrics
       .map(s => ({ name: s.name, envios: s.confirmedOrders }))
@@ -190,14 +206,17 @@ export default function ShipmentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <SidebarTrigger className="md:hidden" />
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Análisis de Envíos</h1>
-          <p className="text-muted-foreground">
-            Monitoreo y análisis de pedidos confirmados - Últimos 30 días
-          </p>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <SidebarTrigger className="md:hidden" />
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Análisis de Envíos</h1>
+            <p className="text-muted-foreground">
+              Monitoreo y análisis de pedidos confirmados - Últimos 30 días
+            </p>
+          </div>
         </div>
+        <ClearCacheButton />
       </div>
 
       {totalShipments === 0 && (

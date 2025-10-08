@@ -74,6 +74,7 @@ const getMetricsFlow = ai.defineFlow(
     const purchasedProductData: { [key: string]: number } = {};
     const storeData: { [key: string]: { totalOrders: number, confirmedOrders: number, totalSpent: number, topProducts: {[key: string]: number}, dailyConfirmed: {[date: string]: {confirmed: number, total: number, rate: number}} } } = {};
     const personnelData: { [key: string]: number } = {};
+    const courierData: { [key: string]: { shipments: number, revenue: number, provinces: Set<string> } } = {};
     
     // --- INVENTARIO ---
     const inventoryFlowData: { [date: string]: { [store: string]: { inflow: number; outflow: number } } } = {};
@@ -160,6 +161,19 @@ const getMetricsFlow = ai.defineFlow(
       if (isOrderConfirmed && order.confirmedBy) {
           const person = order.confirmedBy || 'No especificado';
           personnelData[person] = (personnelData[person] || 0) + 1;
+      }
+
+      // Courier Metrics (from confirmed orders)
+      if (isOrderConfirmed && order.courier) {
+          const courier = order.courier || 'No especificado';
+          if (!courierData[courier]) {
+              courierData[courier] = { shipments: 0, revenue: 0, provinces: new Set() };
+          }
+          courierData[courier].shipments++;
+          courierData[courier].revenue += order.totalPrice || 0;
+          if (order.province) {
+              courierData[courier].provinces.add(order.province);
+          }
       }
 
       // Store Metrics
@@ -296,6 +310,17 @@ const getMetricsFlow = ai.defineFlow(
     const aggregatedPurchasedProducts: any[] = Object.entries(purchasedProductData).map(([name, totalOrders]) => ({ name, totalOrders })).sort((a, b) => b.totalOrders - a.totalOrders);
     
     const aggregatedPersonnelMetrics: any[] = Object.entries(personnelData).map(([name, confirmedOrders]) => ({ name, confirmedOrders })).sort((a, b) => b.confirmedOrders - a.confirmedOrders);
+    
+    // Aggregate Courier Metrics
+    const totalShipments = Object.values(courierData).reduce((sum, c) => sum + c.shipments, 0);
+    const aggregatedCourierMetrics: any[] = Object.entries(courierData).map(([name, data]) => ({
+        name,
+        totalShipments: data.shipments,
+        totalRevenue: data.revenue,
+        averageOrderValue: data.shipments > 0 ? data.revenue / data.shipments : 0,
+        provinceCount: data.provinces.size,
+        percentageOfTotal: totalShipments > 0 ? (data.shipments / totalShipments) * 100 : 0,
+    })).sort((a, b) => b.totalShipments - a.totalShipments);
     
     const aggregatedStoreMetrics = Object.entries(storeData).map(([name, data]) => {
       const topProducts = Object.entries(data.topProducts)
@@ -520,6 +545,7 @@ const getMetricsFlow = ai.defineFlow(
       mostPurchasedProducts: aggregatedPurchasedProducts,
       productConfirmationRates: aggregatedProductConfirmationRates,
       personnelMetrics: aggregatedPersonnelMetrics,
+      courierMetrics: aggregatedCourierMetrics,
       storeMetrics: aggregatedStoreMetrics,
       miscMetrics: miscMetrics,
       inventoryFlowTrend: aggregatedInventoryFlow,

@@ -7,7 +7,7 @@ import { format, subDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, CheckCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight, Package2, ArrowDown, ArrowUp, BarChartHorizontal, PieChart as PieChartIcon, TrendingDown, PackageSearch } from "lucide-react";
+import { Loader, CheckCircle, Percent, Calendar as CalendarIcon, Upload, MapPin, Package, UserCheck, Banknote, RefreshCw, Store, TrendingUp, ShoppingCart, Truck, LineChart as LineChartIcon, Users, ArrowRight, Package2, ArrowDown, ArrowUp, BarChartHorizontal, PieChart as PieChartIcon, TrendingDown, PackageSearch, Wallet, CreditCard } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LabelList, LineChart, Line, PieChart, Pie, Cell } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, DailyStorePerformance, DailyMetric, ProductConfirmationRate } from "@/ai/schemas/getMetricsSchema";
+import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, DailyStorePerformance, DailyMetric, ProductConfirmationRate, PaymentMethodMetric } from "@/ai/schemas/getMetricsSchema";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
@@ -300,6 +300,8 @@ export default function Dashboard() {
     dailyStorePerformance,
     productConfirmationRates
   } = displayMetrics || {};
+
+  const paymentMethodMetrics = fullMetrics?.paymentMethodMetrics || [];
 
   const globalTotal = (miscMetrics?.globalConfirmed ?? 0) + (miscMetrics?.globalUnconfirmed ?? 0);
   const globalRate = globalTotal > 0 ? ((miscMetrics?.globalConfirmed ?? 0) / globalTotal) * 100 : 0;
@@ -798,17 +800,30 @@ export default function Dashboard() {
                   <CardDescription className="text-xs sm:text-sm">Pedidos y gasto total</CardDescription>
               </CardHeader>
               <CardContent className="p-2 sm:p-6">
-               <div className="w-full h-[300px] sm:h-[400px]">
+               <div className="w-full h-[350px] sm:h-[450px]">
                 <ChartContainer config={{
                     totalOrders: { label: "Pedidos", color: "hsl(var(--chart-1))" },
                     totalSpent: { label: "Gasto S/", color: "hsl(var(--chart-2))" },
                 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={(provinceMetrics || []).slice(0, 10)} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
+                    <BarChart 
+                      data={(provinceMetrics || []).slice(0, 10)} 
+                      margin={{ top: 20, right: 20, left: 10, bottom: 80 }}
+                      barCategoryGap="20%"
+                    >
                         <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                        <XAxis dataKey="name" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} angle={-45} textAnchor="end" interval={0} />
-                        <YAxis yAxisId="left" orientation="left" stroke="hsl(var(--primary))" tick={{ fontSize: 9 }} />
-                        <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-1))" tick={{ fontSize: 9 }} />
+                        <XAxis 
+                          dataKey="name" 
+                          tick={{ fontSize: 9 }} 
+                          tickLine={false} 
+                          axisLine={false} 
+                          angle={-45} 
+                          textAnchor="end" 
+                          interval={0}
+                          height={70}
+                        />
+                        <YAxis yAxisId="left" orientation="left" stroke="hsl(var(--primary))" tick={{ fontSize: 9 }} width={40} />
+                        <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-1))" tick={{ fontSize: 9 }} width={40} />
                         <Tooltip 
                           content={<ChartTooltipContent 
                             formatter={(value, name) => (
@@ -819,9 +834,23 @@ export default function Dashboard() {
                             )}
                           />}
                         />
-                        <Legend verticalAlign="top" wrapperStyle={{ fontSize: '10px' }} iconSize={8} />
-                        <Bar yAxisId="left" dataKey="totalOrders" name="Pedidos" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                        <Bar yAxisId="right" dataKey="totalSpent" name="Gasto (S/)" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                        <Legend verticalAlign="top" wrapperStyle={{ fontSize: '10px', paddingBottom: '10px' }} iconSize={8} />
+                        <Bar 
+                          yAxisId="left" 
+                          dataKey="totalOrders" 
+                          name="Pedidos" 
+                          fill="hsl(var(--primary))" 
+                          radius={[4, 4, 0, 0]}
+                          maxBarSize={60}
+                        />
+                        <Bar 
+                          yAxisId="right" 
+                          dataKey="totalSpent" 
+                          name="Gasto (S/)" 
+                          fill="hsl(var(--chart-1))" 
+                          radius={[4, 4, 0, 0]}
+                          maxBarSize={60}
+                        />
                       </BarChart>
                   </ResponsiveContainer>
                 </ChartContainer>
@@ -836,6 +865,164 @@ export default function Dashboard() {
               </div>
           </Card>
       </div>
+      
+      {/* MÉTODOS DE PAGO */}
+      {paymentMethodMetrics && paymentMethodMetrics.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base sm:text-xl flex items-center">
+                <Wallet className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                Distribución por Método de Pago
+              </CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Gráfico de pastel de métodos de pago
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-2 sm:p-6">
+              <div className="w-full h-[300px] sm:h-[350px]">
+                <ChartContainer config={{
+                  revenue: { label: "Ingresos", color: "hsl(var(--chart-1))" },
+                }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={paymentMethodMetrics}
+                        dataKey="totalRevenue"
+                        nameKey="method"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        fill="hsl(var(--primary))"
+                        label={({ method, percentageOfTotal }) => 
+                          `${method}: ${percentageOfTotal.toFixed(1)}%`
+                        }
+                      >
+                        {paymentMethodMetrics.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={`hsl(var(--chart-${(index % 5) + 1}))`} 
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload || !payload.length) return null;
+                          const data = payload[0].payload;
+                          return (
+                            <div className="rounded-lg border bg-background p-2 shadow-md">
+                              <div className="font-semibold">{data.method}</div>
+                              <div className="text-xs text-muted-foreground">
+                                Pedidos: {data.totalOrders}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Ingresos: S/ {data.totalRevenue.toFixed(2)}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Promedio: S/ {data.averageOrderValue.toFixed(2)}
+                              </div>
+                              <div className="text-xs font-semibold">
+                                {data.percentageOfTotal.toFixed(1)}% del total
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Legend verticalAlign="bottom" height={36} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base sm:text-xl flex items-center">
+                <CreditCard className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                Comparación de Métodos de Pago
+              </CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Pedidos e ingresos por método
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-2 sm:p-6">
+              <div className="w-full h-[300px] sm:h-[350px]">
+                <ChartContainer config={{
+                  orders: { label: "Pedidos", color: "hsl(var(--primary))" },
+                  revenue: { label: "Ingresos (S/)", color: "hsl(var(--chart-1))" },
+                }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart 
+                      data={paymentMethodMetrics}
+                      margin={{ top: 20, right: 20, left: 10, bottom: 60 }}
+                      barCategoryGap="20%"
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="method" 
+                        angle={-45} 
+                        textAnchor="end" 
+                        height={60}
+                        style={{ fontSize: '11px' }}
+                      />
+                      <YAxis 
+                        yAxisId="left"
+                        orientation="left"
+                        width={40}
+                        style={{ fontSize: '11px' }}
+                      />
+                      <YAxis 
+                        yAxisId="right"
+                        orientation="right"
+                        width={50}
+                        style={{ fontSize: '11px' }}
+                      />
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload || !payload.length) return null;
+                          const data = payload[0].payload;
+                          return (
+                            <div className="rounded-lg border bg-background p-2 shadow-md">
+                              <div className="font-semibold">{data.method}</div>
+                              <div className="text-xs text-muted-foreground">
+                                Pedidos: {data.totalOrders}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Ingresos: S/ {data.totalRevenue.toFixed(2)}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Promedio: S/ {data.averageOrderValue.toFixed(2)}
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Legend verticalAlign="top" wrapperStyle={{ fontSize: '10px', paddingBottom: '10px' }} iconSize={8} />
+                      <Bar 
+                        yAxisId="left" 
+                        dataKey="totalOrders" 
+                        name="Pedidos" 
+                        fill="hsl(var(--primary))" 
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={50}
+                      />
+                      <Bar 
+                        yAxisId="right" 
+                        dataKey="totalRevenue" 
+                        name="Ingresos (S/)" 
+                        fill="hsl(var(--chart-1))" 
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={50}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6">
         <Card className="lg:col-span-2">

@@ -67,6 +67,15 @@ export const CourierMetricSchema = z.object({
 });
 export type CourierMetric = z.infer<typeof CourierMetricSchema>;
 
+export const PaymentMethodMetricSchema = z.object({
+  method: z.string(),
+  totalOrders: z.number(),
+  totalRevenue: z.number(),
+  averageOrderValue: z.number(),
+  percentageOfTotal: z.number(),
+});
+export type PaymentMethodMetric = z.infer<typeof PaymentMethodMetricSchema>;
+
 
 export const MiscMetricsSchema = z.object({
   globalConfirmed: z.number(),
@@ -184,6 +193,7 @@ export const GetMetricsOutputSchema = z.object({
     productConfirmationRates: z.array(ProductConfirmationRateSchema).optional(),
     personnelMetrics: z.array(PersonnelMetricSchema),
     courierMetrics: z.array(CourierMetricSchema).optional(),
+    paymentMethodMetrics: z.array(PaymentMethodMetricSchema).optional(),
     storeMetrics: z.array(StoreMetricSchema),
     miscMetrics: MiscMetricsSchema,
     inventoryFlowTrend: z.array(InventoryFlowTrendSchema).optional(),

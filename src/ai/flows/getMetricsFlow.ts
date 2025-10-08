@@ -75,6 +75,7 @@ const getMetricsFlow = ai.defineFlow(
     const storeData: { [key: string]: { totalOrders: number, confirmedOrders: number, totalSpent: number, topProducts: {[key: string]: number}, dailyConfirmed: {[date: string]: {confirmed: number, total: number, rate: number}} } } = {};
     const personnelData: { [key: string]: number } = {};
     const courierData: { [key: string]: { shipments: number, revenue: number, provinces: Set<string> } } = {};
+    const paymentMethodData: { [key: string]: { orders: number, revenue: number } } = {};
     
     // --- INVENTARIO ---
     const inventoryFlowData: { [date: string]: { [store: string]: { inflow: number; outflow: number } } } = {};
@@ -174,6 +175,16 @@ const getMetricsFlow = ai.defineFlow(
           if (order.province) {
               courierData[courier].provinces.add(order.province);
           }
+      }
+
+      // Payment Method Metrics (from delivered orders)
+      if (order.isDelivered && order.paymentMethod) {
+          const method = order.paymentMethod;
+          if (!paymentMethodData[method]) {
+              paymentMethodData[method] = { orders: 0, revenue: 0 };
+          }
+          paymentMethodData[method].orders++;
+          paymentMethodData[method].revenue += order.totalPrice || 0;
       }
 
       // Store Metrics
@@ -321,6 +332,16 @@ const getMetricsFlow = ai.defineFlow(
         provinceCount: data.provinces.size,
         percentageOfTotal: totalShipments > 0 ? (data.shipments / totalShipments) * 100 : 0,
     })).sort((a, b) => b.totalShipments - a.totalShipments);
+
+    // Aggregate Payment Method Metrics
+    const totalPaymentOrders = Object.values(paymentMethodData).reduce((sum, p) => sum + p.orders, 0);
+    const aggregatedPaymentMethodMetrics: any[] = Object.entries(paymentMethodData).map(([method, data]) => ({
+        method,
+        totalOrders: data.orders,
+        totalRevenue: data.revenue,
+        averageOrderValue: data.orders > 0 ? data.revenue / data.orders : 0,
+        percentageOfTotal: totalPaymentOrders > 0 ? (data.orders / totalPaymentOrders) * 100 : 0,
+    })).sort((a, b) => b.totalOrders - a.totalOrders);
     
     const aggregatedStoreMetrics = Object.entries(storeData).map(([name, data]) => {
       const topProducts = Object.entries(data.topProducts)
@@ -546,6 +567,7 @@ const getMetricsFlow = ai.defineFlow(
       productConfirmationRates: aggregatedProductConfirmationRates,
       personnelMetrics: aggregatedPersonnelMetrics,
       courierMetrics: aggregatedCourierMetrics,
+      paymentMethodMetrics: aggregatedPaymentMethodMetrics,
       storeMetrics: aggregatedStoreMetrics,
       miscMetrics: miscMetrics,
       inventoryFlowTrend: aggregatedInventoryFlow,

@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, DailyStorePerformance, DailyMetric, ProductConfirmationRate } from "@/ai/schemas/getMetricsSchema";
+import type { ProvinceMetric, ProductMetric, PersonnelMetric, MiscMetrics, GetMetricsOutput, StoreMetric, GetMetricsInput, DailyStorePerformance, DailyMetric, ProductConfirmationRate, CourierPerformance } from "@/ai/schemas/getMetricsSchema";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
@@ -197,7 +197,9 @@ export default function Dashboard() {
   }, [date, processAndSetMetrics, toast]);
 
   useEffect(() => {
-    fetchMetrics(false);
+    if(date){
+        fetchMetrics(false);
+    }
   }, [date, fetchMetrics]);
 
 
@@ -252,14 +254,13 @@ export default function Dashboard() {
       dailyMetrics: filteredDailyMetrics,
       miscMetrics: filteredMiscMetrics,
       mostPurchasedProducts: filteredPurchasedProducts,
-      // For simplicity, we keep some metrics global, as recalculating them client-side would be complex
-      // For a full implementation, these would need to be recalculated or fetched again
       provinceMetrics: fullMetrics.provinceMetricsByStore?.[lowerCaseStoreName] || [],
       mostRequestedProducts: fullMetrics.mostRequestedProducts, // Requested is global, not store-specific
       personnelMetrics: fullMetrics.personnelMetrics, // This is global across stores
       storeMetrics: fullMetrics.storeMetrics.filter(sm => sm.name.toLowerCase() === lowerCaseStoreName),
       dailyStorePerformance: fullMetrics.dailyStorePerformance, // Keep this global for comparison
       productConfirmationRates: fullMetrics.productConfirmationRates,
+      courierPerformance: fullMetrics.courierPerformance, // Keep couriers global
     };
     
     setDisplayMetrics(newDisplayMetrics);
@@ -296,7 +297,8 @@ export default function Dashboard() {
     mostPurchasedProducts,
     storeMetrics,
     dailyStorePerformance,
-    productConfirmationRates
+    productConfirmationRates,
+    courierPerformance,
   } = displayMetrics || {};
 
   const globalTotal = (miscMetrics?.globalConfirmed ?? 0) + (miscMetrics?.globalUnconfirmed ?? 0);
@@ -847,33 +849,30 @@ export default function Dashboard() {
                 {renderProductList(mostPurchasedProducts)}
             </CardContent>
         </Card>
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5" />Rendimiento de Couriers (Global)</CardTitle>
+                <CardDescription>Top 5 couriers por número de envíos.</CardDescription>
+            </CardHeader>
+            <CardContent>
+               <ul className="space-y-3">
+                  {(courierPerformance || []).slice(0, 5).map((courier, index) => (
+                    <li key={courier.courier} className="flex justify-between items-center text-sm">
+                      <span className="truncate pr-4">{index + 1}. {courier.courier}</span>
+                      <span className="font-bold text-primary">{courier.envios}</span>
+                    </li>
+                  ))}
+                </ul>
+            </CardContent>
+            <CardFooter>
+                 <Link href="/dashboard/shipments" passHref className="w-full">
+                    <Button variant="outline" className="w-full">
+                        Ver Detalles de Envíos <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
+            </CardFooter>
+        </Card>
       </div>
-
-      <Card>
-          <CardHeader>
-              <CardTitle className="flex items-center"><Truck className="mr-2 h-5 w-5" />Resumen de Inventario</CardTitle>
-              <CardDescription>Una vista rápida del flujo de inventario y la actividad del equipo.</CardDescription>
-          </CardHeader>
-          <CardContent>
-              <div className="grid grid-cols-2 gap-4 text-center">
-                  <div>
-                      <p className="text-sm text-muted-foreground">Total Entradas</p>
-                      <p className="text-2xl font-bold text-green-500">{(0).toLocaleString()}</p>
-                  </div>
-                  <div>
-                      <p className="text-sm text-muted-foreground">Total Salidas</p>
-                      <p className="text-2xl font-bold text-red-500">{(0).toLocaleString()}</p>
-                  </div>
-              </div>
-          </CardContent>
-          <div className="p-4 pt-0 text-center">
-              <Link href="/dashboard/inventory" passHref>
-                  <Button variant="outline" className="w-full sm:w-auto">
-                      Ver Análisis de Inventario <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-              </Link>
-          </div>
-      </Card>
     </div>
   );
 }

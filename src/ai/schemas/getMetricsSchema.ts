@@ -162,6 +162,18 @@ export type MonthlyProductReport = z.infer<typeof MonthlyProductReportSchema>;
 export const DailyStorePerformanceSchema = z.record(z.union([z.string(), z.number()]));
 export type DailyStorePerformance = z.infer<typeof DailyStorePerformanceSchema>;
 
+// --- Esquema para Courier Performance ---
+export const CourierPerformanceSchema = z.object({
+  courier: z.string(),
+  envios: z.number(),
+  ingresos: z.number(),
+  promedio: z.number(),
+  provincias: z.number(),
+  porcentaje: z.number(),
+  avgDeliveryTime: z.number().nullable(),
+});
+export type CourierPerformance = z.infer<typeof CourierPerformanceSchema>;
+
 
 // --- Esquema de Salida Principal ---
 
@@ -173,6 +185,7 @@ export const GetMetricsOutputSchema = z.object({
     mostPurchasedProducts: z.array(ProductMetricSchema),
     productConfirmationRates: z.array(ProductConfirmationRateSchema).optional(),
     personnelMetrics: z.array(PersonnelMetricSchema),
+    courierPerformance: z.array(CourierPerformanceSchema).optional(),
     storeMetrics: z.array(StoreMetricSchema),
     miscMetrics: MiscMetricsSchema,
     inventoryFlowTrend: z.array(InventoryFlowTrendSchema).optional(),
@@ -188,8 +201,3 @@ export const GetMetricsOutputSchema = z.object({
 });
 
 export type GetMetricsOutput = z.infer<typeof GetMetricsOutputSchema>;
-
-    
-
-    
-

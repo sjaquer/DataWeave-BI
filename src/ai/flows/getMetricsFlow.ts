@@ -1,5 +1,4 @@
 
-
 'use server';
 /**
  * @fileOverview Flujo para obtener y consolidar todas las métricas de Firestore.
@@ -46,13 +45,13 @@ const getMetricsFlow = ai.defineFlow(
     if (input && input.startDate && input.endDate) {
       const startDate = new Date(input.startDate);
       const endDate = new Date(input.endDate);
-      ordersQuery = ordersQuery.where('createdAt', '>=', startDate).where('createdAt', '<=', endDate);
+      ordersQuery = ordersQuery.where('confirmedAt', '>=', startDate).where('confirmedAt', '<=', endDate);
       inventoryQuery = inventoryQuery.where('timestamp', '>=', startDate).where('timestamp', '<=', endDate);
     } else {
       // Por defecto, últimos 6 meses si no hay filtro
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      ordersQuery = ordersQuery.where('createdAt', '>=', sixMonthsAgo);
+      ordersQuery = ordersQuery.where('confirmedAt', '>=', sixMonthsAgo);
       inventoryQuery = inventoryQuery.where('timestamp', '>=', sixMonthsAgo);
     }
     
@@ -74,6 +73,7 @@ const getMetricsFlow = ai.defineFlow(
     const purchasedProductData: { [key: string]: number } = {};
     const storeData: { [key: string]: { totalOrders: number, confirmedOrders: number, totalSpent: number, topProducts: {[key: string]: number}, dailyConfirmed: {[date: string]: {confirmed: number, total: number, rate: number}} } } = {};
     const personnelData: { [key: string]: number } = {};
+    const courierData: { [key: string]: { totalOrders: number; confirmedOrders: number; totalSpent: number; provinces: Set<string>, totalDeliveryTime: number, deliveredCount: number } } = {};
     
     // --- INVENTARIO ---
     const inventoryFlowData: { [date: string]: { [store: string]: { inflow: number; outflow: number } } } = {};
@@ -121,8 +121,11 @@ const getMetricsFlow = ai.defineFlow(
         provinceData[rawProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
       }
       provinceData[rawProvince].totalOrders++;
-      provinceData[rawProvince].totalSpent += order.totalPrice || 0;
-      if (isOrderConfirmed) provinceData[rawProvince].confirmedOrders++;
+      if (isOrderConfirmed) {
+        provinceData[rawProvince].confirmedOrders++;
+        provinceData[rawProvince].totalSpent += order.totalPrice || 0;
+      }
+      
 
       // Province Metrics By Store
       if (storeName !== 'Desconocida') {
@@ -132,8 +135,10 @@ const getMetricsFlow = ai.defineFlow(
           provinceDataByStore[lowerCaseStoreName][rawProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
         }
         provinceDataByStore[lowerCaseStoreName][rawProvince].totalOrders++;
-        provinceDataByStore[lowerCaseStoreName][rawProvince].totalSpent += order.totalPrice || 0;
-        if (isOrderConfirmed) provinceDataByStore[lowerCaseStoreName][rawProvince].confirmedOrders++;
+        if (isOrderConfirmed) {
+          provinceDataByStore[lowerCaseStoreName][rawProvince].confirmedOrders++;
+          provinceDataByStore[lowerCaseStoreName][rawProvince].totalSpent += order.totalPrice || 0;
+        }
       }
       
       // Product Metrics
@@ -162,14 +167,34 @@ const getMetricsFlow = ai.defineFlow(
           personnelData[person] = (personnelData[person] || 0) + 1;
       }
 
+      // Courier Metrics
+      if (isOrderConfirmed && order.courier) {
+        const courierName = order.courier;
+        if (!courierData[courierName]) {
+          courierData[courierName] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0, provinces: new Set(), totalDeliveryTime: 0, deliveredCount: 0 };
+        }
+        courierData[courierName].totalOrders++;
+        courierData[courierName].confirmedOrders++;
+        courierData[courierName].totalSpent += order.totalPrice || 0;
+        if (order.province) {
+            courierData[courierName].provinces.add(order.province);
+        }
+        if (order.deliveryTimeInHours) {
+            courierData[courierName].totalDeliveryTime += order.deliveryTimeInHours;
+            courierData[courierName].deliveredCount++;
+        }
+      }
+
+
       // Store Metrics
       if (!storeData[storeName]) {
           storeData[storeName] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0, topProducts: {}, dailyConfirmed: {} };
       }
       storeData[storeName].totalOrders++;
-      storeData[storeName].totalSpent += order.totalPrice || 0;
+      
       if (isOrderConfirmed) {
           storeData[storeName].confirmedOrders++;
+          storeData[storeName].totalSpent += order.totalPrice || 0;
       }
     });
 
@@ -512,6 +537,17 @@ const getMetricsFlow = ai.defineFlow(
       dailyOrderVariation: dailyOrderVariation
     };
 
+    const courierPerformance = Object.entries(courierData).map(([name, data]) => ({
+      courier: name,
+      envios: data.confirmedOrders,
+      ingresos: data.totalSpent,
+      promedio: data.confirmedOrders > 0 ? data.totalSpent / data.confirmedOrders : 0,
+      provincias: data.provinces.size,
+      porcentaje: totalConfirmed > 0 ? (data.confirmedOrders / totalConfirmed) * 100 : 0,
+      avgDeliveryTime: data.deliveredCount > 0 ? data.totalDeliveryTime / data.deliveredCount : null,
+    })).sort((a, b) => b.envios - a.envios);
+
+
     return {
       dailyMetrics: aggregatedDailyMetrics,
       provinceMetrics: aggregatedProvinceMetrics,
@@ -520,6 +556,7 @@ const getMetricsFlow = ai.defineFlow(
       mostPurchasedProducts: aggregatedPurchasedProducts,
       productConfirmationRates: aggregatedProductConfirmationRates,
       personnelMetrics: aggregatedPersonnelMetrics,
+      courierPerformance: courierPerformance,
       storeMetrics: aggregatedStoreMetrics,
       miscMetrics: miscMetrics,
       inventoryFlowTrend: aggregatedInventoryFlow,
@@ -540,9 +577,3 @@ const getMetricsFlow = ai.defineFlow(
 export async function getMetrics(input: GetMetricsInput): Promise<GetMetricsOutput> {
     return getMetricsFlow(input);
 }
-
-    
-
-    
-
-    

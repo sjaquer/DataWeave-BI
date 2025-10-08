@@ -4,65 +4,102 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, Package, Truck, DollarSign } from "lucide-react";
+import { TrendingUp, Package, Truck, DollarSign, RefreshCw, Calendar as CalendarIcon } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { format, subDays, startOfDay } from "date-fns";
+import { format, subDays } from "date-fns";
+import { es } from 'date-fns/locale';
+import { DateRange } from "react-day-picker";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
-import type { GetMetricsOutput } from "@/ai/schemas/getMetricsSchema";
+import type { GetMetricsOutput, GetMetricsInput, CourierPerformance } from "@/ai/schemas/getMetricsSchema";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82ca9d', '#ffc658', '#ff7c7c'];
 const CACHE_KEY = 'dashboardMetricsCache_shipments';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
 
-interface ShipmentData {
-  orderName: string;
-  confirmedAt: Date;
-  courier: string;
-  totalPrice: number;
-  province: string;
-  storeId: string;
-  products: Array<{ title: string; quantity?: number; price?: number }>;
-  paymentMethod?: string;
-  deliveryTimeInHours?: number | null;
-}
 
 export default function ShipmentsPage() {
-  const [shipmentsData, setShipmentsData] = useState<GetMetricsOutput | null>(null);
+  const [metrics, setMetrics] = useState<GetMetricsOutput | null>(null);
   const [loading, setLoading] = useState(true);
+  const [date, setDate] = useState<DateRange | undefined>(undefined);
   const { toast } = useToast();
 
-  const fetchShipmentMetrics = useCallback(async () => {
+  useEffect(() => {
+    const defaultDate = new Date();
+    setDate({ from: subDays(defaultDate, 29), to: defaultDate });
+  }, []);
+
+  const handleDatePreset = (preset: string) => {
+    const to = new Date();
+    let from: Date | undefined;
+
+    switch (preset) {
+      case 'today':
+        from = new Date();
+        break;
+      case 'yesterday':
+        from = subDays(new Date(), 1);
+        setDate({ from, to: from });
+        return;
+      case '7days':
+        from = new Date();
+        from.setDate(from.getDate() - 6);
+        break;
+      case '30days':
+        from = new Date();
+        from.setDate(from.getDate() - 29);
+        break;
+    }
+    setDate({ from, to });
+  };
+
+  const fetchShipmentMetrics = useCallback(async (forceRefresh = false) => {
+    if (!date?.from) return;
     setLoading(true);
-    try {
-      const cachedData = localStorage.getItem(CACHE_KEY);
-      if (cachedData) {
-        const { data, timestamp } = JSON.parse(cachedData);
-        if (Date.now() - timestamp < CACHE_EXPIRATION_MS) {
-          setShipmentsData(data);
-          setLoading(false);
-          return;
-        }
-      }
-    } catch (e) {
-      console.error("Error reading from cache", e);
+    
+    const cacheKeyWithDate = `${CACHE_KEY}_${date.from.toISOString()}_${date.to?.toISOString()}`;
+
+    if (!forceRefresh) {
+        try {
+            const cachedData = localStorage.getItem(cacheKeyWithDate);
+            if (cachedData) {
+                const { data, timestamp } = JSON.parse(cachedData);
+                if (Date.now() - timestamp < CACHE_EXPIRATION_MS) {
+                    setMetrics(data);
+                    setLoading(false);
+                    return;
+                }
+            }
+        } catch (e) { console.error("Error reading from cache", e); }
     }
     
     try {
-      const thirtyDaysAgo = subDays(new Date(), 30);
-      const metrics = await getMetrics({ startDate: thirtyDaysAgo.toISOString() });
-      setShipmentsData(metrics);
+        const startDate = new Date(date.from);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = date.to ? new Date(date.to) : new Date(date.from);
+        endDate.setHours(23, 59, 59, 999);
+        
+        const input: GetMetricsInput = { 
+            startDate: startDate.toISOString(), 
+            endDate: endDate.toISOString() 
+        };
+        
+        const metricsData = await getMetrics(input);
+        setMetrics(metricsData);
       
-      try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ data: metrics, timestamp: Date.now() }));
-      } catch (e) {
-        console.error("Error saving to cache", e);
-      }
+        try {
+            localStorage.setItem(cacheKeyWithDate, JSON.stringify({ data: metricsData, timestamp: Date.now() }));
+        } catch (e) { console.error("Error saving to cache", e); }
 
     } catch (error) {
       console.error("Error al cargar las métricas de envíos:", error);
@@ -74,11 +111,13 @@ export default function ShipmentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [date, toast]);
   
   useEffect(() => {
-    fetchShipmentMetrics();
-  }, [fetchShipmentMetrics]);
+    if (date?.from) {
+      fetchShipmentMetrics();
+    }
+  }, [date, fetchShipmentMetrics]);
 
   const {
     totalShipments,
@@ -87,69 +126,35 @@ export default function ShipmentsPage() {
     totalProducts,
     shipmentsByDate,
     topProvinces,
-    paymentMethods,
-    courierPerformance,
+    courierPerformanceData,
     storePerformance
   } = useMemo(() => {
-    if (!shipmentsData) return {
-      totalShipments: 0,
-      totalRevenue: 0,
-      avgOrderValue: 0,
-      totalProducts: 0,
-      shipmentsByDate: [],
-      topProvinces: [],
-      paymentMethods: [],
-      courierPerformance: [],
-      storePerformance: [],
+    if (!metrics) return {
+      totalShipments: 0, totalRevenue: 0, avgOrderValue: 0, totalProducts: 0,
+      shipmentsByDate: [], topProvinces: [], courierPerformanceData: [], storePerformance: []
     };
 
-    const confirmedOrders = shipmentsData.dailyMetrics.reduce((sum, day) => sum + day.confirmed, 0);
-    const totalRev = shipmentsData.provinceMetrics.reduce((sum, p) => sum + p.totalSpent, 0);
-    const totalProds = shipmentsData.mostPurchasedProducts.reduce((sum, p) => sum + p.totalOrders, 0);
+    const confirmedOrders = metrics.dailyMetrics.reduce((sum, day) => sum + day.confirmed, 0);
+    const totalRev = metrics.provinceMetrics.reduce((sum, p) => sum + p.totalSpent, 0);
+    const totalProds = metrics.mostPurchasedProducts.reduce((sum, p) => sum + p.totalOrders, 0);
     
-    const byDate = shipmentsData.dailyMetrics.map(day => {
-        const dateKey = day.date;
-        const totalSpent = shipmentsData.provinceMetrics
-            .filter(p => shipmentsData.dailyMetrics.find(d => d.date === dateKey))
-            .reduce((sum, p) => sum + p.totalSpent, 0); // This logic needs to be improved in the backend
-            
-        return {
-            date: dateKey,
-            envios: day.confirmed,
-            ingresos: totalSpent // This is an approximation
-        };
+    const byDate = metrics.dailyMetrics.map(day => {
+        let dailyRevenue = 0;
+        // This is a rough estimation; a backend change is needed for precision
+        if (metrics.provinceMetrics.length > 0 && confirmedOrders > 0) {
+            dailyRevenue = (totalRev / confirmedOrders) * day.confirmed;
+        }
+        return { date: day.date, envios: day.confirmed, ingresos: dailyRevenue };
     }).reverse();
 
-
-    const provinces = shipmentsData.provinceMetrics
+    const provinces = metrics.provinceMetrics
         .map(p => ({ name: p.name, value: p.confirmedOrders, revenue: p.totalSpent }))
         .sort((a,b) => b.value - a.value)
         .slice(0, 8);
 
-    const payments = shipmentsData.storeMetrics.reduce((acc, store) => {
-      // This is a placeholder as paymentMethod is not in the metrics
-      // We will simulate it for now
-      const methods = ["Contra Entrega", "Adelantado", "Pago Parcial"];
-      methods.forEach(m => {
-        const count = Math.floor(store.confirmedOrders / methods.length);
-        acc[m] = (acc[m] || 0) + count;
-      });
-      return acc;
-    }, {} as Record<string, number>);
-
-    const paymentData = Object.entries(payments).map(([name, value]) => ({name, value})).sort((a,b) => b.value - a.value);
-
-    const couriers = shipmentsData.personnelMetrics.map((p, index) => ({
-      courier: p.name,
-      envios: p.confirmedOrders,
-      ingresos: shipmentsData.provinceMetrics.reduce((sum, prov) => sum + prov.totalSpent, 0) / shipmentsData.personnelMetrics.length, // Approximation
-      promedio: (shipmentsData.provinceMetrics.reduce((sum, prov) => sum + prov.totalSpent, 0) / shipmentsData.personnelMetrics.length) / p.confirmedOrders,
-      provincias: Math.ceil(shipmentsData.provinceMetrics.length / (index + 1)),
-      porcentaje: (p.confirmedOrders / confirmedOrders) * 100,
-      avgDeliveryTime: 24 + Math.random() * 48 // Simulated
-    })).sort((a,b) => b.envios - a.envios);
+    const couriers = (metrics.courierPerformance || []).sort((a,b) => b.envios - a.envios);
     
-    const stores = shipmentsData.storeMetrics
+    const stores = (metrics.storeMetrics || [])
       .map(s => ({ name: s.name, envios: s.confirmedOrders }))
       .sort((a, b) => b.envios - a.envios);
 
@@ -160,11 +165,10 @@ export default function ShipmentsPage() {
       totalProducts: totalProds,
       shipmentsByDate: byDate,
       topProvinces: provinces,
-      paymentMethods: paymentData,
-      courierPerformance: couriers,
+      courierPerformanceData: couriers,
       storePerformance: stores,
     };
-  }, [shipmentsData]);
+  }, [metrics]);
 
   if (loading) {
     return (
@@ -190,17 +194,45 @@ export default function ShipmentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <SidebarTrigger className="md:hidden" />
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Análisis de Envíos</h1>
-          <p className="text-muted-foreground">
-            Monitoreo y análisis de pedidos confirmados - Últimos 30 días
-          </p>
+       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+         <div className="flex items-center gap-4">
+            <SidebarTrigger className="md:hidden"/>
+            <div>
+                <h1 className="text-3xl font-bold tracking-tight">Análisis de Envíos</h1>
+                <p className="text-muted-foreground">Monitoreo y análisis de pedidos confirmados.</p>
+            </div>
+        </div>
+         <div className="flex items-center gap-2 flex-wrap">
+          <Select onValueChange={handleDatePreset}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Filtro Rápido" />
+              </SelectTrigger>
+              <SelectContent>
+                  <SelectItem value="today">Hoy</SelectItem>
+                  <SelectItem value="yesterday">Ayer</SelectItem>
+                  <SelectItem value="7days">Últimos 7 días</SelectItem>
+                  <SelectItem value="30days">Últimos 30 días</SelectItem>
+              </SelectContent>
+          </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {date?.from ? (date.to ? (<>{format(date.from, "LLL dd, y", { locale: es })} - {format(date.to, "LLL dd, y", { locale: es })}</>) : (format(date.from, "LLL dd, y", { locale: es }))) : (<span>Selecciona un rango</span>)}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
+            </PopoverContent>
+          </Popover>
+          <Button className="flex-1 sm:flex-initial" variant="outline" size="sm" onClick={() => fetchShipmentMetrics(true)} disabled={loading}>
+            {loading ? <Skeleton className="w-20 h-5" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            Actualizar
+          </Button>
         </div>
       </div>
 
-      {totalShipments === 0 && (
+      {totalShipments === 0 && !loading && (
         <Alert>
           <AlertDescription>
             No hay envíos confirmados en el período seleccionado. Los datos aparecerán cuando se confirmen pedidos.
@@ -245,7 +277,7 @@ export default function ShipmentsPage() {
             <Truck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{courierPerformance.length}</div>
+            <div className="text-2xl font-bold">{courierPerformanceData.length}</div>
             <p className="text-xs text-muted-foreground">Empresas de transporte</p>
           </CardContent>
         </Card>
@@ -255,7 +287,7 @@ export default function ShipmentsPage() {
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle>Tendencia de Envíos e Ingresos</CardTitle>
-            <CardDescription>Evolución diaria en los últimos 30 días</CardDescription>
+            <CardDescription>Evolución diaria en el período seleccionado.</CardDescription>
           </CardHeader>
           <CardContent>
             {shipmentsByDate.length > 0 && shipmentsByDate.some(d => d.envios > 0) ? (
@@ -326,7 +358,7 @@ export default function ShipmentsPage() {
           <CardDescription>Análisis completo de empresas de transporte</CardDescription>
         </CardHeader>
         <CardContent>
-          {courierPerformance.length > 0 ? (
+          {courierPerformanceData.length > 0 ? (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -341,7 +373,7 @@ export default function ShipmentsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {courierPerformance.map((courier, index) => (
+                  {courierPerformanceData.map((courier, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium"><div className="flex items-center gap-2">{courier.courier}{index === 0 && (<Badge variant="default" className="text-xs">Top</Badge>)}</div></TableCell>
                       <TableCell className="text-right font-mono">{courier.envios}</TableCell>

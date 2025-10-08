@@ -1,10 +1,10 @@
-// src/app/api/webhooks/sheets/route.ts
+// src/app/api/webhooks/delivered/route.ts
 import { NextResponse } from 'next/server';
-import { updateConfirmedOrders } from '@/lib/firestore';
-import type { ConfirmedOrderInfo } from '@/lib/firestore';
+import { updateDeliveredOrders } from '@/lib/firestore';
+import type { DeliveredOrderInfo } from '@/lib/firestore';
 
 /**
- * Endpoint para recibir los webhooks desde Google Sheets (hoja "REPORTE_ENVIADOS").
+ * Endpoint para recibir los webhooks desde Google Sheets (hoja "ENTREGADOS").
  * Acepta un objeto JSON con la clave "data", que contiene un array de objetos de pedido.
  */
 export async function POST(req: Request) {
@@ -12,18 +12,18 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     // El script de Apps Script envía un objeto con una clave "data".
-    const confirmedOrders: ConfirmedOrderInfo[] = body.data;
+    const deliveredOrders: DeliveredOrderInfo[] = body.data;
 
-    if (!Array.isArray(confirmedOrders) || confirmedOrders.length === 0) {
+    if (!Array.isArray(deliveredOrders) || deliveredOrders.length === 0) {
       return NextResponse.json({ status: 'error', message: 'El payload está vacío o no contiene un array "data" válido.' }, { status: 400 });
     }
 
-    const sample = confirmedOrders[0];
-    if (typeof sample.PEDIDO === 'undefined' || typeof sample.TIENDA === 'undefined') {
-      return NextResponse.json({ status: 'error', message: 'Los objetos de pedido deben contener al menos los campos PEDIDO y TIENDA.' }, { status: 400 });
+    const sample = deliveredOrders[0];
+    if (typeof sample.ID === 'undefined' || typeof sample.PEDIDO === 'undefined') {
+      return NextResponse.json({ status: 'error', message: 'Los objetos de pedido deben contener al menos los campos ID y PEDIDO.' }, { status: 400 });
     }
 
-    const result = await updateConfirmedOrders(confirmedOrders);
+    const result = await updateDeliveredOrders(deliveredOrders);
 
     if (result.status === 'error') {
       return NextResponse.json(result, { status: 500 });
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     return NextResponse.json(result, { status: 200 });
 
   } catch (error) {
-    console.error('Error en el webhook de Google Sheets:', error);
+    console.error('Error en el webhook de entregados de Google Sheets:', error);
     const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error desconocido.';
     return NextResponse.json({ status: 'error', message: `Error interno del servidor: ${errorMessage}` }, { status: 500 });
   }

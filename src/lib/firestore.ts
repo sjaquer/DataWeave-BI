@@ -1,3 +1,4 @@
+// src/lib/firestore.ts
 'use server';
 
 import { db } from '@/lib/firebase-admin';
@@ -25,7 +26,17 @@ export interface ConfirmedOrderInfo {
   COURIER?: string;
   PROVINCIA?: string; 
   'FECHA DE ATENCIÓN'?: string;
-  PRODUCTO?: string; // Campo para los productos desde Google Sheets
+  PRODUCTO?: string;
+}
+
+export interface DeliveredOrderInfo {
+  ID: string;
+  PEDIDO: string;
+  TIENDA: string;
+  TOTAL: number;
+  'MONTO PENDIENTE': number;
+  'FECHA ENVIADO'?: string;
+  'FECHA ENTREGADO'?: string;
 }
 
 export interface InventoryMovement {
@@ -52,8 +63,8 @@ export interface Order {
     created_at: string;
     updated_at?: string;
     total_price: string;
-    financial_status?: string; // paid, pending, partially_paid, refunded, etc.
-    fulfillment_status?: string | null; // fulfilled, null, partial
+    financial_status?: string; 
+    fulfillment_status?: string | null;
     customer?: {
         first_name: string;
         last_name: string;
@@ -74,31 +85,21 @@ export interface Order {
 
 // --- Funciones de Normalización y Creación de ID ---
 
-/**
- * Extrae solo los dígitos de un número de pedido (ej: "#1001" -> "1001").
- */
 function normalizeOrderNumber(name: string): string {
     if (!name) return '';
     const match = String(name).match(/[0-9]+(-[0-9]+)*$/);
     return match ? match[0] : name.replace(/[^0-9a-zA-Z-]/g, '');
 }
 
-/**
- * Crea un ID de documento único y consistente para cada pedido.
- * Formato: "idDeTienda-numeroDePedidoNormalizado" (ej: "tienda-1-1001")
- */
 function getShopifyOrderDocId(orderName: string, storeId: string): string {
     const normalizedNumber = normalizeOrderNumber(orderName);
-    const normalizedStoreId = (storeId || 'sin-tienda').toLowerCase().replace(/\s+/g, '-');
+    const normalizedStoreId = (storeId || 'sin-tienda').toLowerCase().replace(/\s+/g, '-').replace('perú', '').replace('peru','').trim();
     return `${normalizedStoreId}-${normalizedNumber}`;
 }
 
 
-// --- Lógica de Webhooks (Shopify y Google Sheets) ---
+// --- Lógica de Webhooks ---
 
-/**
- * Procesa un nuevo pedido que llega en tiempo real desde un webhook de Shopify.
- */
 export async function processNewShopifyOrder(order: Order, storeId: string) {
   const orderDate = new Date(order.created_at);
 
@@ -134,7 +135,6 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
   };
 
   try {
-    // Usamos set con merge:true para crear o actualizar el pedido sin sobreescribir datos de confirmación
     await db.collection('shopify_orders').doc(orderDocId).set(orderData, { merge: true });
     console.log(`[Firestore] Pedido ${order.name} de ${storeId} guardado/actualizado en 'shopify_orders'.`);
   } catch (error) {
@@ -143,21 +143,16 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
   }
 }
 
-/**
- * Procesa una actualización de pedido que llega en tiempo real desde un webhook de Shopify.
- */
 export async function processUpdatedShopifyOrder(order: Order, storeId: string) {
   const orderDocId = getShopifyOrderDocId(order.name, storeId);
   const orderDocRef = db.collection('shopify_orders').doc(orderDocId);
   
-  // Define las condiciones para que un pedido se considere "confirmado" desde Shopify.
   const isPaid = order.financial_status === 'paid' || order.financial_status === 'partially_paid';
   const isFulfilled = order.fulfillment_status === 'fulfilled' || order.fulfillment_status === 'partial';
 
   if (isPaid || isFulfilled) {
     try {
       const orderDoc = await orderDocRef.get();
-      // Solo actualiza si el pedido ya existe y no está confirmado, para evitar sobreescribir confirmaciones de Google Sheets.
       if (orderDoc.exists && orderDoc.data()?.isConfirmed !== true) {
         const updateData: { isConfirmed: boolean; confirmedAt: Timestamp; confirmedBy: string; } = {
           isConfirmed: true,
@@ -175,9 +170,6 @@ export async function processUpdatedShopifyOrder(order: Order, storeId: string) 
 }
 
 
-/**
- * Crea o actualiza los pedidos en Firestore desde Google Sheets.
- */
 export async function updateConfirmedOrders(
   confirmedOrders: ConfirmedOrderInfo[]
 ): Promise<{ status: string; message: string }> {
@@ -212,14 +204,12 @@ export async function updateConfirmedOrders(
         province: item.PROVINCIA || 'N/A', 
     };
 
-    // Procesar la cadena de productos si existe
     if (item.PRODUCTO) {
         orderData.products = item.PRODUCTO
-            .split('+') // 1. Dividir la cadena por el símbolo '+'
-            .map(name => name.trim()) // 2. Limpiar espacios en blanco
-            .filter(name => name.length > 0) // 3. Filtrar elementos vacíos
+            .split('+')
+            .map(name => name.trim())
+            .filter(name => name.length > 0)
             .map(name => {
-                // 4. Limpiar "1x ", "2x ", etc. del inicio del nombre
                 const cleanedName = name.replace(/^[0-9]+\s*x\s+/i, '').trim();
                 return { title: cleanedName };
             });
@@ -233,19 +223,88 @@ export async function updateConfirmedOrders(
     await batch.commit();
   }
 
-  const message = `${processedCount} pedidos fueron creados o actualizados como confirmados en la base de datos.`;
+  const message = `${processedCount} pedidos fueron creados o actualizados como confirmados.`;
   console.log(`[Firestore] ${message}`);
   
-  return {
-    status: 'success',
-    message,
-  };
+  return { status: 'success', message };
+}
+
+/**
+ * Actualiza pedidos con información de la hoja "ENTREGADOS".
+ */
+export async function updateDeliveredOrders(
+  deliveredOrders: DeliveredOrderInfo[]
+): Promise<{ status: string; message: string }> {
+  if (!Array.isArray(deliveredOrders) || deliveredOrders.length === 0) {
+    return { status: 'success', message: 'No se encontraron registros de entrega para procesar.' };
+  }
+  
+  const batch: WriteBatch = db.batch();
+  let processedCount = 0;
+
+  for (const item of deliveredOrders) {
+    const rawOrderName = String(item.PEDIDO || '');
+    const storeId = item.TIENDA;
+
+    if (!rawOrderName || !storeId) {
+        console.warn(`[Firestore] Item de entrega ignorado por falta de PEDIDO o TIENDA:`, item);
+        continue;
+    };
+    
+    const orderDocId = getShopifyOrderDocId(rawOrderName, storeId);
+    const orderDocRef = db.collection('shopify_orders').doc(orderDocId);
+    
+    // Calcular método de pago
+    const total = Number(item.TOTAL || 0);
+    const pending = Number(item['MONTO PENDIENTE'] || 0);
+    let paymentMethod = 'Desconocido';
+    if (pending === 0 && total > 0) {
+        paymentMethod = 'Adelantado'; // (Transferencia, Tarjeta, etc.)
+    } else if (pending > 0 && pending >= total) {
+        paymentMethod = 'Contra Entrega';
+    } else if (pending > 0 && pending < total) {
+        paymentMethod = 'Pago Parcial';
+    }
+
+    // Calcular tiempo de entrega
+    let deliveryTimeInHours = null;
+    if (item['FECHA ENVIADO'] && item['FECHA ENTREGADO']) {
+      try {
+        const shippedDate = new Date(item['FECHA ENVIADO']);
+        const deliveredDate = new Date(item['FECHA ENTREGADO']);
+        if (!isNaN(shippedDate.getTime()) && !isNaN(deliveredDate.getTime())) {
+          const diffMs = deliveredDate.getTime() - shippedDate.getTime();
+          deliveryTimeInHours = diffMs / (1000 * 60 * 60);
+        }
+      } catch (e) {
+        console.warn(`[Firestore] No se pudo calcular el tiempo de entrega para el pedido ${rawOrderName}.`);
+      }
+    }
+
+    const deliveryData = {
+        isDelivered: true,
+        deliveredAt: item['FECHA ENTREGADO'] ? Timestamp.fromDate(new Date(item['FECHA ENTREGADO'])) : null,
+        shippedAt: item['FECHA ENVIADO'] ? Timestamp.fromDate(new Date(item['FECHA ENVIADO'])) : null,
+        paymentMethod: paymentMethod,
+        pendingAmount: pending,
+        deliveryTimeInHours: deliveryTimeInHours,
+    };
+
+    batch.set(orderDocRef, deliveryData, { merge: true });
+    processedCount++;
+  }
+
+  if (processedCount > 0) {
+    await batch.commit();
+  }
+
+  const message = `${processedCount} registros de entrega fueron procesados y actualizados.`;
+  console.log(`[Firestore] ${message}`);
+  
+  return { status: 'success', message };
 }
 
 
-/**
- * Procesa y almacena movimientos de inventario desde Google Sheets.
- */
 export async function processInventoryMovements(
   movements: InventoryMovement[]
 ): Promise<{ status: string; message: string }> {
@@ -263,7 +322,6 @@ export async function processInventoryMovements(
       continue;
     }
     
-    // Intenta parsear el timestamp. Asume formato 'DD/MM/YYYY HH:mm:ss'
     let movementTimestamp: Timestamp;
     try {
         const [datePart, timePart] = item.TIMESTAMP.split(' ');
@@ -304,21 +362,13 @@ export async function processInventoryMovements(
     await batch.commit();
   }
 
-  const message = `${processedCount} movimientos de inventario fueron guardados en la base de datos.`;
+  const message = `${processedCount} movimientos de inventario fueron guardados.`;
   console.log(`[Firestore] ${message}`);
   
-  return {
-    status: 'success',
-    message,
-  };
+  return { status: 'success', message };
 }
 
 
-// --- Lógica de Carga Masiva (CSV) y Limpieza ---
-
-/**
- * Procesa archivos CSV de Shopify, los transforma y los guarda en Firestore.
- */
 export async function analyzeAndStoreMetrics(
   input: AnalyzeAndStoreMetricsInput
 ): Promise<AnalyzeAndStoreMetricsOutput> {
@@ -397,9 +447,6 @@ export async function analyzeAndStoreMetrics(
   }
 }
 
-/**
- * Elimina todos los registros de pedidos con más de 6 meses de antigüedad.
- */
 export async function deleteOldMetrics(): Promise<{ status: string; message: string; deletedCount: number }> {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);

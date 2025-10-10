@@ -98,8 +98,8 @@ function normalizeStoreId(storeId: string): string {
     return (storeId || 'sin-tienda')
         .toLowerCase()
         .trim()
-        .replace(/perú/g, '')
-        .replace(/peru/g, '')
+        .replace(/perú/g, '') // Eliminar 'perú'
+        .replace(/peru/g, '')  // Eliminar 'peru'
         .replace(/\s+/g, '-')  // Reemplazar espacios con guion simple
         .replace(/-+/g, '-')   // Reemplazar múltiples guiones con uno solo
         .replace(/^-|-$/g, ''); // Eliminar guiones al inicio y final

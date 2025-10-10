@@ -6,8 +6,8 @@ import { format, subDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 
-import { Loader, Calendar as CalendarIcon, RefreshCw, ArrowDown, ArrowUp, LineChart as LineChartIcon, CheckCircle, XCircle, Percent } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
+import { Loader, Calendar as CalendarIcon, RefreshCw, ArrowDown, ArrowUp, LineChart as LineChartIcon, CheckCircle, XCircle, Percent, DollarSign, Store, MapPin } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, AreaChart, Area, BarChart, Bar } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
@@ -27,6 +27,7 @@ const CACHE_KEY = 'dashboardMetricsCache_daily';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
 const MAIN_STORES = ["dearel", "blumi", "novi", "trazto", "cumbre"];
 const ITEMS_PER_PAGE = 15;
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82ca9d', '#ffc658', '#ff7c7c', '#a4de6c', '#d0ed57'];
 
 
 type SortConfig = {
@@ -45,6 +46,8 @@ export default function DailyDetailPage() {
   const [date, setDate] = useState<DateRange | undefined>(undefined);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'date', direction: 'descending' });
   const [visibleItemsCount, setVisibleItemsCount] = useState(ITEMS_PER_PAGE);
+  const [selectedStore, setSelectedStore] = useState<string>("all");
+  const [selectedProvince, setSelectedProvince] = useState<string>("all");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -187,6 +190,90 @@ export default function DailyDetailPage() {
   
   const chartData = useMemo(() => {
     return [...sortedMetrics].reverse();
+  }, [sortedMetrics]);
+
+  // Calcular métricas de ventas diarias
+  const salesMetrics = useMemo(() => {
+    const salesData = sortedMetrics.map(m => ({
+      date: m.date,
+      ventas: m.revenue || 0,
+      pedidos: m.confirmed,
+      total_pedidos: m.totalOrders
+    }));
+
+    const totalRev = salesData.reduce((sum, d) => sum + d.ventas, 0);
+    const avgRev = salesData.length > 0 ? totalRev / salesData.length : 0;
+    const totalConf = salesData.reduce((sum, d) => sum + d.pedidos, 0);
+    const avgDailyOrders = salesData.length > 0 ? totalConf / salesData.length : 0;
+
+    // Extraer todas las tiendas
+    const storesSet = new Set<string>();
+    sortedMetrics.forEach(m => {
+      if (m.byStore) {
+        Object.keys(m.byStore).forEach(store => storesSet.add(store));
+      }
+    });
+    const allStores = Array.from(storesSet);
+
+    // Extraer todas las provincias
+    const provincesSet = new Set<string>();
+    sortedMetrics.forEach(m => {
+      if (m.byProvince) {
+        Object.keys(m.byProvince).forEach(province => provincesSet.add(province));
+      }
+    });
+    const allProvinces = Array.from(provincesSet);
+
+    // Datos por tienda
+    const byStoreData = sortedMetrics.map(m => {
+      const result: any = { date: m.date };
+      if (m.byStore) {
+        Object.entries(m.byStore).forEach(([store, data]) => {
+          result[`${store}_ventas`] = data.revenue || 0;
+          result[`${store}_pedidos`] = data.confirmed;
+        });
+      }
+      return result;
+    }).reverse(); // Reverse para orden cronológico
+
+    // Datos por provincia (top 10)
+    const provinceRevenues: { [key: string]: number } = {};
+    sortedMetrics.forEach(m => {
+      if (m.byProvince) {
+        Object.entries(m.byProvince).forEach(([province, data]) => {
+          provinceRevenues[province] = (provinceRevenues[province] || 0) + data.revenue;
+        });
+      }
+    });
+
+    const topProvinces = Object.entries(provinceRevenues)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10)
+      .map(([name]) => name);
+
+    const byProvinceData = sortedMetrics.map(m => {
+      const result: any = { date: m.date };
+      if (m.byProvince) {
+        topProvinces.forEach(province => {
+          const data = m.byProvince?.[province];
+          result[`${province}_ventas`] = data?.revenue || 0;
+          result[`${province}_pedidos`] = data?.confirmed || 0;
+        });
+      }
+      return result;
+    }).reverse();
+
+    return {
+      dailySalesData: [...salesData].reverse(),
+      totalRevenue: totalRev,
+      avgDailyRevenue: avgRev,
+      totalConfirmed: totalConf,
+      avgDailyOrders: avgDailyOrders,
+      allStores,
+      allProvinces: topProvinces,
+      byStoreData,
+      byProvinceData
+    };
   }, [sortedMetrics]);
 
 
@@ -426,6 +513,224 @@ export default function DailyDetailPage() {
                             </ResponsiveContainer>
                         </ChartContainer>
                       </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* NUEVA SECCIÓN: VENTAS DIARIAS */}
+            <div className="grid gap-4 md:grid-cols-1">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center">
+                            <DollarSign className="mr-2 h-5 w-5" />
+                            Ventas Diarias (Ingresos)
+                        </CardTitle>
+                        <CardDescription>
+                            Evolución de ingresos por día - Total acumulado: S/ {salesMetrics.totalRevenue.toLocaleString('es-PE', { minimumFractionDigits: 2 })} 
+                            {' '}| Promedio diario: S/ {salesMetrics.avgDailyRevenue.toLocaleString('es-PE', { minimumFractionDigits: 2 })}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-[300px] overflow-x-auto">
+                        <div className="min-w-[800px] h-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={salesMetrics.dailySalesData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis 
+                                        dataKey="date" 
+                                        tick={{ fontSize: 12 }} 
+                                        interval="preserveStartEnd"
+                                    />
+                                    <YAxis 
+                                        yAxisId="left"
+                                        tickFormatter={(value) => `S/ ${value.toFixed(0)}`}
+                                    />
+                                    <YAxis 
+                                        yAxisId="right"
+                                        orientation="right"
+                                    />
+                                    <Tooltip 
+                                        formatter={(value: number, name: string) => {
+                                            if (name === 'ventas') return [`S/ ${value.toFixed(2)}`, 'Ventas'];
+                                            if (name === 'pedidos') return [value, 'Pedidos Confirmados'];
+                                            return [value, name];
+                                        }}
+                                    />
+                                    <Legend />
+                                    <Line 
+                                        yAxisId="left"
+                                        type="monotone" 
+                                        dataKey="ventas" 
+                                        name="Ventas (S/)" 
+                                        stroke="#8884d8" 
+                                        strokeWidth={3}
+                                        dot={{ r: 4 }}
+                                    />
+                                    <Line 
+                                        yAxisId="right"
+                                        type="monotone" 
+                                        dataKey="pedidos" 
+                                        name="Pedidos Confirmados" 
+                                        stroke="#82ca9d" 
+                                        strokeWidth={2}
+                                        dot={{ r: 3 }}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* NUEVA SECCIÓN: VENTAS POR TIENDA */}
+            <div className="grid gap-4 md:grid-cols-1">
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle className="flex items-center">
+                                    <Store className="mr-2 h-5 w-5" />
+                                    Ventas Diarias por Tienda
+                                </CardTitle>
+                                <CardDescription>
+                                    Comparativa de ingresos entre tiendas
+                                </CardDescription>
+                            </div>
+                            <Select value={selectedStore} onValueChange={setSelectedStore}>
+                                <SelectTrigger className="w-[200px]">
+                                    <SelectValue placeholder="Filtrar tienda" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Todas las tiendas</SelectItem>
+                                    {salesMetrics.allStores.map((store) => (
+                                        <SelectItem key={store} value={store}>
+                                            {capitalize(store)}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="h-[350px] overflow-x-auto">
+                        <div className="min-w-[800px] h-full">
+                            {salesMetrics.byStoreData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={salesMetrics.byStoreData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis 
+                                            dataKey="date" 
+                                            tick={{ fontSize: 11 }} 
+                                            angle={-45}
+                                            textAnchor="end"
+                                            height={70}
+                                        />
+                                        <YAxis tickFormatter={(value) => `S/ ${value.toFixed(0)}`} />
+                                        <Tooltip 
+                                            formatter={(value: number, name: string) => {
+                                                const storeName = name.replace('_ventas', '');
+                                                return [`S/ ${value.toFixed(2)}`, capitalize(storeName)];
+                                            }}
+                                        />
+                                        <Legend 
+                                            formatter={(value) => capitalize(value.replace('_ventas', ''))}
+                                        />
+                                        {salesMetrics.allStores.map((store, idx) => {
+                                            if (selectedStore !== "all" && selectedStore !== store) return null;
+                                            return (
+                                                <Area
+                                                    key={store}
+                                                    type="monotone"
+                                                    dataKey={`${store}_ventas`}
+                                                    stackId="1"
+                                                    stroke={COLORS[idx % COLORS.length]}
+                                                    fill={COLORS[idx % COLORS.length]}
+                                                    fillOpacity={0.6}
+                                                    name={`${store}_ventas`}
+                                                />
+                                            );
+                                        })}
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                    No hay datos de ventas por tienda
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* NUEVA SECCIÓN: VENTAS POR PROVINCIA */}
+            <div className="grid gap-4 md:grid-cols-1">
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle className="flex items-center">
+                                    <MapPin className="mr-2 h-5 w-5" />
+                                    Ventas Diarias por Provincia (Top 10)
+                                </CardTitle>
+                                <CardDescription>
+                                    Distribución geográfica de ingresos
+                                </CardDescription>
+                            </div>
+                            <Select value={selectedProvince} onValueChange={setSelectedProvince}>
+                                <SelectTrigger className="w-[200px]">
+                                    <SelectValue placeholder="Filtrar provincia" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Todas (Top 10)</SelectItem>
+                                    {salesMetrics.allProvinces.map((province) => (
+                                        <SelectItem key={province} value={province}>
+                                            {province}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="h-[350px] overflow-x-auto">
+                        <div className="min-w-[800px] h-full">
+                            {salesMetrics.byProvinceData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={salesMetrics.byProvinceData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis 
+                                            dataKey="date" 
+                                            tick={{ fontSize: 11 }} 
+                                            angle={-45}
+                                            textAnchor="end"
+                                            height={70}
+                                        />
+                                        <YAxis tickFormatter={(value) => `S/ ${value.toFixed(0)}`} />
+                                        <Tooltip 
+                                            formatter={(value: number, name: string) => {
+                                                const provinceName = name.replace('_ventas', '');
+                                                return [`S/ ${value.toFixed(2)}`, provinceName];
+                                            }}
+                                        />
+                                        <Legend 
+                                            formatter={(value) => value.replace('_ventas', '')}
+                                        />
+                                        {salesMetrics.allProvinces.map((province, idx) => {
+                                            if (selectedProvince !== "all" && selectedProvince !== province) return null;
+                                            return (
+                                                <Bar
+                                                    key={province}
+                                                    dataKey={`${province}_ventas`}
+                                                    fill={COLORS[idx % COLORS.length]}
+                                                    name={`${province}_ventas`}
+                                                />
+                                            );
+                                        })}
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                    No hay datos de ventas por provincia
+                                </div>
+                            )}
+                        </div>
                     </CardContent>
                 </Card>
             </div>

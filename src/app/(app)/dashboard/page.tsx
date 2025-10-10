@@ -212,19 +212,23 @@ export default function Dashboard() {
     const lowerCaseStoreName = storeName.toLowerCase();
     
     // Filter Daily Metrics
-    const filteredDailyMetrics = fullMetrics.dailyMetrics.map((dm: DailyMetric) => {
-      const storeData = dm.byStore?.[lowerCaseStoreName];
-      if (!storeData) return null;
-      const total = storeData.confirmed + storeData.unconfirmed;
-      return {
-        date: dm.date,
-        totalOrders: total,
-        confirmed: storeData.confirmed,
-        unconfirmed: storeData.unconfirmed,
-        confirmationRate: total > 0 ? (storeData.confirmed / total) * 100 : 0,
-        byStore: { [lowerCaseStoreName]: storeData }
-      };
-    }).filter((d): d is DailyMetric => d !== null && (d as DailyMetric).totalOrders > 0);
+    const filteredDailyMetrics: DailyMetric[] = fullMetrics.dailyMetrics
+      .map((dm: DailyMetric) => {
+        const storeData = dm.byStore?.[lowerCaseStoreName];
+        if (!storeData) return null;
+        const total = storeData.confirmed + storeData.unconfirmed;
+        return {
+          date: dm.date,
+          totalOrders: total,
+          confirmed: storeData.confirmed,
+          unconfirmed: storeData.unconfirmed,
+          confirmationRate: total > 0 ? (storeData.confirmed / total) * 100 : 0,
+          revenue: dm.revenue,
+          byStore: { [lowerCaseStoreName]: storeData },
+          byProvince: dm.byProvince
+        } as DailyMetric;
+      })
+      .filter((d): d is DailyMetric => d !== null && d.totalOrders > 0);
     
     // Recalculate Misc Metrics for the store
     let globalConfirmed = 0;

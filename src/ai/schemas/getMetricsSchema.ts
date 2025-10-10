@@ -18,9 +18,15 @@ export const DailyMetricSchema = z.object({
   confirmed: z.number(),
   unconfirmed: z.number(),
   confirmationRate: z.number(),
+  revenue: z.number().optional(), // ← NUEVO: Ingresos del día
   byStore: z.record(z.object({
     confirmed: z.number(),
     unconfirmed: z.number(),
+    revenue: z.number().optional(), // ← NUEVO: Ingresos por tienda
+  })).optional(),
+  byProvince: z.record(z.object({
+    confirmed: z.number(),
+    revenue: z.number(), // ← NUEVO: Ingresos por provincia
   })).optional(),
 });
 export type DailyMetric = z.infer<typeof DailyMetricSchema>;

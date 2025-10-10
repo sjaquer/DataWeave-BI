@@ -87,7 +87,7 @@ const getMetricsFlow = ai.defineFlow(
 
     let totalConfirmed = 0;
     let totalUnconfirmed = 0;
-    const dailyData: { [key: string]: { confirmed: number; unconfirmed: number, byStore: { [store: string]: { confirmed: number, unconfirmed: number } }, revenue: number } } = {};
+    const dailyData: { [key: string]: { confirmed: number; unconfirmed: number, byStore: { [store: string]: { confirmed: number, unconfirmed: number, revenue: number } }, revenue: number, byProvince: { [province: string]: { confirmed: number, revenue: number } } } } = {};
     const provinceData: { [key: string]: { totalOrders: number; confirmedOrders: number; totalSpent: number; } } = {};
     const provinceDataByStore: { [store: string]: { [province: string]: { totalOrders: number, confirmedOrders: number, totalSpent: number } } } = {};
     const requestedProductData: { [key: string]: number } = {};
@@ -160,15 +160,21 @@ const getMetricsFlow = ai.defineFlow(
             const dateStr = `${String(localDate.getUTCFullYear())}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`;
             
             if (!dailyData[dateStr]) {
-                dailyData[dateStr] = { confirmed: 0, unconfirmed: 0, revenue: 0, byStore: {} };
+                dailyData[dateStr] = { confirmed: 0, unconfirmed: 0, revenue: 0, byStore: {}, byProvince: {} };
             }
             if (!dailyData[dateStr].byStore[storeName]) {
-                dailyData[dateStr].byStore[storeName] = { confirmed: 0, unconfirmed: 0 };
+                dailyData[dateStr].byStore[storeName] = { confirmed: 0, unconfirmed: 0, revenue: 0 };
+            }
+            if (!dailyData[dateStr].byProvince[rawProvince]) {
+                dailyData[dateStr].byProvince[rawProvince] = { confirmed: 0, revenue: 0 };
             }
 
             if (isOrderConfirmed) {
                 dailyData[dateStr].confirmed++;
                 dailyData[dateStr].byStore[storeName].confirmed++;
+                dailyData[dateStr].byStore[storeName].revenue += order.totalPrice || 0;
+                dailyData[dateStr].byProvince[rawProvince].confirmed++;
+                dailyData[dateStr].byProvince[rawProvince].revenue += order.totalPrice || 0;
                 dailyData[dateStr].revenue += order.totalPrice || 0;
             } else {
                 dailyData[dateStr].unconfirmed++;

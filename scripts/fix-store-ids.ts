@@ -60,20 +60,33 @@ async function migrateBlumiStoreIds() {
     
     if (needsMigration) {
       console.log(`  ➡️  Migrando ${docId} a ${newDocId}`);
-      migrationCount++;
       
-      const oldDocRef = ordersRef.doc(docId);
-      const newDocRef = ordersRef.doc(newDocId);
-      const data = doc.data();
+      try {
+        const oldDocRef = ordersRef.doc(docId);
+        const newDocRef = ordersRef.doc(newDocId);
+        const data = doc.data();
 
-      // Corregir el campo 'storeId' dentro del documento también
-      if (data.storeId.includes('peru') || data.storeId.includes('perú')) {
-        data.storeId = 'blumi';
+        if (!data) {
+          console.log(`  ⚠️  Advertencia: El documento ${docId} no tiene datos. Saltando...`);
+          return;
+        }
+
+        // Corregir el campo 'storeId' dentro del documento también
+        if (data.storeId && typeof data.storeId === 'string') {
+          if (data.storeId.includes('peru') || data.storeId.includes('perú')) {
+            data.storeId = 'blumi';
+            console.log(`    🔄 Corrigiendo storeId: ${data.storeId}`);
+          }
+        }
+        
+        // Crear el nuevo documento y eliminar el viejo
+        batch.set(newDocRef, data, { merge: true }); // Usar merge por si el doc correcto ya existe
+        batch.delete(oldDocRef);
+        
+        migrationCount++;
+      } catch (error: any) {
+        console.error(`  ❌ Error procesando documento ${docId}:`, error.message);
       }
-      
-      // Crear el nuevo documento y eliminar el viejo
-      batch.set(newDocRef, data, { merge: true }); // Usar merge por si el doc correcto ya existe
-      batch.delete(oldDocRef);
     }
   });
 

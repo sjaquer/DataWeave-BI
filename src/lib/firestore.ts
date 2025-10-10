@@ -33,8 +33,8 @@ export interface DeliveredOrderInfo {
   ID: string;
   PEDIDO: string;
   TIENDA: string;
-  TOTAL: number;
-  'MONTO PENDIENTE': number;
+  TOTAL?: number;
+  'MONTO PENDIENTE'?: number;
   'FECHA ENVIADO'?: string;
   'FECHA ENTREGADO'?: string;
   'FORMA DE PAGO'?: string; // YAPE, PLIN, AGENTE BOP, etc.
@@ -150,6 +150,9 @@ export async function processNewShopifyOrder(order: Order, storeId: string) {
       confirmedAt: null,
       confirmedBy: null,
       courier: null,
+      isDelivered: false,
+      deliveredAt: null,
+      paymentMethod: null,
   };
 
   try {
@@ -211,53 +214,17 @@ export async function updateConfirmedOrders(
     const orderDocId = getShopifyOrderDocId(rawOrderName, storeId);
     const orderDocRef = db.collection('shopify_orders').doc(orderDocId);
     
-    // IMPORTANTE: Primero verificar si el documento existe
-    const existingDoc = await orderDocRef.get();
-    
     const dateString = item['FECHA DE ATENCIÓN'];
     const confirmedAtTimestamp = dateString ? Timestamp.fromDate(new Date(dateString)) : Timestamp.now();
 
-    // Solo actualizar campos de confirmación, NO sobrescribir estructura original
     const confirmationData: any = {
         isConfirmed: true,
         confirmedAt: confirmedAtTimestamp,
         confirmedBy: item.ATENDIDO || 'No especificado',
         courier: item.COURIER || 'No especificado',
+        province: item.PROVINCIA || 'N/A', // Siempre actualizar la provincia desde la confirmación
     };
 
-    // Solo agregar provincia si viene del sheet Y no existe en Firestore
-    if (item.PROVINCIA && (!existingDoc.exists || !existingDoc.data()?.province)) {
-        confirmationData.province = item.PROVINCIA;
-    }
-
-    // Si NO existe el documento, crear uno básico (caso raro, pero posible)
-    if (!existingDoc.exists) {
-        console.warn(`[Firestore] Creando documento nuevo para pedido ${rawOrderName} (no existía en Shopify)`);
-        confirmationData.storeId = storeId;
-        confirmationData.orderName = rawOrderName;
-        confirmationData.createdAt = confirmedAtTimestamp;
-        confirmationData.totalPrice = 0;
-        confirmationData.customerName = 'N/A';
-        confirmationData.province = item.PROVINCIA || 'N/A';
-        confirmationData.city = '-';
-        confirmationData.zip = '-';
-        confirmationData.country = 'Peru';
-        confirmationData.products = [];
-        
-        // Si viene producto del sheet, parsearlo
-        if (item.PRODUCTO) {
-            confirmationData.products = item.PRODUCTO
-                .split('+')
-                .map(name => name.trim())
-                .filter(name => name.length > 0)
-                .map(name => {
-                    const cleanedName = name.replace(/^[0-9]+\s*x\s+/i, '').trim();
-                    return { title: cleanedName, quantity: 1, price: 0 };
-                });
-        }
-    }
-
-    // MERGE: Actualiza SOLO los campos especificados, preserva el resto
     batch.set(orderDocRef, confirmationData, { merge: true });
     processedCount++;
   }
@@ -273,7 +240,7 @@ export async function updateConfirmedOrders(
 }
 
 /**
- * Actualiza pedidos con información de la hoja "ENTREGADOS".
+ * Actualiza pedidos con información de la hoja "ENTREGADO".
  */
 export async function updateDeliveredOrders(
   deliveredOrders: DeliveredOrderInfo[]
@@ -326,7 +293,6 @@ export async function updateDeliveredOrders(
         deliveredBy: item.USUARIO || 'No especificado', // Quien registró la entrega
     };
 
-    // MERGE: Actualiza SOLO los campos especificados, preserva el resto (ej: datos de Shopify)
     batch.set(orderDocRef, deliveryData, { merge: true });
     processedCount++;
   }

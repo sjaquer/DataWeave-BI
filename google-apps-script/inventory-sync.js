@@ -14,12 +14,12 @@ const CONFIG = {
 
   // Nombres de las hojas
   SHIPPED_SHEET_NAME: 'REPORTE_ENVIADOS',
-  DELIVERED_SHEET_NAME: 'ENTREGADO', // Corregido de "ENTREGADOS" a "ENTREGADO"
+  DELIVERED_SHEET_NAME: 'ENTREGADO',
   LOG_SHEET_NAME: 'LOG_ENVIOS',
 
   // Columnas de ID único para cada hoja
   SHIPPED_UNIQUE_ID_COLUMN: 'PEDIDO',
-  DELIVERED_UNIQUE_ID_COLUMN: 'ID', // Usaremos el ID de fila como identificador único
+  DELIVERED_UNIQUE_ID_COLUMN: 'ID', 
 
   // Frecuencia del disparador automático en horas.
   TRIGGER_FREQUENCY_HOURS: 1
@@ -39,15 +39,15 @@ function onOpen() {
       .addItem('1. Sincronizar REPORTE ENVIADOS', 'triggerShippedSync')
       .addItem('2. Sincronizar ENTREGADO', 'triggerDeliveredSync')
       .addSeparator()
-      .addItem('3. Activar Sincronización Automática', 'createTrigger')
+      .addItem('3. Activar Sincronización Automática', 'createTriggers')
       .addItem('4. Desactivar Sincronización Automática', 'deleteTriggers')
       .addToUi();
 }
 
 /**
- * Crea un disparador (trigger) que ejecuta ambas sincronizaciones.
+ * Crea disparadores (triggers) para ambas sincronizaciones.
  */
-function createTrigger() {
+function createTriggers() {
   deleteTriggers();
   
   // Trigger para REPORTE_ENVIADOS
@@ -56,7 +56,7 @@ function createTrigger() {
       .everyHours(CONFIG.TRIGGER_FREQUENCY_HOURS)
       .create();
 
-  // Trigger para ENTREGADOS
+  // Trigger para ENTREGADO
   ScriptApp.newTrigger('triggerDeliveredSync')
       .timeBased()
       .everyHours(CONFIG.TRIGGER_FREQUENCY_HOURS)
@@ -71,11 +71,12 @@ function createTrigger() {
 function deleteTriggers() {
   const triggers = ScriptApp.getProjectTriggers();
   for (const trigger of triggers) {
-    if (trigger.getEventType() === ScriptApp.EventType.CLOCK) {
+    if (trigger.getHandlerFunction() === 'triggerShippedSync' || trigger.getHandlerFunction() === 'triggerDeliveredSync') {
       ScriptApp.deleteTrigger(trigger);
     }
   }
   Logger.log('Se han eliminado los disparadores automáticos existentes.');
+  SpreadsheetApp.getUi().alert('Sincronización automática desactivada.');
 }
 
 
@@ -91,7 +92,8 @@ function triggerShippedSync() {
     CONFIG.SHIPPED_SHEET_NAME,
     CONFIG.SHIPPED_UNIQUE_ID_COLUMN,
     CONFIG.SHIPPED_WEBHOOK_URL,
-    'ENVIADO'
+    'ENVIADO',
+    true // Usar log para esta hoja
   );
 }
 
@@ -100,7 +102,8 @@ function triggerDeliveredSync() {
     CONFIG.DELIVERED_SHEET_NAME,
     CONFIG.DELIVERED_UNIQUE_ID_COLUMN,
     CONFIG.DELIVERED_WEBHOOK_URL,
-    'ENTREGADO'
+    'ENTREGADO',
+    false // NO usar log para esta hoja, siempre enviar todo para actualizaciones
   );
 }
 
@@ -111,8 +114,9 @@ function triggerDeliveredSync() {
  * @param {string} uniqueIdColumn - El nombre de la columna que es el ID único.
  * @param {string} webhookUrl - La URL del webhook a la que se enviarán los datos.
  * @param {string} logPrefix - Un prefijo para los IDs en el log para evitar colisiones.
+ * @param {boolean} useLog - Si es true, solo envía filas nuevas. Si es false, envía todo.
  */
-function syncSheet(sheetName, uniqueIdColumn, webhookUrl, logPrefix) {
+function syncSheet(sheetName, uniqueIdColumn, webhookUrl, logPrefix, useLog) {
   const ui = SpreadsheetApp.getUi();
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
 
@@ -127,22 +131,38 @@ function syncSheet(sheetName, uniqueIdColumn, webhookUrl, logPrefix) {
       Logger.log(`Hoja de log "${CONFIG.LOG_SHEET_NAME}" creada.`);
     }
 
-    const sentIds = getSentIds(logSheet, logPrefix);
-    const { newRows, sentIdsForLog } = findNewRows(mainSheet, uniqueIdColumn, sentIds, logPrefix);
+    const sentIds = useLog ? getSentIds(logSheet, logPrefix) : new Set();
+    const { dataToSend, idsToLog } = findRowsToSend(mainSheet, uniqueIdColumn, sentIds, logPrefix, useLog);
 
-    if (newRows.length === 0) {
+    if (dataToSend.length === 0) {
       Logger.log(`No hay filas nuevas para enviar desde "${sheetName}".`);
-      // No mostrar alerta si es ejecución automática.
       if (isManualExecution()) {
-        ui.alert('Sincronización', `No se encontraron registros nuevos en "${sheetName}" para enviar.`, ui.ButtonSet.OK);
+        ui.alert('Sincronización', `No se encontraron registros ${useLog ? 'nuevos' : ''} en "${sheetName}" para enviar.`, ui.ButtonSet.OK);
       }
       return;
     }
 
-    const payload = { data: newRows }; // El backend espera un objeto con clave "data"
+    const payload = { data: dataToSend }; 
     const response = sendPayloadToWebhook(payload, webhookUrl);
 
-    handleWebhookResponse(response, logSheet, sentIdsForLog);
+    // Solo registrar en el log si useLog es true
+    if (useLog) {
+      handleWebhookResponse(response, logSheet, idsToLog);
+    } else {
+        const responseCode = response.getResponseCode();
+        const responseBody = response.getContentText();
+        if (responseCode === 200) {
+            Logger.log(`Éxito (${responseCode}): Se han procesado ${dataToSend.length} filas desde ${sheetName}. Respuesta: ${responseBody}`);
+            if (isManualExecution()) {
+                const serverMessage = JSON.parse(responseBody).message;
+                ui.alert('Sincronización Exitosa', serverMessage, ui.ButtonSet.OK);
+            }
+        } else {
+            const errorMsg = `Error al enviar los datos. Código: ${responseCode}\nRespuesta: ${responseBody}`;
+            Logger.log(errorMsg);
+            ui.alert('Error de Sincronización', errorMsg, ui.ButtonSet.OK);
+        }
+    }
 
   } catch (error) {
     const errorMessage = `Error en hoja "${sheetName}": ${error.message}`;
@@ -173,16 +193,17 @@ function getSentIds(logSheet, logPrefix) {
 
 
 /**
- * Busca filas que no han sido enviadas.
+ * Busca filas para enviar.
  * @param {GoogleAppsScript.Spreadsheet.Sheet} mainSheet - La hoja principal.
  * @param {string} uniqueIdColumn - El nombre de la columna de ID.
  * @param {Set<string>} sentIds - Conjunto de IDs ya enviados.
  * @param {string} logPrefix - Prefijo para construir el ID del log.
- * @returns {{newRows: Array<Object>, sentIdsForLog: Array<string>}}
+ * @param {boolean} useLog - Si es true, filtra por sentIds. Si es false, toma todo.
+ * @returns {{dataToSend: Array<Object>, idsToLog: Array<string>}}
  */
-function findNewRows(mainSheet, uniqueIdColumn, sentIds, logPrefix) {
+function findRowsToSend(mainSheet, uniqueIdColumn, sentIds, logPrefix, useLog) {
   const allValues = mainSheet.getDataRange().getValues();
-  if (allValues.length <= 1) return { newRows: [], sentIdsForLog: [] };
+  if (allValues.length <= 1) return { dataToSend: [], idsToLog: [] };
 
   const headers = allValues[0];
   const uniqueIdColumnIndex = headers.indexOf(uniqueIdColumn);
@@ -191,36 +212,42 @@ function findNewRows(mainSheet, uniqueIdColumn, sentIds, logPrefix) {
     throw new Error(`No se encontró la columna de ID único "${uniqueIdColumn}" en la hoja "${mainSheet.getName()}".`);
   }
 
-  const newRows = [];
-  const sentIdsForLog = [];
+  const dataToSend = [];
+  const idsToLog = [];
 
   for (let i = 1; i < allValues.length; i++) {
     const row = allValues[i];
     let uniqueId = String(row[uniqueIdColumnIndex]);
 
-    // Si la columna de ID es 'ID', usamos el número de fila como fallback.
+    // Si la columna de ID es 'ID', usamos el número de fila como fallback si está vacía.
     if (uniqueIdColumn === 'ID' && !uniqueId) {
       uniqueId = String(i + 1); // El número de fila es i + 1
     }
 
     const logId = `${logPrefix}-${uniqueId}`;
 
-    if (uniqueId && !sentIds.has(logId)) {
-      const rowObject = {};
-      headers.forEach((header, index) => {
-        if (header) {
-          rowObject[header] = row[index];
-        }
-      });
-      // Si el ID es el de la fila, lo añadimos explícitamente al objeto.
-      if (uniqueIdColumn === 'ID') {
-        rowObject['ID'] = uniqueId;
+    const rowObject = {};
+    headers.forEach((header, index) => {
+      if (header) {
+        rowObject[header] = row[index];
       }
-      newRows.push(rowObject);
-      sentIdsForLog.push(logId);
+    });
+
+    if (useLog) {
+      if (uniqueId && !sentIds.has(logId)) {
+        if (uniqueIdColumn === 'ID') rowObject['ID'] = uniqueId;
+        dataToSend.push(rowObject);
+        idsToLog.push(logId);
+      }
+    } else {
+      if (uniqueId) {
+        if (uniqueIdColumn === 'ID') rowObject['ID'] = uniqueId;
+        dataToSend.push(rowObject);
+        // No añadimos a idsToLog porque no se registrará en el log
+      }
     }
   }
-  return { newRows, sentIdsForLog };
+  return { dataToSend, idsToLog };
 }
 
 
@@ -242,16 +269,16 @@ function sendPayloadToWebhook(payload, webhookUrl) {
 /**
  * Maneja la respuesta del servidor y actualiza la hoja de log.
  */
-function handleWebhookResponse(response, logSheet, sentIdsForLog) {
+function handleWebhookResponse(response, logSheet, idsToLog) {
   const responseCode = response.getResponseCode();
   const responseBody = response.getContentText();
   const ui = SpreadsheetApp.getUi();
 
   if (responseCode === 200) {
-    Logger.log(`Éxito (${responseCode}): Se han procesado ${sentIdsForLog.length} filas. Respuesta: ${responseBody}`);
+    Logger.log(`Éxito (${responseCode}): Se han procesado ${idsToLog.length} filas. Respuesta: ${responseBody}`);
     
     const timestamp = new Date();
-    const rowsToLog = sentIdsForLog.map(id => [id, timestamp]);
+    const rowsToLog = idsToLog.map(id => [id, timestamp]);
     if (rowsToLog.length > 0) {
       logSheet.getRange(logSheet.getLastRow() + 1, 1, rowsToLog.length, 2).setValues(rowsToLog);
     }
@@ -264,15 +291,15 @@ function handleWebhookResponse(response, logSheet, sentIdsForLog) {
   } else {
     const errorMsg = `Error al enviar los datos. Código: ${responseCode}\nRespuesta: ${responseBody}`;
     Logger.log(errorMsg);
-    // Siempre alertamos en caso de error.
     ui.alert('Error de Sincronización', errorMsg, ui.ButtonSet.OK);
   }
 }
 
 /**
- * Verifica si el script fue ejecutado manually o por un trigger.
+ * Verifica si el script fue ejecutado manualmente o por un trigger.
  * @param {object} e - El objeto de evento del trigger.
  */
 function isManualExecution(e) {
+  // `e` (el objeto de evento) solo existe cuando se ejecuta por un trigger.
   return !e;
 }

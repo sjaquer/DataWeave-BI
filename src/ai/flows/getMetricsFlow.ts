@@ -41,39 +41,49 @@ const getMetricsFlow = ai.defineFlow(
     const startDate = input?.startDate ? new Date(input.startDate) : null;
     const endDate = input?.endDate ? new Date(input.endDate) : null;
 
-    // --- CONSULTAS A FIRESTORE ---
-    let confirmedOrdersQuery = db.collection('shopify_orders').where('isConfirmed', '==', true);
-    if (startDate && endDate) {
-      confirmedOrdersQuery = confirmedOrdersQuery.where('confirmedAt', '>=', startDate).where('confirmedAt', '<=', endDate);
-    }
-
-    let deliveredOrdersQuery = db.collection('shopify_orders').where('isDelivered', '==', true);
-    if (startDate && endDate) {
-        deliveredOrdersQuery = deliveredOrdersQuery.where('deliveredAt', '>=', startDate).where('deliveredAt', '<=', endDate);
-    }
-    
-    let allOrdersQuery = db.collection('shopify_orders');
-     if (startDate && endDate) {
-      allOrdersQuery = allOrdersQuery.where('createdAt', '>=', startDate).where('createdAt', '<=', endDate);
-    }
-
-    let inventoryQuery = db.collection('inventory_movements');
-    if (startDate && endDate) {
-      inventoryQuery = inventoryQuery.where('timestamp', '>=', startDate).where('timestamp', '<=', endDate);
-    }
-    
+    // --- CONSULTAS A FIRESTORE (SIMPLIFICADAS - Sin filtros de fecha en query) ---
     const [confirmedOrdersSnapshot, deliveredOrdersSnapshot, allOrdersSnapshot, inventorySnapshot] = await Promise.all([
-      confirmedOrdersQuery.get(),
-      deliveredOrdersQuery.get(),
-      allOrdersQuery.get(),
-      inventoryQuery.get(),
+      db.collection('shopify_orders').where('isConfirmed', '==', true).get(),
+      db.collection('shopify_orders').where('isDelivered', '==', true).get(),
+      db.collection('shopify_orders').get(),
+      db.collection('inventory_movements').get(),
     ]);
     
     // --- INICIALIZACIÓN DE DATOS AGREGADOS ---
-    const confirmedOrders: any[] = confirmedOrdersSnapshot.docs.map(doc => doc.data());
-    const deliveredOrders: any[] = deliveredOrdersSnapshot.docs.map(doc => doc.data());
-    const allOrders: any[] = allOrdersSnapshot.docs.map(doc => doc.data());
-    const inventoryMovements: any[] = inventorySnapshot.docs.map(doc => doc.data());
+    const allOrdersRaw: any[] = allOrdersSnapshot.docs.map((doc: any) => doc.data());
+    const confirmedOrdersRaw: any[] = confirmedOrdersSnapshot.docs.map((doc: any) => doc.data());
+    const deliveredOrdersRaw: any[] = deliveredOrdersSnapshot.docs.map((doc: any) => doc.data());
+    let inventoryMovements: any[] = inventorySnapshot.docs.map((doc: any) => doc.data());
+
+    // **LÓGICA CORRECTA DE FILTRADO**:
+    // - allOrders: Filtrado por FECHA DE CREACIÓN (base para todo)
+    // - confirmedOrders: Los mismos pedidos de allOrders que están confirmados
+    // - deliveredOrders: Filtrado por FECHA DE ENTREGA (para métricas de delivery)
+    
+    const allOrders = startDate && endDate ? allOrdersRaw.filter(order => {
+      if (!order.createdAt) return false;
+      const orderDate = order.createdAt.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+      return orderDate >= startDate && orderDate <= endDate;
+    }) : allOrdersRaw;
+
+    // confirmedOrders: De los pedidos creados en el rango, cuáles están confirmados
+    const confirmedOrders = allOrders.filter(order => order.isConfirmed === true);
+
+    // deliveredOrders: Filtrado por fecha de ENTREGA para métricas de shipping
+    const deliveredOrders = startDate && endDate ? deliveredOrdersRaw.filter(order => {
+      if (!order.deliveredAt) return false;
+      const orderDate = order.deliveredAt.toDate ? order.deliveredAt.toDate() : new Date(order.deliveredAt);
+      return orderDate >= startDate && orderDate <= endDate;
+    }) : deliveredOrdersRaw;
+
+    // Inventario: Filtrado por timestamp
+    if (startDate && endDate) {
+      inventoryMovements = inventoryMovements.filter(movement => {
+        if (!movement.timestamp) return false;
+        const movDate = movement.timestamp.toDate ? movement.timestamp.toDate() : new Date(movement.timestamp);
+        return movDate >= startDate && movDate <= endDate;
+      });
+    }
 
     let totalConfirmed = 0;
     let totalUnconfirmed = 0;
@@ -98,14 +108,27 @@ const getMetricsFlow = ai.defineFlow(
 
 
     // --- PROCESAMIENTO DE TODOS LOS PEDIDOS (para métricas globales) ---
+    // IMPORTANTE: 
+    // - totalConfirmed = pedidos CREADOS en el rango que ESTÁN confirmados (sin importar cuándo)
+    // - totalUnconfirmed = pedidos CREADOS en el rango que NO están confirmados
+    totalConfirmed = confirmedOrders.length;
+    totalUnconfirmed = allOrders.filter(order => order.isConfirmed !== true).length;
+
     allOrders.forEach((order) => {
         const isOrderConfirmed = order.isConfirmed === true;
         const storeName = order.storeId || 'Desconocida';
 
-        // Conteo global
-        isOrderConfirmed ? totalConfirmed++ : totalUnconfirmed++;
+        // Store Metrics - Calcular desde TODOS los pedidos
+        if (!storeData[storeName]) {
+            storeData[storeName] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0, topProducts: {}, dailyConfirmed: {} };
+        }
+        storeData[storeName].totalOrders++;
+        if (isOrderConfirmed) {
+            storeData[storeName].confirmedOrders++;
+            storeData[storeName].totalSpent += order.totalPrice || 0;
+        }
 
-        // Daily Metrics para todos los pedidos
+        // Daily Metrics para todos los pedidos (basado en createdAt)
         if (order.createdAt && typeof order.createdAt.toDate === 'function') {
             const utcDate = order.createdAt.toDate();
             const localDate = adjustToLocalTimezone(utcDate);
@@ -200,13 +223,8 @@ const getMetricsFlow = ai.defineFlow(
           }
       }
 
-      // Store Metrics
-      if (!storeData[storeName]) {
-          storeData[storeName] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0, topProducts: {}, dailyConfirmed: {} };
-      }
-      storeData[storeName].totalOrders++;
-      storeData[storeName].confirmedOrders++;
-      storeData[storeName].totalSpent += order.totalPrice || 0;
+      // NOTA: Store Metrics ahora se calculan en el loop de allOrders
+      // NO duplicar aquí para evitar contar doble
     });
 
     // --- PROCESAMIENTO DE PEDIDOS ENTREGADOS (para métodos de pago) ---
@@ -462,7 +480,7 @@ const getMetricsFlow = ai.defineFlow(
         .where('timestamp', '>=', thirtyDaysAgo)
         .get();
         
-    recentMovementsSnapshot.docs.forEach(doc => {
+    recentMovementsSnapshot.docs.forEach((doc: any) => {
         const mov = doc.data();
         if (Number(mov.quantity) < 0 && mov.productName) {
             recentOutflows[mov.productName] = (recentOutflows[mov.productName] || 0) + Math.abs(Number(mov.quantity));

@@ -1,5 +1,4 @@
 
-
 'use server';
 /**
  * @fileOverview Flujo para obtener y consolidar todas las métricas de Firestore.
@@ -38,36 +37,47 @@ const getMetricsFlow = ai.defineFlow(
     outputSchema: GetMetricsOutputSchema,
   },
   async (input) => {
-    // --- CONSULTAS A FIRESTORE ---
-    let ordersQuery = db.collection('shopify_orders');
-    let inventoryQuery = db.collection('inventory_movements');
     
-    // Aplicar filtro de fecha si se proporciona
-    if (input && input.startDate && input.endDate) {
-      const startDate = new Date(input.startDate);
-      const endDate = new Date(input.endDate);
-      ordersQuery = ordersQuery.where('createdAt', '>=', startDate).where('createdAt', '<=', endDate);
-      inventoryQuery = inventoryQuery.where('timestamp', '>=', startDate).where('timestamp', '<=', endDate);
-    } else {
-      // Por defecto, últimos 6 meses si no hay filtro
-      const sixMonthsAgo = new Date();
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      ordersQuery = ordersQuery.where('createdAt', '>=', sixMonthsAgo);
-      inventoryQuery = inventoryQuery.where('timestamp', '>=', sixMonthsAgo);
+    const startDate = input?.startDate ? new Date(input.startDate) : null;
+    const endDate = input?.endDate ? new Date(input.endDate) : null;
+
+    // --- CONSULTAS A FIRESTORE ---
+    let confirmedOrdersQuery = db.collection('shopify_orders').where('isConfirmed', '==', true);
+    if (startDate && endDate) {
+      confirmedOrdersQuery = confirmedOrdersQuery.where('confirmedAt', '>=', startDate).where('confirmedAt', '<=', endDate);
+    }
+
+    let deliveredOrdersQuery = db.collection('shopify_orders').where('isDelivered', '==', true);
+    if (startDate && endDate) {
+        deliveredOrdersQuery = deliveredOrdersQuery.where('deliveredAt', '>=', startDate).where('deliveredAt', '<=', endDate);
     }
     
-    const [ordersSnapshot, inventorySnapshot] = await Promise.all([
-      ordersQuery.get(),
+    let allOrdersQuery = db.collection('shopify_orders');
+     if (startDate && endDate) {
+      allOrdersQuery = allOrdersQuery.where('createdAt', '>=', startDate).where('createdAt', '<=', endDate);
+    }
+
+    let inventoryQuery = db.collection('inventory_movements');
+    if (startDate && endDate) {
+      inventoryQuery = inventoryQuery.where('timestamp', '>=', startDate).where('timestamp', '<=', endDate);
+    }
+    
+    const [confirmedOrdersSnapshot, deliveredOrdersSnapshot, allOrdersSnapshot, inventorySnapshot] = await Promise.all([
+      confirmedOrdersQuery.get(),
+      deliveredOrdersQuery.get(),
+      allOrdersQuery.get(),
       inventoryQuery.get(),
     ]);
     
     // --- INICIALIZACIÓN DE DATOS AGREGADOS ---
-    const orders: any[] = ordersSnapshot.docs.map(doc => doc.data());
+    const confirmedOrders: any[] = confirmedOrdersSnapshot.docs.map(doc => doc.data());
+    const deliveredOrders: any[] = deliveredOrdersSnapshot.docs.map(doc => doc.data());
+    const allOrders: any[] = allOrdersSnapshot.docs.map(doc => doc.data());
     const inventoryMovements: any[] = inventorySnapshot.docs.map(doc => doc.data());
 
     let totalConfirmed = 0;
     let totalUnconfirmed = 0;
-    const dailyData: { [key: string]: { confirmed: number; unconfirmed: number, byStore: { [store: string]: { confirmed: number, unconfirmed: number } } } } = {};
+    const dailyData: { [key: string]: { confirmed: number; unconfirmed: number, byStore: { [store: string]: { confirmed: number, unconfirmed: number } }, revenue: number } } = {};
     const provinceData: { [key: string]: { totalOrders: number; confirmedOrders: number; totalSpent: number; } } = {};
     const provinceDataByStore: { [store: string]: { [province: string]: { totalOrders: number, confirmedOrders: number, totalSpent: number } } } = {};
     const requestedProductData: { [key: string]: number } = {};
@@ -87,44 +97,60 @@ const getMetricsFlow = ai.defineFlow(
     const latestMovements: { [sku: string]: any } = {};
 
 
-    // --- PROCESAMIENTO DE PEDIDOS (Orders) ---
-    orders.forEach((order) => {
-      const isOrderConfirmed = order.isConfirmed === true;
+    // --- PROCESAMIENTO DE TODOS LOS PEDIDOS (para métricas globales) ---
+    allOrders.forEach((order) => {
+        const isOrderConfirmed = order.isConfirmed === true;
+        const storeName = order.storeId || 'Desconocida';
+
+        // Conteo global
+        isOrderConfirmed ? totalConfirmed++ : totalUnconfirmed++;
+
+        // Daily Metrics para todos los pedidos
+        if (order.createdAt && typeof order.createdAt.toDate === 'function') {
+            const utcDate = order.createdAt.toDate();
+            const localDate = adjustToLocalTimezone(utcDate);
+            const dateStr = `${String(localDate.getUTCFullYear())}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`;
+            
+            if (!dailyData[dateStr]) {
+                dailyData[dateStr] = { confirmed: 0, unconfirmed: 0, revenue: 0, byStore: {} };
+            }
+            if (!dailyData[dateStr].byStore[storeName]) {
+                dailyData[dateStr].byStore[storeName] = { confirmed: 0, unconfirmed: 0 };
+            }
+
+            if (isOrderConfirmed) {
+                dailyData[dateStr].confirmed++;
+                dailyData[dateStr].byStore[storeName].confirmed++;
+                dailyData[dateStr].revenue += order.totalPrice || 0;
+            } else {
+                dailyData[dateStr].unconfirmed++;
+                dailyData[dateStr].byStore[storeName].unconfirmed++;
+            }
+        }
+        
+        // Product Metrics (solo pedidos)
+        if (order.products && Array.isArray(order.products)) {
+            order.products.forEach((product: { title: string }) => {
+                if (!product || !product.title) return;
+                const rawProduct = product.title;
+                const cleanedProduct = rawProduct.replace(/^[0-9]+\s*x\s+/i, '').trim();
+                requestedProductData[cleanedProduct] = (requestedProductData[cleanedProduct] || 0) + 1;
+            });
+        }
+    });
+
+    // --- PROCESAMIENTO DE PEDIDOS CONFIRMADOS (para métricas de envío) ---
+    confirmedOrders.forEach((order) => {
       const storeName = order.storeId || 'Desconocida';
       
-      isOrderConfirmed ? totalConfirmed++ : totalUnconfirmed++;
-      
-      // Daily Metrics con ajuste de zona horaria
-      if (order.createdAt && typeof order.createdAt.toDate === 'function') {
-        const utcDate = order.createdAt.toDate();
-        const localDate = adjustToLocalTimezone(utcDate); // Ajustamos a UTC-5
-        
-        const dateStr = `${String(localDate.getUTCFullYear())}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`;
-        
-        if (!dailyData[dateStr]) {
-            dailyData[dateStr] = { confirmed: 0, unconfirmed: 0, byStore: {} };
-        }
-        if (!dailyData[dateStr].byStore[storeName]) {
-            dailyData[dateStr].byStore[storeName] = { confirmed: 0, unconfirmed: 0 };
-        }
-
-        if (isOrderConfirmed) {
-            dailyData[dateStr].confirmed++;
-            dailyData[dateStr].byStore[storeName].confirmed++;
-        } else {
-            dailyData[dateStr].unconfirmed++;
-            dailyData[dateStr].byStore[storeName].unconfirmed++;
-        }
-      }
-
       // Province Metrics
       const rawProvince = order.province || 'Desconocida';
       if (!provinceData[rawProvince]) {
         provinceData[rawProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
       }
-      provinceData[rawProvince].totalOrders++;
+      provinceData[rawProvince].totalOrders++; // Aquí usamos todos, pero el source ya está filtrado
+      provinceData[rawProvince].confirmedOrders++;
       provinceData[rawProvince].totalSpent += order.totalPrice || 0;
-      if (isOrderConfirmed) provinceData[rawProvince].confirmedOrders++;
 
       // Province Metrics By Store
       if (storeName !== 'Desconocida') {
@@ -134,57 +160,44 @@ const getMetricsFlow = ai.defineFlow(
           provinceDataByStore[lowerCaseStoreName][rawProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
         }
         provinceDataByStore[lowerCaseStoreName][rawProvince].totalOrders++;
+        provinceDataByStore[lowerCaseStoreName][rawProvince].confirmedOrders++;
         provinceDataByStore[lowerCaseStoreName][rawProvince].totalSpent += order.totalPrice || 0;
-        if (isOrderConfirmed) provinceDataByStore[lowerCaseStoreName][rawProvince].confirmedOrders++;
       }
       
-      // Product Metrics
+      // Purchased Product Metrics
       if (order.products && Array.isArray(order.products)) {
           order.products.forEach((product: { title: string }) => {
               if (!product || !product.title) return;
               const rawProduct = product.title;
               const cleanedProduct = rawProduct.replace(/^[0-9]+\s*x\s+/i, '').trim();
               
-              requestedProductData[cleanedProduct] = (requestedProductData[cleanedProduct] || 0) + 1;
-              if (isOrderConfirmed) {
-                  purchasedProductData[cleanedProduct] = (purchasedProductData[cleanedProduct] || 0) + 1;
+              purchasedProductData[cleanedProduct] = (purchasedProductData[cleanedProduct] || 0) + 1;
 
-                  // Store-specific top products
-                   if (!storeData[storeName]) {
-                      storeData[storeName] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0, topProducts: {}, dailyConfirmed: {} };
-                   }
-                   storeData[storeName].topProducts[cleanedProduct] = (storeData[storeName].topProducts[cleanedProduct] || 0) + 1;
-              }
+              // Store-specific top products
+               if (!storeData[storeName]) {
+                  storeData[storeName] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0, topProducts: {}, dailyConfirmed: {} };
+               }
+               storeData[storeName].topProducts[cleanedProduct] = (storeData[storeName].topProducts[cleanedProduct] || 0) + 1;
           });
       }
       
-      // Personnel Metrics (from confirmed orders)
-      if (isOrderConfirmed && order.confirmedBy) {
+      // Personnel Metrics
+      if (order.confirmedBy) {
           const person = order.confirmedBy || 'No especificado';
           personnelData[person] = (personnelData[person] || 0) + 1;
       }
 
-      // Courier Metrics (from confirmed orders)
-      if (isOrderConfirmed && order.courier) {
-          const courier = order.courier || 'No especificado';
-          if (!courierData[courier]) {
-              courierData[courier] = { shipments: 0, revenue: 0, provinces: new Set() };
+      // Courier Metrics
+      const courierName = order.courier;
+      if (courierName && courierName !== 'No especificado') {
+          if (!courierData[courierName]) {
+              courierData[courierName] = { shipments: 0, revenue: 0, provinces: new Set() };
           }
-          courierData[courier].shipments++;
-          courierData[courier].revenue += order.totalPrice || 0;
+          courierData[courierName].shipments++;
+          courierData[courierName].revenue += order.totalPrice || 0;
           if (order.province) {
-              courierData[courier].provinces.add(order.province);
+              courierData[courierName].provinces.add(order.province);
           }
-      }
-
-      // Payment Method Metrics (from delivered orders)
-      if (order.isDelivered && order.paymentMethod) {
-          const method = order.paymentMethod;
-          if (!paymentMethodData[method]) {
-              paymentMethodData[method] = { orders: 0, revenue: 0 };
-          }
-          paymentMethodData[method].orders++;
-          paymentMethodData[method].revenue += order.totalPrice || 0;
       }
 
       // Store Metrics
@@ -192,10 +205,20 @@ const getMetricsFlow = ai.defineFlow(
           storeData[storeName] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0, topProducts: {}, dailyConfirmed: {} };
       }
       storeData[storeName].totalOrders++;
+      storeData[storeName].confirmedOrders++;
       storeData[storeName].totalSpent += order.totalPrice || 0;
-      if (isOrderConfirmed) {
-          storeData[storeName].confirmedOrders++;
-      }
+    });
+
+    // --- PROCESAMIENTO DE PEDIDOS ENTREGADOS (para métodos de pago) ---
+    deliveredOrders.forEach((order) => {
+        if (order.paymentMethod) {
+            const method = order.paymentMethod;
+            if (!paymentMethodData[method]) {
+                paymentMethodData[method] = { orders: 0, revenue: 0 };
+            }
+            paymentMethodData[method].orders++;
+            paymentMethodData[method].revenue += order.totalPrice || 0;
+        }
     });
 
     // --- Rellenar datos diarios para cada tienda ---
@@ -302,6 +325,7 @@ const getMetricsFlow = ai.defineFlow(
         totalOrders: data.confirmed + data.unconfirmed, 
         confirmed: data.confirmed, 
         unconfirmed: data.unconfirmed, 
+        ingresos: data.revenue,
         confirmationRate: (data.confirmed + data.unconfirmed) > 0 ? (data.confirmed / (data.confirmed + data.unconfirmed)) * 100 : 0,
         byStore: data.byStore 
     })).sort((a, b) => new Date(b.date.split('-').reverse().join('-')).getTime() - new Date(a.date.split('-').reverse().join('-')).getTime());
@@ -553,7 +577,7 @@ const getMetricsFlow = ai.defineFlow(
 
 
     const miscMetrics = { 
-      globalConfirmed: totalConfirmed, 
+      globalConfirmed: confirmedOrders.length,
       globalUnconfirmed: totalUnconfirmed,
       dailyOrderVariation: dailyOrderVariation
     };
@@ -588,9 +612,3 @@ const getMetricsFlow = ai.defineFlow(
 export async function getMetrics(input: GetMetricsInput): Promise<GetMetricsOutput> {
     return getMetricsFlow(input);
 }
-
-    
-
-    
-
-    

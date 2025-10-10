@@ -128,6 +128,31 @@ const getMetricsFlow = ai.defineFlow(
             storeData[storeName].totalSpent += order.totalPrice || 0;
         }
 
+        // Province Metrics - Calcular desde TODOS los pedidos
+        const rawProvince = order.province || 'Desconocida';
+        if (!provinceData[rawProvince]) {
+            provinceData[rawProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
+        }
+        provinceData[rawProvince].totalOrders++;
+        if (isOrderConfirmed) {
+            provinceData[rawProvince].confirmedOrders++;
+            provinceData[rawProvince].totalSpent += order.totalPrice || 0;
+        }
+
+        // Province Metrics By Store - Calcular desde TODOS los pedidos
+        if (storeName !== 'Desconocida') {
+            const lowerCaseStoreName = storeName.toLowerCase();
+            if (!provinceDataByStore[lowerCaseStoreName]) provinceDataByStore[lowerCaseStoreName] = {};
+            if (!provinceDataByStore[lowerCaseStoreName][rawProvince]) {
+                provinceDataByStore[lowerCaseStoreName][rawProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
+            }
+            provinceDataByStore[lowerCaseStoreName][rawProvince].totalOrders++;
+            if (isOrderConfirmed) {
+                provinceDataByStore[lowerCaseStoreName][rawProvince].confirmedOrders++;
+                provinceDataByStore[lowerCaseStoreName][rawProvince].totalSpent += order.totalPrice || 0;
+            }
+        }
+
         // Daily Metrics para todos los pedidos (basado en createdAt)
         if (order.createdAt && typeof order.createdAt.toDate === 'function') {
             const utcDate = order.createdAt.toDate();
@@ -166,26 +191,8 @@ const getMetricsFlow = ai.defineFlow(
     confirmedOrders.forEach((order) => {
       const storeName = order.storeId || 'Desconocida';
       
-      // Province Metrics
-      const rawProvince = order.province || 'Desconocida';
-      if (!provinceData[rawProvince]) {
-        provinceData[rawProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
-      }
-      provinceData[rawProvince].totalOrders++; // Aquí usamos todos, pero el source ya está filtrado
-      provinceData[rawProvince].confirmedOrders++;
-      provinceData[rawProvince].totalSpent += order.totalPrice || 0;
-
-      // Province Metrics By Store
-      if (storeName !== 'Desconocida') {
-        const lowerCaseStoreName = storeName.toLowerCase();
-        if (!provinceDataByStore[lowerCaseStoreName]) provinceDataByStore[lowerCaseStoreName] = {};
-        if (!provinceDataByStore[lowerCaseStoreName][rawProvince]) {
-          provinceDataByStore[lowerCaseStoreName][rawProvince] = { totalOrders: 0, confirmedOrders: 0, totalSpent: 0 };
-        }
-        provinceDataByStore[lowerCaseStoreName][rawProvince].totalOrders++;
-        provinceDataByStore[lowerCaseStoreName][rawProvince].confirmedOrders++;
-        provinceDataByStore[lowerCaseStoreName][rawProvince].totalSpent += order.totalPrice || 0;
-      }
+      // NOTA: Province Metrics ahora se calculan en el loop de allOrders
+      // NO duplicar aquí para evitar contar doble
       
       // Purchased Product Metrics
       if (order.products && Array.isArray(order.products)) {

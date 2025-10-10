@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82ca9d', '#ffc658', '#ff7c7c'];
 const CACHE_KEY_PREFIX = 'dashboardMetricsCache_shipments';
@@ -32,6 +33,8 @@ export default function ShipmentsPage() {
     from: subDays(new Date(), 29),
     to: new Date(),
   });
+  const [selectedCourier, setSelectedCourier] = useState<string>("all");
+  const [selectedStore, setSelectedStore] = useState<string>("all");
   const { toast } = useToast();
   
   const CACHE_KEY = `${CACHE_KEY_PREFIX}_${date?.from?.toISOString()}_${date?.to?.toISOString()}`;
@@ -100,7 +103,9 @@ export default function ShipmentsPage() {
     topProvinces,
     paymentMethods,
     courierPerformance,
-    storePerformance
+    storePerformance,
+    allCouriers,
+    allStores
   } = useMemo(() => {
     if (!metrics) return {
       totalShipments: 0,
@@ -112,6 +117,8 @@ export default function ShipmentsPage() {
       paymentMethods: [],
       courierPerformance: [],
       storePerformance: [],
+      allCouriers: [],
+      allStores: [],
     };
     
     const confirmedOrders = metrics.miscMetrics.globalConfirmed;
@@ -155,11 +162,23 @@ export default function ShipmentsPage() {
         
     const paymentData = (metrics.paymentMethodMetrics || []).sort((a,b) => b.totalOrders - a.totalOrders);
 
-    const couriers = (metrics.courierMetrics || []).sort((a, b) => b.totalShipments - a.totalShipments);
-    
-    const stores = metrics.storeMetrics
+    // Obtener TODOS los couriers y tiendas para los filtros
+    const allCouriersData = (metrics.courierMetrics || []).map(c => c.name);
+    const allStoresData = metrics.storeMetrics.map(s => s.name);
+
+    // Filtrar couriers según selección
+    let couriers = (metrics.courierMetrics || []).sort((a, b) => b.totalShipments - a.totalShipments);
+    if (selectedCourier !== "all") {
+      couriers = couriers.filter(c => c.name === selectedCourier);
+    }
+
+    // Filtrar tiendas según selección
+    let stores = metrics.storeMetrics
       .map(s => ({ name: s.name, envios: s.confirmedOrders }))
       .sort((a, b) => b.envios - a.envios);
+    if (selectedStore !== "all") {
+      stores = stores.filter(s => s.name === selectedStore);
+    }
 
     return {
       totalShipments: confirmedOrders,
@@ -171,8 +190,10 @@ export default function ShipmentsPage() {
       paymentMethods: paymentData,
       courierPerformance: couriers,
       storePerformance: stores,
+      allCouriers: allCouriersData,
+      allStores: allStoresData,
     };
-  }, [metrics, date]);
+  }, [metrics, date, selectedCourier, selectedStore]);
 
   if (loading) {
     return (
@@ -198,29 +219,113 @@ export default function ShipmentsPage() {
 
   return (
     <div className="space-y-6">
-       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <SidebarTrigger className="md:hidden" />
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Análisis de Envíos</h1>
-            <p className="text-muted-foreground">
-              Monitoreo y análisis de pedidos confirmados
-            </p>
+       <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <SidebarTrigger className="md:hidden" />
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Análisis de Envíos</h1>
+              <p className="text-muted-foreground">
+                Monitoreo y análisis de pedidos confirmados
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+             <Popover>
+              <PopoverTrigger asChild>
+                <Button id="date" variant={"outline"} className={cn("w-[240px] sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {date?.from ? (date.to ? (<>{format(date.from, "LLL dd, y", { locale: es })} - {format(date.to, "LLL dd, y", { locale: es })}</>) : (format(date.from, "LLL dd, y", { locale: es }))) : (<span>Selecciona un rango</span>)}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
+              </PopoverContent>
+            </Popover>
+            <ClearCacheButton onClick={() => fetchShipmentMetrics(true)} disabled={loading} />
           </div>
         </div>
-        <div className="flex items-center gap-2">
-           <Popover>
-            <PopoverTrigger asChild>
-              <Button id="date" variant={"outline"} className={cn("w-[240px] sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {date?.from ? (date.to ? (<>{format(date.from, "LLL dd, y", { locale: es })} - {format(date.to, "LLL dd, y", { locale: es })}</>) : (format(date.from, "LLL dd, y", { locale: es }))) : (<span>Selecciona un rango</span>)}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
-            </PopoverContent>
-          </Popover>
-          <ClearCacheButton />
+
+        {/* FILTROS RÁPIDOS */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Button
+              variant={!date || (date.from && date.to && (date.to.getTime() - date.from.getTime()) / (1000 * 60 * 60 * 24) === 6) ? "default" : "outline"}
+              size="sm"
+              onClick={() => setDate({ from: subDays(new Date(), 6), to: new Date() })}
+            >
+              Últimos 7 días
+            </Button>
+            <Button
+              variant={date?.from && date.to && (date.to.getTime() - date.from.getTime()) / (1000 * 60 * 60 * 24) === 29 ? "default" : "outline"}
+              size="sm"
+              onClick={() => setDate({ from: subDays(new Date(), 29), to: new Date() })}
+            >
+              Últimos 30 días
+            </Button>
+            <Button
+              variant={date?.from && date.to && (date.to.getTime() - date.from.getTime()) / (1000 * 60 * 60 * 24) >= 89 ? "default" : "outline"}
+              size="sm"
+              onClick={() => setDate({ from: subDays(new Date(), 89), to: new Date() })}
+            >
+              Últimos 90 días
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const today = new Date();
+                setDate({ from: new Date(today.getFullYear(), today.getMonth(), 1), to: today });
+              }}
+            >
+              Este mes
+            </Button>
+          </div>
+
+          <div className="h-6 w-px bg-border" />
+
+          {/* Filtro por Courier */}
+          <Select value={selectedCourier} onValueChange={setSelectedCourier}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Todos los couriers" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los couriers</SelectItem>
+              {allCouriers.map((courier) => (
+                <SelectItem key={courier} value={courier}>
+                  {courier}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Filtro por Tienda */}
+          <Select value={selectedStore} onValueChange={setSelectedStore}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Todas las tiendas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas las tiendas</SelectItem>
+              {allStores.map((store) => (
+                <SelectItem key={store} value={store}>
+                  {store}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {(selectedCourier !== "all" || selectedStore !== "all") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSelectedCourier("all");
+                setSelectedStore("all");
+              }}
+            >
+              Limpiar filtros
+            </Button>
+          )}
         </div>
       </div>
 
@@ -400,7 +505,16 @@ export default function ShipmentsPage() {
                 </TableBody>
               </Table>
             </div>
-          ) : ( <div className="flex items-center justify-center h-32 text-muted-foreground">No hay datos de couriers</div> )}
+          ) : (
+            <div className="flex flex-col items-center justify-center h-32 text-muted-foreground gap-2">
+              <p>No hay datos de couriers en el período seleccionado</p>
+              <p className="text-xs">
+                {selectedCourier !== "all" 
+                  ? `Filtrando por: ${selectedCourier}` 
+                  : "Intenta ampliar el rango de fechas o verifica que los pedidos tengan courier asignado"}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

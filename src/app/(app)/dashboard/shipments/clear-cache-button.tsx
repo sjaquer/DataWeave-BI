@@ -1,20 +1,19 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-export function ClearCacheButton() {
+export function ClearCacheButton({ onClick, disabled }: { onClick: () => void, disabled?: boolean }) {
   const { toast } = useToast();
 
-  const clearCache = () => {
+  const handleClearCache = () => {
     try {
-      // Limpiar todas las cachés relacionadas con el dashboard
       const keys = Object.keys(localStorage);
       let clearedCount = 0;
       
       keys.forEach(key => {
-        if (key.includes('dashboardMetricsCache') || key.includes('shipments') || key.includes('metrics')) {
+        if (key.startsWith('dashboardMetricsCache_shipments')) {
           localStorage.removeItem(key);
           clearedCount++;
         }
@@ -22,18 +21,16 @@ export function ClearCacheButton() {
 
       toast({
         title: "Caché Limpiada",
-        description: `Se eliminaron ${clearedCount} cachés. La página se recargará para obtener datos frescos.`,
+        description: `Se eliminaron ${clearedCount} cachés de envíos. Recargando datos...`,
       });
 
-      // Recargar la página después de 1 segundo
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      onClick();
+
     } catch (error) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "No se pudo limpiar la caché. Intenta recargar manualmente (Ctrl+Shift+R).",
+        description: "No se pudo limpiar la caché.",
       });
     }
   };
@@ -42,11 +39,12 @@ export function ClearCacheButton() {
     <Button
       variant="outline"
       size="sm"
-      onClick={clearCache}
+      onClick={handleClearCache}
+      disabled={disabled}
       className="gap-2"
     >
-      <Trash2 className="h-4 w-4" />
-      Limpiar Caché
+      <RefreshCw className="h-4 w-4" />
+      Actualizar
     </Button>
   );
 }

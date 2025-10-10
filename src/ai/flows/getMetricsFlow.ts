@@ -423,7 +423,7 @@ const getMetricsFlow = ai.defineFlow(
           confirmedOrders: data.confirmedOrders,
           totalSpent: data.totalSpent,
           confirmationRate: data.totalOrders > 0 ? (data.confirmedOrders / data.totalOrders) * 100 : 0,
-          averageTicket: data.totalOrders > 0 ? data.totalSpent / data.totalOrders : 0,
+          averageTicket: data.confirmedOrders > 0 ? data.totalSpent / data.confirmedOrders : 0, // FIX: Dividir entre confirmedOrders, no totalOrders
           topProducts,
           dailyOrderVariation,
           confirmationRateTrend,

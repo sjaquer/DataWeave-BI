@@ -1,0 +1,92 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "envios_temporales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "enReporteEnviados", "order": "ASCENDING" },
+        { "fieldPath": "eliminadoDeTransito", "order": "ASCENDING" },
+        { "fieldPath": "ultimaActualizacion", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "envios_temporales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipoOrigen", "order": "ASCENDING" },
+        { "fieldPath": "enReporteEnviados", "order": "ASCENDING" },
+        { "fieldPath": "eliminadoDeTransito", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "envios_temporales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "enReporteEnviados", "order": "ASCENDING" },
+        { "fieldPath": "eliminadoDeTransito", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "envios_temporales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "courier", "order": "ASCENDING" },
+        { "fieldPath": "tipoOrigen", "order": "ASCENDING" },
+        { "fieldPath": "enReporteEnviados", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "envios_temporales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "provincia", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "enReporteEnviados", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "envios_temporales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tienda", "order": "ASCENDING" },
+        { "fieldPath": "tipoOrigen", "order": "ASCENDING" },
+        { "fieldPath": "enReporteEnviados", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "envios_temporales_historial",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "pedidoId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "envios_temporales_historial",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "evento", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "envios_temporales_historial",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipoOrigen", "order": "ASCENDING" },
+        { "fieldPath": "evento", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "envios_temporales_historial",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "courier", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

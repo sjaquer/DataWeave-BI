@@ -4,7 +4,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, Package, Truck, DollarSign, RefreshCw, Calendar as CalendarIcon } from "lucide-react";
+import { TrendingUp, Package, Truck, DollarSign, RefreshCw, Calendar as CalendarIcon, Clock } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,11 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useEnviosTemporales } from "@/hooks/useEnviosTemporales";
+import { EnviosTemporalesKPIs } from "@/components/dashboard/EnviosTemporalesKPIs";
+import { EstadosTemporalesTable } from "@/components/dashboard/EstadosTemporalesTable";
+import { CourierPerformanceChart } from "@/components/dashboard/CourierPerformanceChart";
+import { Separator } from "@/components/ui/separator";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82ca9d', '#ffc658', '#ff7c7c'];
 const CACHE_KEY_PREFIX = 'dashboardMetricsCache_shipments';
@@ -36,6 +41,9 @@ export default function ShipmentsPage() {
   const [selectedCourier, setSelectedCourier] = useState<string>("all");
   const [selectedStore, setSelectedStore] = useState<string>("all");
   const { toast } = useToast();
+  
+  // Hook para datos de envíos temporales (en tránsito)
+  const { data: enviosTemporales, loading: loadingTemporales, error: errorTemporales, refetch: refetchTemporales } = useEnviosTemporales(true, 30000);
   
   const CACHE_KEY = `${CACHE_KEY_PREFIX}_${date?.from?.toISOString()}_${date?.to?.toISOString()}`;
 
@@ -327,6 +335,76 @@ export default function ShipmentsPage() {
             </Button>
           )}
         </div>
+      </div>
+
+      {/* ====== NUEVA SECCIÓN: ENVÍOS TEMPORALES EN TRÁNSITO ====== */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <Clock className="h-6 w-6 text-blue-600" />
+              Envíos en Tránsito (Tiempo Real)
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Pedidos activos de PROVINCIA y LIMA. Actualización automática cada 30 segundos.
+            </p>
+          </div>
+          <Button
+            onClick={() => refetchTemporales()}
+            disabled={loadingTemporales}
+            variant="outline"
+            size="sm"
+          >
+            <RefreshCw className={cn("h-4 w-4 mr-2", loadingTemporales && "animate-spin")} />
+            Actualizar
+          </Button>
+        </div>
+
+        {loadingTemporales && !enviosTemporales && (
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="h-32" />
+              ))}
+            </div>
+            <Skeleton className="h-64" />
+          </div>
+        )}
+
+        {errorTemporales && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              Error al cargar datos de envíos temporales: {errorTemporales}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {enviosTemporales && !errorTemporales && (
+          <>
+            {/* KPIs de Envíos Temporales */}
+            <EnviosTemporalesKPIs data={enviosTemporales} />
+
+            {/* Tabla de Estados */}
+            <EstadosTemporalesTable data={enviosTemporales} />
+
+            {/* Gráficos de Courier */}
+            <CourierPerformanceChart data={enviosTemporales} />
+
+            <div className="flex items-center justify-center text-xs text-muted-foreground">
+              Última actualización: {new Date(enviosTemporales.timestamp).toLocaleString('es-PE')}
+            </div>
+          </>
+        )}
+      </div>
+
+      <Separator className="my-8" />
+
+      {/* ====== SECCIÓN EXISTENTE: ANÁLISIS HISTÓRICO ====== */}
+      <div className="space-y-1 mb-6">
+        <h2 className="text-2xl font-bold tracking-tight">Análisis Histórico de Envíos</h2>
+        <p className="text-sm text-muted-foreground">
+          Métricas y tendencias de pedidos confirmados en el período seleccionado
+        </p>
       </div>
 
 

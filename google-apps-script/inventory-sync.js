@@ -12,14 +12,21 @@ const CONFIG = {
   // URL del webhook para la nueva hoja ENTREGADO.
   DELIVERED_WEBHOOK_URL: 'https://dataweave-bi.vercel.app/api/webhooks/delivered',
 
+  // URL del webhook para datos temporales (PROVINCIA_ENVIADOS y LIMA_ENVIADOS).
+  ENVIOS_TEMPORALES_WEBHOOK_URL: 'https://dataweave-bi.vercel.app/api/webhooks/envios-temporales',
+
   // Nombres de las hojas
   SHIPPED_SHEET_NAME: 'REPORTE_ENVIADOS',
   DELIVERED_SHEET_NAME: 'ENTREGADO',
+  PROVINCIA_ENVIADOS_SHEET_NAME: 'PROVINCIA_ENVIADOS',
+  LIMA_ENVIADOS_SHEET_NAME: 'LIMA_ENVIADOS',
   LOG_SHEET_NAME: 'LOG_ENVIOS',
 
   // Columnas de ID único para cada hoja
   SHIPPED_UNIQUE_ID_COLUMN: 'PEDIDO',
-  DELIVERED_UNIQUE_ID_COLUMN: 'ID', 
+  DELIVERED_UNIQUE_ID_COLUMN: 'ID',
+  PROVINCIA_ENVIADOS_UNIQUE_ID_COLUMN: 'PEDIDO',
+  LIMA_ENVIADOS_UNIQUE_ID_COLUMN: 'PEDIDO',
 
   // Frecuencia del disparador automático en horas.
   TRIGGER_FREQUENCY_HOURS: 1
@@ -36,11 +43,13 @@ const CONFIG = {
 function onOpen() {
   SpreadsheetApp.getUi()
       .createMenu('Sincronización DataWeave')
-      .addItem('1. Sincronizar REPORTE ENVIADOS', 'triggerShippedSync')
-      .addItem('2. Sincronizar ENTREGADO', 'triggerDeliveredSync')
+      .addItem('1. Sincronizar PROVINCIA ENVIADOS (Temporal)', 'triggerProvinciaEnviadosSync')
+      .addItem('2. Sincronizar LIMA ENVIADOS (Temporal)', 'triggerLimaEnviadosSync')
+      .addItem('3. Sincronizar REPORTE ENVIADOS', 'triggerShippedSync')
+      .addItem('4. Sincronizar ENTREGADO', 'triggerDeliveredSync')
       .addSeparator()
-      .addItem('3. Activar Sincronización Automática', 'createTriggers')
-      .addItem('4. Desactivar Sincronización Automática', 'deleteTriggers')
+      .addItem('5. Activar Sincronización Automática', 'createTriggers')
+      .addItem('6. Desactivar Sincronización Automática', 'deleteTriggers')
       .addToUi();
 }
 
@@ -50,6 +59,18 @@ function onOpen() {
 function createTriggers() {
   deleteTriggers();
   
+  // Trigger para PROVINCIA_ENVIADOS (ejecutar primero)
+  ScriptApp.newTrigger('triggerProvinciaEnviadosSync')
+      .timeBased()
+      .everyHours(CONFIG.TRIGGER_FREQUENCY_HOURS)
+      .create();
+
+  // Trigger para LIMA_ENVIADOS
+  ScriptApp.newTrigger('triggerLimaEnviadosSync')
+      .timeBased()
+      .everyHours(CONFIG.TRIGGER_FREQUENCY_HOURS)
+      .create();
+
   // Trigger para REPORTE_ENVIADOS
   ScriptApp.newTrigger('triggerShippedSync')
       .timeBased()
@@ -62,7 +83,7 @@ function createTriggers() {
       .everyHours(CONFIG.TRIGGER_FREQUENCY_HOURS)
       .create();
 
-  SpreadsheetApp.getUi().alert(`¡Activado! La sincronización automática se ejecutará cada ${CONFIG.TRIGGER_FREQUENCY_HOURS} hora(s) para ambas hojas.`);
+  SpreadsheetApp.getUi().alert(`¡Activado! La sincronización automática se ejecutará cada ${CONFIG.TRIGGER_FREQUENCY_HOURS} hora(s) para las 4 hojas.`);
 }
 
 /**
@@ -71,7 +92,11 @@ function createTriggers() {
 function deleteTriggers() {
   const triggers = ScriptApp.getProjectTriggers();
   for (const trigger of triggers) {
-    if (trigger.getHandlerFunction() === 'triggerShippedSync' || trigger.getHandlerFunction() === 'triggerDeliveredSync') {
+    const handlerFunction = trigger.getHandlerFunction();
+    if (handlerFunction === 'triggerShippedSync' || 
+        handlerFunction === 'triggerDeliveredSync' || 
+        handlerFunction === 'triggerProvinciaEnviadosSync' ||
+        handlerFunction === 'triggerLimaEnviadosSync') {
       ScriptApp.deleteTrigger(trigger);
     }
   }
@@ -87,6 +112,22 @@ function deleteTriggers() {
 /**
  * Funciones de disparo para el menú.
  */
+function triggerProvinciaEnviadosSync() {
+  syncSheetTemporal(
+    CONFIG.PROVINCIA_ENVIADOS_SHEET_NAME,
+    CONFIG.PROVINCIA_ENVIADOS_UNIQUE_ID_COLUMN,
+    'PROVINCIA'
+  );
+}
+
+function triggerLimaEnviadosSync() {
+  syncSheetTemporal(
+    CONFIG.LIMA_ENVIADOS_SHEET_NAME,
+    CONFIG.LIMA_ENVIADOS_UNIQUE_ID_COLUMN,
+    'LIMA'
+  );
+}
+
 function triggerShippedSync() {
   syncSheet(
     CONFIG.SHIPPED_SHEET_NAME,
@@ -105,6 +146,65 @@ function triggerDeliveredSync() {
     'ENTREGADO',
     false // NO usar log para esta hoja, siempre enviar todo para actualizaciones
   );
+}
+
+/**
+ * Sincronización especial para hojas temporales (PROVINCIA_ENVIADOS y LIMA_ENVIADOS).
+ * Ambas usan el mismo webhook pero con diferentes tipos de origen.
+ */
+function syncSheetTemporal(sheetName, uniqueIdColumn, tipoOrigen) {
+  const ui = SpreadsheetApp.getUi();
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+
+  try {
+    const mainSheet = spreadsheet.getSheetByName(sheetName);
+    if (!mainSheet) throw new Error(`No se encontró la hoja "${sheetName}".`);
+
+    const { dataToSend } = findRowsToSendTemporal(mainSheet, uniqueIdColumn);
+
+    if (dataToSend.length === 0) {
+      Logger.log(`No hay filas para enviar desde "${sheetName}".`);
+      if (isManualExecution()) {
+        ui.alert('Sincronización', `No se encontraron registros en "${sheetName}" para enviar.`, ui.ButtonSet.OK);
+      }
+      return;
+    }
+
+    // Agregar tipo de origen (PROVINCIA o LIMA) a cada registro
+    const dataConTipo = dataToSend.map(row => ({
+      ...row,
+      TIPO_ORIGEN: tipoOrigen
+    }));
+
+    const payload = { 
+      data: dataConTipo,
+      tipoOrigen: tipoOrigen
+    }; 
+    
+    const response = sendPayloadToWebhook(payload, CONFIG.ENVIOS_TEMPORALES_WEBHOOK_URL);
+
+    const responseCode = response.getResponseCode();
+    const responseBody = response.getContentText();
+    
+    if (responseCode === 200) {
+      Logger.log(`Éxito (${responseCode}): Se han procesado ${dataToSend.length} filas desde ${sheetName}. Respuesta: ${responseBody}`);
+      if (isManualExecution()) {
+        const serverMessage = JSON.parse(responseBody).message;
+        ui.alert('Sincronización Exitosa', serverMessage, ui.ButtonSet.OK);
+      }
+    } else {
+      const errorMsg = `Error al enviar los datos. Código: ${responseCode}\nRespuesta: ${responseBody}`;
+      Logger.log(errorMsg);
+      ui.alert('Error de Sincronización', errorMsg, ui.ButtonSet.OK);
+    }
+
+  } catch (error) {
+    const errorMessage = `Error en hoja "${sheetName}": ${error.message}`;
+    Logger.log(errorMessage);
+    if (isManualExecution()) {
+        ui.alert('Error de Sincronización', errorMessage, ui.ButtonSet.OK);
+    }
+  }
 }
 
 
@@ -294,6 +394,45 @@ function handleWebhookResponse(response, logSheet, idsToLog) {
     ui.alert('Error de Sincronización', errorMsg, ui.ButtonSet.OK);
   }
 }
+
+/**
+ * Busca filas para enviar (versión para hojas temporales).
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} mainSheet - La hoja principal.
+ * @param {string} uniqueIdColumn - El nombre de la columna de ID.
+ * @returns {{dataToSend: Array<Object>}}
+ */
+function findRowsToSendTemporal(mainSheet, uniqueIdColumn) {
+  const allValues = mainSheet.getDataRange().getValues();
+  if (allValues.length <= 1) return { dataToSend: [] };
+
+  const headers = allValues[0];
+  const uniqueIdColumnIndex = headers.indexOf(uniqueIdColumn);
+
+  if (uniqueIdColumnIndex === -1) {
+    throw new Error(`No se encontró la columna de ID único "${uniqueIdColumn}" en la hoja "${mainSheet.getName()}".`);
+  }
+
+  const dataToSend = [];
+
+  for (let i = 1; i < allValues.length; i++) {
+    const row = allValues[i];
+    let uniqueId = String(row[uniqueIdColumnIndex]);
+
+    const rowObject = {};
+    headers.forEach((header, index) => {
+      if (header) {
+        rowObject[header] = row[index];
+      }
+    });
+
+    if (uniqueId) {
+      dataToSend.push(rowObject);
+    }
+  }
+  
+  return { dataToSend };
+}
+
 
 /**
  * Verifica si el script fue ejecutado manualmente o por un trigger.

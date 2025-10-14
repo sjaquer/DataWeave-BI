@@ -453,8 +453,8 @@ export default function ShipmentsPage() {
             <Truck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{courierPerformance.length}</div>
-            <p className="text-xs text-muted-foreground">Empresas de transporte</p>
+            <div className="text-2xl font-bold">{enviosTemporales && enviosTemporales.porCourier ? Object.keys(enviosTemporales.porCourier).length : courierPerformance.length}</div>
+            <p className="text-xs text-muted-foreground">Empresas de transporte activas (tiempo real{enviosTemporales ? '' : ', estimado'})</p>
           </CardContent>
         </Card>
       </div>

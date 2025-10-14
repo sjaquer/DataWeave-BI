@@ -221,6 +221,15 @@ function onSheetEdit(e) {
         const h = headers[i];
         if (h) obj[h] = values[i];
       }
+      
+      // Para LIMA_ENVIADOS: usar columna CLAVES (W, índice 22) como COURIER
+      if (sheetName === CONFIG.LIMA_ENVIADOS_SHEET_NAME) {
+        const clavesValue = values[22]; // Columna W = índice 22 (0-indexed)
+        if (clavesValue) {
+          obj['COURIER'] = clavesValue;
+        }
+      }
+      
       return obj;
     }
 
@@ -571,6 +580,7 @@ function findRowsToSendTemporal(mainSheet, uniqueIdColumn) {
   }
 
   const dataToSend = [];
+  const sheetName = mainSheet.getName();
 
   for (let i = 1; i < allValues.length; i++) {
     const row = allValues[i];
@@ -582,6 +592,11 @@ function findRowsToSendTemporal(mainSheet, uniqueIdColumn) {
         rowObject[header] = row[index];
       }
     });
+
+    // Para LIMA_ENVIADOS: usar columna CLAVES (W, índice 22) como COURIER
+    if (sheetName === CONFIG.LIMA_ENVIADOS_SHEET_NAME && row[22]) {
+      rowObject['COURIER'] = row[22];
+    }
 
     if (uniqueId) {
       dataToSend.push(rowObject);

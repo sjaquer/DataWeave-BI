@@ -2,6 +2,18 @@
  * @OnlyCurrentDoc
  */
 
+/**
+ * inventory-sync.js
+ * -----------------
+ * Sincronización de Google Sheets -> Webhooks (DataWeave)
+ *
+ * - Soporta hojas: REPORTE_ENVIADOS, ENTREGADO, PROVINCIA_ENVIADOS, LIMA_ENVIADOS
+ * - Al pulsar '5. Activar Sincronización Automática' se crea UN trigger time-based
+ *   que ejecuta `runAutoSyncAll` cada N minutos (por defecto CONFIG.TRIGGER_FREQUENCY_MINUTES = 5).
+ * - `runAutoSyncAll` ejecuta en background la sincronización de todas las hojas sin mostrar UI.
+ * - '6. Desactivar Sincronización Automática' elimina el trigger creado.
+ */
+
 // =========================================
 // CONFIGURACIÓN CENTRALIZADA
 // =========================================
@@ -29,7 +41,9 @@ const CONFIG = {
   LIMA_ENVIADOS_UNIQUE_ID_COLUMN: 'PEDIDO',
 
   // Frecuencia del disparador automático en horas.
-  TRIGGER_FREQUENCY_HOURS: 1
+  // Si TRIGGER_FREQUENCY_MINUTES está presente se usará prioridad sobre horas.
+  TRIGGER_FREQUENCY_HOURS: 1,
+  TRIGGER_FREQUENCY_MINUTES: 5
 };
 
 
@@ -59,31 +73,29 @@ function onOpen() {
 function createTriggers() {
   deleteTriggers();
   
-  // Trigger para PROVINCIA_ENVIADOS (ejecutar primero)
-  ScriptApp.newTrigger('triggerProvinciaEnviadosSync')
-      .timeBased()
-      .everyHours(CONFIG.TRIGGER_FREQUENCY_HOURS)
-      .create();
+  // Crear triggers con prioridad a minutos si está configurado
+  const useMinutes = typeof CONFIG.TRIGGER_FREQUENCY_MINUTES === 'number' && CONFIG.TRIGGER_FREQUENCY_MINUTES > 0;
 
-  // Trigger para LIMA_ENVIADOS
-  ScriptApp.newTrigger('triggerLimaEnviadosSync')
-      .timeBased()
-      .everyHours(CONFIG.TRIGGER_FREQUENCY_HOURS)
-      .create();
+  // Helper para crear trigger con minutos u horas
+  function createTimeTrigger(functionName) {
+    const trig = ScriptApp.newTrigger(functionName).timeBased();
+    if (useMinutes) {
+      trig.everyMinutes(CONFIG.TRIGGER_FREQUENCY_MINUTES).create();
+    } else {
+      trig.everyHours(CONFIG.TRIGGER_FREQUENCY_HOURS).create();
+    }
+  }
 
-  // Trigger para REPORTE_ENVIADOS
-  ScriptApp.newTrigger('triggerShippedSync')
-      .timeBased()
-      .everyHours(CONFIG.TRIGGER_FREQUENCY_HOURS)
-      .create();
+  // Crear UN solo trigger que ejecuta la sincronización de todas las hojas en background
+  createTimeTrigger('runAutoSyncAll');
 
-  // Trigger para ENTREGADO
-  ScriptApp.newTrigger('triggerDeliveredSync')
-      .timeBased()
-      .everyHours(CONFIG.TRIGGER_FREQUENCY_HOURS)
-      .create();
-
-  SpreadsheetApp.getUi().alert(`¡Activado! La sincronización automática se ejecutará cada ${CONFIG.TRIGGER_FREQUENCY_HOURS} hora(s) para las 4 hojas.`);
+  // Mensaje informativo (si hay UI disponible)
+  try {
+    const freqText = useMinutes ? `${CONFIG.TRIGGER_FREQUENCY_MINUTES} minuto(s)` : `${CONFIG.TRIGGER_FREQUENCY_HOURS} hora(s)`;
+    SpreadsheetApp.getUi().alert(`¡Activado! La sincronización automática en background se ejecutará cada ${freqText} para todas las hojas.`);
+  } catch (e) {
+    // No hay UI (ejecución por trigger), no hacemos nada
+  }
 }
 
 /**
@@ -93,15 +105,28 @@ function deleteTriggers() {
   const triggers = ScriptApp.getProjectTriggers();
   for (const trigger of triggers) {
     const handlerFunction = trigger.getHandlerFunction();
-    if (handlerFunction === 'triggerShippedSync' || 
-        handlerFunction === 'triggerDeliveredSync' || 
-        handlerFunction === 'triggerProvinciaEnviadosSync' ||
-        handlerFunction === 'triggerLimaEnviadosSync') {
-      ScriptApp.deleteTrigger(trigger);
+    // Eliminar triggers antiguos o el nuevo handler central
+    const handlersToDelete = new Set([
+      'triggerShippedSync',
+      'triggerDeliveredSync',
+      'triggerProvinciaEnviadosSync',
+      'triggerLimaEnviadosSync',
+      'runAutoSyncAll'
+    ]);
+    if (handlersToDelete.has(handlerFunction)) {
+      try {
+        ScriptApp.deleteTrigger(trigger);
+      } catch (e) {
+        Logger.log(`No se pudo eliminar trigger ${handlerFunction}: ${e.message}`);
+      }
     }
   }
   Logger.log('Se han eliminado los disparadores automáticos existentes.');
-  SpreadsheetApp.getUi().alert('Sincronización automática desactivada.');
+  try {
+    SpreadsheetApp.getUi().alert('Sincronización automática desactivada.');
+  } catch (e) {
+    // No UI disponible
+  }
 }
 
 
@@ -146,6 +171,29 @@ function triggerDeliveredSync() {
     'ENTREGADO',
     false // NO usar log para esta hoja, siempre enviar todo para actualizaciones
   );
+}
+
+
+/**
+ * Handler central para la sincronización automática en background.
+ * Llama a las funciones de sincronización para todas las hojas en una sola ejecución.
+ * Esta función está pensada para ser invocada por un trigger time-based cada N minutos.
+ */
+function runAutoSyncAll() {
+  // Ejecutar las sincronizaciones en silencioso (sin ventanas UI)
+  try {
+    // Temporal: Provincia y Lima (enviar todo cada vez)
+    syncSheetTemporal(CONFIG.PROVINCIA_ENVIADOS_SHEET_NAME, CONFIG.PROVINCIA_ENVIADOS_UNIQUE_ID_COLUMN, 'PROVINCIA');
+    syncSheetTemporal(CONFIG.LIMA_ENVIADOS_SHEET_NAME, CONFIG.LIMA_ENVIADOS_UNIQUE_ID_COLUMN, 'LIMA');
+
+    // REPORTE_ENVIADOS y ENTREGADO usan su lógica (REPORTE usa log para evitar duplicados)
+    syncSheet(CONFIG.SHIPPED_SHEET_NAME, CONFIG.SHIPPED_UNIQUE_ID_COLUMN, CONFIG.SHIPPED_WEBHOOK_URL, 'ENVIADO', true);
+    syncSheet(CONFIG.DELIVERED_SHEET_NAME, CONFIG.DELIVERED_UNIQUE_ID_COLUMN, CONFIG.DELIVERED_WEBHOOK_URL, 'ENTREGADO', false);
+
+  } catch (e) {
+    // Registrar pero no mostrar UI
+    Logger.log(`Error en runAutoSyncAll: ${e.message}`);
+  }
 }
 
 /**
@@ -440,5 +488,9 @@ function findRowsToSendTemporal(mainSheet, uniqueIdColumn) {
  */
 function isManualExecution(e) {
   // `e` (el objeto de evento) solo existe cuando se ejecuta por un trigger.
+  // Si no hay objeto de evento, asumimos ejecución manual y podemos mostrar UI.
+  // Al invocar desde triggers (runAutoSyncAll) no se pasa `e`, por lo que
+  // ciertos invocadores podrían pasar undefined; aquí mantenemos la
+  // lógica original: retorna true cuando no hay objeto e.
   return !e;
 }

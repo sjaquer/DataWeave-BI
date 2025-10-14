@@ -71,18 +71,39 @@ function onOpen() {
  * Crea disparadores (triggers) para ambas sincronizaciones.
  */
 function createTriggers() {
-  deleteTriggers();
+  // Intentamos eliminar triggers anteriores — si faltan permisos, informamos al usuario
+  try {
+    deleteTriggers();
+  } catch (e) {
+    try {
+      SpreadsheetApp.getUi().alert('No se pudieron gestionar los disparadores automáticos debido a permisos insuficientes. \n\nPara solucionar: abre Extensiones → Apps Script, selecciona la función "createTriggers" y pulsa Ejecutar para autorizar los permisos requeridos (scope: https://www.googleapis.com/auth/script.scriptapp). Si tu cuenta es de G Suite, quizá necesites pedir al admin que permita estos permisos.');
+    } catch (uiErr) {
+      // fallback logging
+      Logger.log('Permisos insuficientes para gestionar triggers: ' + e.message);
+    }
+    return;
+  }
   
   // Crear triggers con prioridad a minutos si está configurado
   const useMinutes = typeof CONFIG.TRIGGER_FREQUENCY_MINUTES === 'number' && CONFIG.TRIGGER_FREQUENCY_MINUTES > 0;
 
   // Helper para crear trigger con minutos u horas
   function createTimeTrigger(functionName) {
-    const trig = ScriptApp.newTrigger(functionName).timeBased();
-    if (useMinutes) {
-      trig.everyMinutes(CONFIG.TRIGGER_FREQUENCY_MINUTES).create();
-    } else {
-      trig.everyHours(CONFIG.TRIGGER_FREQUENCY_HOURS).create();
+    try {
+      const trig = ScriptApp.newTrigger(functionName).timeBased();
+      if (useMinutes) {
+        trig.everyMinutes(CONFIG.TRIGGER_FREQUENCY_MINUTES).create();
+      } else {
+        trig.everyHours(CONFIG.TRIGGER_FREQUENCY_HOURS).create();
+      }
+    } catch (err) {
+      // Probablemente permisos insuficientes (scope script.scriptapp)
+      try {
+        SpreadsheetApp.getUi().alert('No se pudieron crear triggers por permisos insuficientes. Para autorizar: abra Extensiones → Apps Script, ejecute la función "createTriggers" desde el editor y acepte los permisos solicitados. \n\nPermiso requerido: https://www.googleapis.com/auth/script.scriptapp');
+      } catch (uiErr) {
+        Logger.log('No se pudieron crear triggers: ' + err.message);
+      }
+      throw err;
     }
   }
 
@@ -171,6 +192,95 @@ function triggerDeliveredSync() {
     'ENTREGADO',
     false // NO usar log para esta hoja, siempre enviar todo para actualizaciones
   );
+}
+
+/**
+ * Handler instalable para "On edit" que puedes seleccionar manualmente al crear un activador.
+ * - En el editor de Apps Script, al añadir un activador, selecciona la función `onSheetEdit`
+ *   y el evento "On edit" (From spreadsheet -> On edit).
+ * - Envía sólo la(s) fila(s) editada(s) al webhook correspondiente para minimizar trabajo.
+ * @param {Object} e Evento de Apps Script (installable onEdit event)
+ */
+function onSheetEdit(e) {
+  try {
+    if (!e || !e.range) {
+      Logger.log('onSheetEdit: evento inválido');
+      return;
+    }
+
+    const sheet = e.range.getSheet();
+    const sheetName = sheet.getName();
+    const firstRow = 1;
+    const headers = sheet.getRange(firstRow, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+    // Función auxiliar para construir objetos fila
+    function rowToObject(rowIndex) {
+      const values = sheet.getRange(rowIndex, 1, 1, headers.length).getValues()[0];
+      const obj = {};
+      for (let i = 0; i < headers.length; i++) {
+        const h = headers[i];
+        if (h) obj[h] = values[i];
+      }
+      return obj;
+    }
+
+    const startRow = e.range.getRow();
+    const numRows = e.range.getNumRows ? e.range.getNumRows() : 1;
+    const rows = [];
+    for (let r = 0; r < numRows; r++) {
+      const idx = startRow + r;
+      if (idx === 1) continue; // evitar cabecera
+      rows.push(rowToObject(idx));
+    }
+
+    if (rows.length === 0) {
+      Logger.log('onSheetEdit: no hay filas relevantes editadas');
+      return;
+    }
+
+    // Enviar a endpoints según la hoja
+    if (sheetName === CONFIG.PROVINCIA_ENVIADOS_SHEET_NAME || sheetName === CONFIG.LIMA_ENVIADOS_SHEET_NAME) {
+      const tipo = sheetName === CONFIG.PROVINCIA_ENVIADOS_SHEET_NAME ? 'PROVINCIA' : 'LIMA';
+      const dataConTipo = rows.map(r => ({ ...r, TIPO_ORIGEN: tipo }));
+      const payload = { data: dataConTipo, tipoOrigen: tipo };
+      try {
+        const resp = sendPayloadToWebhook(payload, CONFIG.ENVIOS_TEMPORALES_WEBHOOK_URL);
+        Logger.log('onSheetEdit: enviado temporal, codigo=' + resp.getResponseCode());
+      } catch (err) {
+        Logger.log('onSheetEdit: error enviando temporal: ' + err.message);
+      }
+      return;
+    }
+
+    if (sheetName === CONFIG.SHIPPED_SHEET_NAME) {
+      // Para REPORTE_ENVIADOS enviamos la(s) fila(s) editada(s) al webhook de shipped
+      const payload = { data: rows };
+      try {
+        const resp = sendPayloadToWebhook(payload, CONFIG.SHIPPED_WEBHOOK_URL);
+        Logger.log('onSheetEdit: enviado shipped, codigo=' + resp.getResponseCode());
+      } catch (err) {
+        Logger.log('onSheetEdit: error enviando shipped: ' + err.message);
+      }
+      return;
+    }
+
+    if (sheetName === CONFIG.DELIVERED_SHEET_NAME) {
+      const payload = { data: rows };
+      try {
+        const resp = sendPayloadToWebhook(payload, CONFIG.DELIVERED_WEBHOOK_URL);
+        Logger.log('onSheetEdit: enviado delivered, codigo=' + resp.getResponseCode());
+      } catch (err) {
+        Logger.log('onSheetEdit: error enviando delivered: ' + err.message);
+      }
+      return;
+    }
+
+    // Si la hoja no coincide con ninguna conocida, no hacemos nada
+    Logger.log('onSheetEdit: hoja no gestionada: ' + sheetName);
+
+  } catch (ex) {
+    Logger.log('onSheetEdit: excepción: ' + ex.message);
+  }
 }
 
 

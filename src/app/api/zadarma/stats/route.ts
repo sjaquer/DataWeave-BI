@@ -25,7 +25,7 @@ export async function GET(req: Request) {
     const startDateQuery = searchParams.get('startDate');
     const endDateQuery = searchParams.get('endDate');
 
-    // Usar las fechas proporcionadas o el día actual si no se especifica.
+    // CORRECCIÓN: Usar las fechas proporcionadas. Usar hoy solo como fallback.
     const start = startDateQuery ? new Date(startDateQuery) : new Date();
     const end = endDateQuery ? new Date(endDateQuery) : new Date();
 

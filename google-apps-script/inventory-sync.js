@@ -7,7 +7,21 @@
  * -----------------
  * Sincronización de Google Sheets -> Webhooks (DataWeave)
  *
- * - Soporta hojas: REPORTE_ENVIADOS, ENTREGADO, PROVINCIA_ENVIADOS, LIMA_ENVIADOS
+ * HOJAS SOPORTADAS:
+ * - REPORTE_ENVIADOS (~25 columnas)
+ * - ENTREGADO (~16 columnas)
+ * - PROVINCIA_ENVIADOS (28 columnas A-AB, ID único: PEDIDO columna D)
+ * - LIMA_ENVIADOS (28 columnas A-AB, ID único: PEDIDO columna D)
+ * 
+ * IMPORTANTE:
+ * - PROVINCIA y LIMA tienen EXACTAMENTE la misma estructura (28 columnas)
+ * - Ambas usan PEDIDO (columna D) como ID único
+ * - Ambas tienen COURIER en columna P (index 15)
+ * - Ambas tienen NOMBRES en columna I (index 8)
+ * - Ambas tienen ESTADO en columna AB (index 27)
+ * - El mapeo es DINÁMICO por nombre de header, NO por índice
+ *
+ * SINCRONIZACIÓN AUTOMÁTICA:
  * - Al pulsar '5. Activar Sincronización Automática' se crea UN trigger time-based
  *   que ejecuta `runAutoSyncAll` cada N minutos (por defecto CONFIG.TRIGGER_FREQUENCY_MINUTES = 5).
  * - `runAutoSyncAll` ejecuta en background la sincronización de todas las hojas sin mostrar UI.
@@ -227,14 +241,6 @@ function onSheetEdit(e) {
       for (let i = 0; i < headers.length; i++) {
         const h = headers[i];
         if (h) obj[h] = values[i];
-      }
-      
-      // Para LIMA_ENVIADOS: usar columna CLAVES (W, índice 22) como COURIER
-      if (sheetName === CONFIG.LIMA_ENVIADOS_SHEET_NAME) {
-        const clavesValue = values[22]; // Columna W = índice 22 (0-indexed)
-        if (clavesValue) {
-          obj['COURIER'] = clavesValue;
-        }
       }
       
       return obj;
@@ -687,11 +693,6 @@ function findRowsToSendTemporal(mainSheet, uniqueIdColumn) {
         rowObject[header] = row[index];
       }
     });
-
-    // Para LIMA_ENVIADOS: usar columna CLAVES (W, índice 22) como COURIER
-    if (sheetName === CONFIG.LIMA_ENVIADOS_SHEET_NAME && row[22]) {
-      rowObject['COURIER'] = row[22];
-    }
 
     if (uniqueId) {
       dataToSend.push(rowObject);

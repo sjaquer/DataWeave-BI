@@ -33,22 +33,63 @@ import { FieldValue } from 'firebase-admin/firestore';
 export const runtime = 'nodejs';
 
 interface EnvioTemporalRow {
-  ID: string;
-  FECHA_CREADO: string;
-  TIENDA: string;
-  PEDIDO: string; // ID único del pedido (puede ser PEDID también)
-  PRODUCTOS: string;
-  M: number;
-  NOMBRES: string;
-  DNI: string;
-  CELULAR: string;
-  PROV: string;
-  DIRECCION: string;
-  COURIER: string;
-  CLAVES: string;
-  FECHA_ENVIADO?: string;
-  ESTADO?: string; // Estado actual del pedido
-  TIPO_ORIGEN: 'PROVINCIA' | 'LIMA'; // Agregado por el script
+  // Estructura REAL verificada 2025-10-15
+  // PROVINCIA_ENVIADOS y LIMA_ENVIADOS tienen EXACTAMENTE la misma estructura (28 columnas A-AB)
+  
+  // Columnas principales (A-H)
+  ID: string;                    // A - ID interno sistema
+  FECHA_CREADO?: string;         // B - Fecha creación (puede ser "FECHA CREADO")
+  'FECHA CREADO'?: string;       // B - Variante del header
+  TIENDA: string;                // C - Tienda origen
+  PEDIDO: string;                // D - ID único del pedido (ej: "#Z4890", "N-13128")
+  PRODUCTOS: string;             // E - Descripción productos
+  'PRODUCTO 2'?: string;         // F - Producto adicional
+  TOTAL?: number;                // G - Total del pedido
+  'MONTO PENDIENTE'?: number;    // H - Monto pendiente
+  
+  // Datos del cliente (I-K)
+  NOMBRES: string;               // I - Nombre del cliente (ambas hojas usan NOMBRES)
+  DNI?: string;                  // J - DNI del cliente
+  CELULAR?: string;              // K - Teléfono
+  
+  // Ubicación (L-M)
+  PROVINCIA?: string;            // L - Provincia destino
+  PROV?: string;                 // Alias de PROVINCIA
+  DIRECCION: string;             // M - Dirección entrega
+  
+  // Courier y seguimiento (N-P)
+  'AGENCIA SHALOM'?: string;     // N - Agencia Shalom
+  'PDF URL'?: string;            // O - URL del PDF
+  COURIER: string;               // P - Courier asignado (¡AMBAS HOJAS TIENEN COURIER!)
+  
+  // Control interno (Q-T)
+  ENVIAR?: boolean | string;     // Q - Flag envío
+  ANULAR?: boolean | string;     // R - Flag anulación
+  ATENDIDO?: string;             // S - Usuario que atendió
+  SUBIDO?: string;               // T - Usuario que subió
+  
+  // Notas y observaciones (U-V)
+  'NOTAS DEL PEDIDO'?: string;   // U - Notas
+  OBSERVACIONES?: string;        // V - Observaciones
+  
+  // Seguimiento (W-Y)
+  CLAVES?: string;               // W - Código seguimiento
+  'LINK SHALOM'?: string;        // X - URL rastreo Shalom
+  'PDF SHALOM'?: string;         // Y - PDF comprobante
+  
+  // Fechas y estado (Z-AB)
+  'FECHA ENVIADO'?: string;      // Z - Fecha envío
+  FECHA_ENVIADO?: string;        // Alias
+  ENTREGADO?: string | boolean;  // AA - Flag/fecha entrega
+  ESTADO?: string;               // AB - Estado actual (última columna)
+  
+  // Campos legacy/alternativos
+  M?: number;                    // Alias de MONTO
+  NOMB?: string;                 // Alias de NOMBRES
+  PEDID?: string;                // Alias de PEDIDO
+  
+  // Metadatos
+  TIPO_ORIGEN?: 'PROVINCIA' | 'LIMA'; // Agregado por el script
   [key: string]: any;
 }
 
@@ -111,17 +152,26 @@ export async function POST(request: NextRequest) {
         pedidoId,
         tipoOrigen, // PROVINCIA o LIMA
         tienda: row.TIENDA || 'N/A',
-        provincia: row.PROV || (tipoOrigen === 'LIMA' ? 'Lima' : 'N/A'),
+        provincia: row.PROVINCIA || row.PROV || (tipoOrigen === 'LIMA' ? 'Lima' : 'N/A'),
         estado: estadoActual,
         courier: row.COURIER || 'N/A',
         cliente: row.NOMBRES || row.NOMB || 'N/A',
         celular: row.CELULAR || 'N/A',
         direccion: row.DIRECCION || 'N/A',
         claves: row.CLAVES || null,
-        monto: row.M || 0,
-        fechaCreado: row.FECHA_CREADO || null,
-        fechaEnviado: row.FECHA_ENVIADO || null,
+        monto: row.TOTAL || row.M || 0,
+        montoPendiente: row['MONTO PENDIENTE'] || 0,
+        fechaCreado: row['FECHA CREADO'] || row.FECHA_CREADO || null,
+        fechaEnviado: row['FECHA ENVIADO'] || row.FECHA_ENVIADO || null,
         productos: row.PRODUCTOS || 'N/A',
+        producto2: row['PRODUCTO 2'] || null,
+        agenciaShalom: row['AGENCIA SHALOM'] || null,
+        linkShalom: row['LINK SHALOM'] || null,
+        pdfShalom: row['PDF SHALOM'] || null,
+        atendidoPor: row.ATENDIDO || null,
+        subidoPor: row.SUBIDO || null,
+        notas: row['NOTAS DEL PEDIDO'] || null,
+        observaciones: row.OBSERVACIONES || null,
         datosCompletos: row,
         ultimaActualizacion: FieldValue.serverTimestamp(),
         enReporteEnviados: false,

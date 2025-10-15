@@ -20,25 +20,85 @@ export interface AnalyzeAndStoreMetricsOutput {
 }
 
 export interface ConfirmedOrderInfo {
-  PEDIDO: string;
-  TIENDA: string;
-  ATENDIDO?: string;
-  COURIER?: string;
-  PROVINCIA?: string; 
+  // Estructura REAL de REPORTE_ENVIADOS - 20 columnas (A-T)
+  // Verificado 2025-10-15
+  
+  ID?: string;                   // A - ID interno sistema
+  'FECHA CREADO'?: string;       // B - Fecha creación
+  TIENDA: string;                // C - Tienda origen (requerido)
+  PEDIDO: string;                // D - ID único del pedido (requerido)
+  PRODUCTOS?: string;            // E - Descripción productos
+  'PRODUCTO 2'?: string;         // F - Producto adicional
+  TOTAL?: number;                // G - Total del pedido
+  'MONTO PENDIENTE'?: number;    // H - Monto pendiente
+  NOMBRES?: string;              // I - Nombre del cliente
+  DNI?: string;                  // J - DNI
+  CELULAR?: string;              // K - Teléfono
+  PROVINCIA?: string;            // L - Provincia
+  DIRECCION?: string;            // M - Dirección
+  'AGENCIA SHALOM'?: string;     // N - Agencia Shalom
+  'PDF URL'?: string;            // O - URL del PDF
+  COURIER?: string;              // P - Courier asignado
+  ENVIAR?: boolean | string;     // Q - Flag envío
+  ANULAR?: boolean | string;     // R - Flag anulación
+  ATENDIDO?: string;             // S - Usuario que atendió
+  SUBIDO?: string;               // T - Usuario que subió
+  
+  // Campos legacy
   'FECHA DE ATENCIÓN'?: string;
   PRODUCTO?: string;
 }
 
 export interface DeliveredOrderInfo {
-  ID: string;
-  PEDIDO: string;
-  TIENDA: string;
-  TOTAL?: number;
-  'MONTO PENDIENTE'?: number;
-  'FECHA ENVIADO'?: string;
-  'FECHA ENTREGADO'?: string;
-  'FORMA DE PAGO'?: string; // YAPE, PLIN, AGENTE BOP, etc.
-  'USUARIO'?: string; // Quien registró la entrega
+  // Estructura REAL de ENTREGADO - 39 columnas (A-AM)
+  // Verificado 2025-10-15
+  
+  // Columnas principales (A-T) - igual a otras hojas
+  ID: string;                    // A - ID único para ENTREGADO ⚠️
+  FECHA?: string;                // B - Fecha (no "FECHA CREADO")
+  TIENDA: string;                // C - Tienda origen
+  PEDIDO: string;                // D - Código del pedido
+  PRODUCTOS?: string;            // E - Descripción productos
+  'PRODUCTO 2'?: string;         // F - Producto adicional
+  TOTAL?: number;                // G - Total del pedido
+  'MONTO PENDIENTE'?: number;    // H - Monto pendiente
+  NOMBRES?: string;              // I - Nombre del cliente
+  DNI?: string;                  // J - DNI
+  CELULAR?: string;              // K - Teléfono
+  PROVINCIA?: string;            // L - Provincia
+  DIRECCION?: string;            // M - Dirección
+  'AGENCIA SHALOM'?: string;     // N - Agencia Shalom
+  'PDF URL'?: string;            // O - URL del PDF
+  COURIER?: string;              // P - Courier asignado
+  ENVIAR?: boolean | string;     // Q - Flag envío
+  ANULAR?: boolean | string;     // R - Flag anulación
+  ATENDIDO?: string;             // S - Usuario que atendió
+  SUBIDO?: string;               // T - Usuario que subió
+  
+  // Columnas U-AB (igual a PROVINCIA/LIMA)
+  'NOTAS DEL PEDIDO'?: string;   // U - Notas
+  OBSERVACIONES?: string;        // V - Observaciones
+  CLAVES?: string;               // W - Código seguimiento
+  'LINK SHALOM'?: string;        // X - URL rastreo
+  'PDF SHALOM'?: string;         // Y - PDF comprobante
+  'FECHA ENVIADO'?: string;      // Z - Fecha envío
+  ENTREGADO?: string | boolean;  // AA - Flag entrega
+  ESTADO?: string;               // AB - Estado
+  
+  // Columnas AC-AI (REV - específicas de ENTREGADO)
+  REV1?: string;                 // AC
+  REV2?: string;                 // AD
+  REV3?: string;                 // AE
+  REV4?: string;                 // AF
+  REV5?: string;                 // AG
+  REV6?: string;                 // AH
+  REV7?: string;                 // AI
+  
+  // Columnas AJ-AM (campos finales críticos)
+  'FECHA ENTREGADO'?: string;    // AJ - Fecha entrega real
+  'FECHA Y HORA DE PAGO'?: string; // AK - Fecha/hora pago
+  'FORMA DE PAGO'?: string;      // AL - Método de pago (YAPE, PLIN, etc.) 🎯
+  USUARIO?: string;              // AM - Quien registró la entrega 🎯
 }
 
 export interface InventoryMovement {

@@ -38,6 +38,8 @@ export default function ShipmentsPage() {
     from: subDays(new Date(), 29),
     to: new Date(),
   });
+  const [tempDate, setTempDate] = useState<DateRange | undefined>(date);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [selectedCourier, setSelectedCourier] = useState<string>("all");
   const [selectedStore, setSelectedStore] = useState<string>("all");
   const { toast } = useToast();
@@ -239,7 +241,7 @@ export default function ShipmentsPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-             <Popover>
+             <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
               <PopoverTrigger asChild>
                 <Button id="date" variant={"outline"} className={cn("w-[240px] sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
                   <CalendarIcon className="mr-2 h-4 w-4" />
@@ -247,7 +249,11 @@ export default function ShipmentsPage() {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="end">
-                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
+                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={2} locale={es} />
+                <div className="flex justify-end gap-2 p-4">
+                  <Button variant="ghost" onClick={() => setIsDatePickerOpen(false)}>Cancelar</Button>
+                  <Button onClick={() => { setDate(tempDate); setIsDatePickerOpen(false); }}>Aplicar</Button>
+                </div>
               </PopoverContent>
             </Popover>
             <ClearCacheButton onClick={() => fetchShipmentMetrics(true)} disabled={loading} />

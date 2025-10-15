@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { format } from 'date-fns';
 import * as dotenv from 'dotenv';
@@ -25,9 +26,10 @@ export async function GET(req: Request) {
     const startDateQuery = searchParams.get('startDate');
     const endDateQuery = searchParams.get('endDate');
 
-    // CORRECCIÓN: Usar las fechas proporcionadas. Usar hoy solo como fallback.
+    // CORRECCIÓN: Si no hay fecha de fin, usar la misma fecha de inicio.
+    // Esto asegura que los filtros de un solo día (como "Ayer") funcionen.
     const start = startDateQuery ? new Date(startDateQuery) : new Date();
-    const end = endDateQuery ? new Date(endDateQuery) : new Date();
+    const end = endDateQuery ? new Date(endDateQuery) : new Date(start);
 
     const formattedStartDate = format(start, 'yyyy-MM-dd HH:mm:ss');
     const formattedEndDate = format(end, 'yyyy-MM-dd HH:mm:ss');
@@ -81,3 +83,4 @@ export async function GET(req: Request) {
     return NextResponse.json({ status: 'error', message: `Error interno del servidor: ${error.message}` }, { status: 500 });
   }
 }
+

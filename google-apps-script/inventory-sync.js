@@ -43,7 +43,14 @@ const CONFIG = {
   // Frecuencia del disparador automático en horas.
   // Si TRIGGER_FREQUENCY_MINUTES está presente se usará prioridad sobre horas.
   TRIGGER_FREQUENCY_HOURS: 1,
-  TRIGGER_FREQUENCY_MINUTES: 5
+  TRIGGER_FREQUENCY_MINUTES: 5,
+  
+  // Tamaño del lote para envíos (para evitar error 413 FUNCTION_PAYLOAD_TOO_LARGE)
+  // Ajusta este valor si sigues recibiendo errores. Valores recomendados: 50-100
+  BATCH_SIZE: 75,
+  
+  // Delay entre lotes en milisegundos (para evitar rate limits)
+  BATCH_DELAY_MS: 500
 };
 
 
@@ -251,10 +258,10 @@ function onSheetEdit(e) {
     if (sheetName === CONFIG.PROVINCIA_ENVIADOS_SHEET_NAME || sheetName === CONFIG.LIMA_ENVIADOS_SHEET_NAME) {
       const tipo = sheetName === CONFIG.PROVINCIA_ENVIADOS_SHEET_NAME ? 'PROVINCIA' : 'LIMA';
       const dataConTipo = rows.map(r => ({ ...r, TIPO_ORIGEN: tipo }));
-      const payload = { data: dataConTipo, tipoOrigen: tipo };
+      
       try {
-        const resp = sendPayloadToWebhook(payload, CONFIG.ENVIOS_TEMPORALES_WEBHOOK_URL);
-        Logger.log('onSheetEdit: enviado temporal, codigo=' + resp.getResponseCode());
+        const result = sendDataInBatches(dataConTipo, CONFIG.ENVIOS_TEMPORALES_WEBHOOK_URL, tipo);
+        Logger.log(`onSheetEdit: enviado temporal, ${result.totalSent} filas en ${result.batches} lote(s)`);
       } catch (err) {
         Logger.log('onSheetEdit: error enviando temporal: ' + err.message);
       }
@@ -263,10 +270,9 @@ function onSheetEdit(e) {
 
     if (sheetName === CONFIG.SHIPPED_SHEET_NAME) {
       // Para REPORTE_ENVIADOS enviamos la(s) fila(s) editada(s) al webhook de shipped
-      const payload = { data: rows };
       try {
-        const resp = sendPayloadToWebhook(payload, CONFIG.SHIPPED_WEBHOOK_URL);
-        Logger.log('onSheetEdit: enviado shipped, codigo=' + resp.getResponseCode());
+        const result = sendDataInBatches(rows, CONFIG.SHIPPED_WEBHOOK_URL);
+        Logger.log(`onSheetEdit: enviado shipped, ${result.totalSent} filas en ${result.batches} lote(s)`);
       } catch (err) {
         Logger.log('onSheetEdit: error enviando shipped: ' + err.message);
       }
@@ -274,10 +280,9 @@ function onSheetEdit(e) {
     }
 
     if (sheetName === CONFIG.DELIVERED_SHEET_NAME) {
-      const payload = { data: rows };
       try {
-        const resp = sendPayloadToWebhook(payload, CONFIG.DELIVERED_WEBHOOK_URL);
-        Logger.log('onSheetEdit: enviado delivered, codigo=' + resp.getResponseCode());
+        const result = sendDataInBatches(rows, CONFIG.DELIVERED_WEBHOOK_URL);
+        Logger.log(`onSheetEdit: enviado delivered, ${result.totalSent} filas en ${result.batches} lote(s)`);
       } catch (err) {
         Logger.log('onSheetEdit: error enviando delivered: ' + err.message);
       }
@@ -343,26 +348,21 @@ function syncSheetTemporal(sheetName, uniqueIdColumn, tipoOrigen) {
       TIPO_ORIGEN: tipoOrigen
     }));
 
-    const payload = { 
-      data: dataConTipo,
-      tipoOrigen: tipoOrigen
-    }; 
+    // Enviar en lotes para evitar error 413
+    const result = sendDataInBatches(dataConTipo, CONFIG.ENVIOS_TEMPORALES_WEBHOOK_URL, tipoOrigen);
     
-    const response = sendPayloadToWebhook(payload, CONFIG.ENVIOS_TEMPORALES_WEBHOOK_URL);
-
-    const responseCode = response.getResponseCode();
-    const responseBody = response.getContentText();
-    
-    if (responseCode === 200) {
-      Logger.log(`Éxito (${responseCode}): Se han procesado ${dataToSend.length} filas desde ${sheetName}. Respuesta: ${responseBody}`);
+    if (result.success) {
+      const successMsg = `✅ Sincronización exitosa: ${result.totalSent} filas procesadas en ${result.batches} lote(s)`;
+      Logger.log(successMsg);
       if (isManualExecution()) {
-        const serverMessage = JSON.parse(responseBody).message;
-        ui.alert('Sincronización Exitosa', serverMessage, ui.ButtonSet.OK);
+        ui.alert('Sincronización Exitosa', `Se han procesado ${result.totalSent} filas desde ${sheetName} en ${result.batches} lote(s).`, ui.ButtonSet.OK);
       }
     } else {
-      const errorMsg = `Error al enviar los datos. Código: ${responseCode}\nRespuesta: ${responseBody}`;
+      const errorMsg = `⚠️ Sincronización parcial: ${result.totalSent}/${dataToSend.length} filas enviadas. Errores: ${result.errors.length}`;
       Logger.log(errorMsg);
-      ui.alert('Error de Sincronización', errorMsg, ui.ButtonSet.OK);
+      if (isManualExecution()) {
+        ui.alert('Error de Sincronización', `${errorMsg}\n\nPrimeros errores:\n${result.errors.slice(0, 3).join('\n')}`, ui.ButtonSet.OK);
+      }
     }
 
   } catch (error) {
@@ -409,26 +409,42 @@ function syncSheet(sheetName, uniqueIdColumn, webhookUrl, logPrefix, useLog) {
       return;
     }
 
-    const payload = { data: dataToSend }; 
-    const response = sendPayloadToWebhook(payload, webhookUrl);
+    // Enviar en lotes para evitar error 413
+    const result = sendDataInBatches(dataToSend, webhookUrl);
 
-    // Solo registrar en el log si useLog es true
-    if (useLog) {
-      handleWebhookResponse(response, logSheet, idsToLog);
-    } else {
-        const responseCode = response.getResponseCode();
-        const responseBody = response.getContentText();
-        if (responseCode === 200) {
-            Logger.log(`Éxito (${responseCode}): Se han procesado ${dataToSend.length} filas desde ${sheetName}. Respuesta: ${responseBody}`);
-            if (isManualExecution()) {
-                const serverMessage = JSON.parse(responseBody).message;
-                ui.alert('Sincronización Exitosa', serverMessage, ui.ButtonSet.OK);
-            }
-        } else {
-            const errorMsg = `Error al enviar los datos. Código: ${responseCode}\nRespuesta: ${responseBody}`;
-            Logger.log(errorMsg);
-            ui.alert('Error de Sincronización', errorMsg, ui.ButtonSet.OK);
+    // Solo registrar en el log si useLog es true Y el envío fue exitoso
+    if (useLog && result.success && result.totalSent > 0) {
+      const timestamp = new Date();
+      const rowsToLog = idsToLog.slice(0, result.totalSent).map(id => [id, timestamp]);
+      if (rowsToLog.length > 0) {
+        logSheet.getRange(logSheet.getLastRow() + 1, 1, rowsToLog.length, 2).setValues(rowsToLog);
+        Logger.log(`📝 Registrados ${rowsToLog.length} IDs en el log`);
+      }
+      
+      if (isManualExecution()) {
+        ui.alert('Sincronización Exitosa', `Se procesaron ${result.totalSent} filas en ${result.batches} lote(s).`, ui.ButtonSet.OK);
+      }
+    } else if (!useLog) {
+      // Sin log: solo mostrar resultado
+      if (result.success) {
+        Logger.log(`✅ Sincronización exitosa: ${result.totalSent} filas en ${result.batches} lote(s)`);
+        if (isManualExecution()) {
+          ui.alert('Sincronización Exitosa', `Se han procesado ${result.totalSent} filas desde ${sheetName} en ${result.batches} lote(s).`, ui.ButtonSet.OK);
         }
+      } else {
+        const errorMsg = `⚠️ Sincronización parcial: ${result.totalSent}/${dataToSend.length} filas. Errores: ${result.errors.length}`;
+        Logger.log(errorMsg);
+        if (isManualExecution()) {
+          ui.alert('Error de Sincronización', `${errorMsg}\n\nPrimeros errores:\n${result.errors.slice(0, 2).join('\n')}`, ui.ButtonSet.OK);
+        }
+      }
+    } else {
+      // useLog=true pero hubo errores
+      const errorMsg = `⚠️ Error en sincronización: solo ${result.totalSent}/${dataToSend.length} filas enviadas. No se actualizó el log.`;
+      Logger.log(errorMsg);
+      if (isManualExecution()) {
+        ui.alert('Error de Sincronización', `${errorMsg}\n\nErrores:\n${result.errors.slice(0, 2).join('\n')}`, ui.ButtonSet.OK);
+      }
     }
 
   } catch (error) {
@@ -531,6 +547,85 @@ function sendPayloadToWebhook(payload, webhookUrl) {
 
   Logger.log(`Enviando ${payload.data.length} registro(s) a ${webhookUrl}`);
   return UrlFetchApp.fetch(webhookUrl, options);
+}
+
+/**
+ * Divide un array en lotes (chunks) del tamaño especificado.
+ * @param {Array} array - Array a dividir
+ * @param {number} size - Tamaño de cada lote
+ * @returns {Array<Array>} Array de lotes
+ */
+function chunkArray(array, size) {
+  const chunks = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
+ * Envía datos en lotes para evitar el error 413 (payload demasiado grande).
+ * @param {Array} dataToSend - Datos a enviar
+ * @param {string} webhookUrl - URL del webhook
+ * @param {string} tipoOrigen - Tipo de origen (opcional, para hojas temporales)
+ * @returns {Object} Resultado del envío con estadísticas
+ */
+function sendDataInBatches(dataToSend, webhookUrl, tipoOrigen = null) {
+  if (dataToSend.length === 0) {
+    return { success: true, totalSent: 0, batches: 0, errors: [] };
+  }
+
+  const batches = chunkArray(dataToSend, CONFIG.BATCH_SIZE);
+  const results = {
+    success: true,
+    totalSent: 0,
+    batches: batches.length,
+    errors: []
+  };
+
+  Logger.log(`📦 Enviando ${dataToSend.length} filas en ${batches.length} lote(s) de hasta ${CONFIG.BATCH_SIZE} filas cada uno`);
+
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i];
+    const batchNum = i + 1;
+    
+    try {
+      const payload = tipoOrigen 
+        ? { data: batch, tipoOrigen: tipoOrigen }
+        : { data: batch };
+      
+      Logger.log(`📤 Enviando lote ${batchNum}/${batches.length} (${batch.length} filas)...`);
+      
+      const response = sendPayloadToWebhook(payload, webhookUrl);
+      const responseCode = response.getResponseCode();
+      const responseBody = response.getContentText();
+
+      if (responseCode === 200) {
+        results.totalSent += batch.length;
+        Logger.log(`✅ Lote ${batchNum}/${batches.length} procesado exitosamente`);
+      } else {
+        const error = `Error en lote ${batchNum}: código ${responseCode}, respuesta: ${responseBody}`;
+        Logger.log(`❌ ${error}`);
+        results.errors.push(error);
+        results.success = false;
+      }
+
+      // Delay entre lotes para evitar rate limits (excepto en el último)
+      if (i < batches.length - 1) {
+        Utilities.sleep(CONFIG.BATCH_DELAY_MS);
+      }
+
+    } catch (error) {
+      const errorMsg = `Excepción en lote ${batchNum}: ${error.message}`;
+      Logger.log(`❌ ${errorMsg}`);
+      results.errors.push(errorMsg);
+      results.success = false;
+    }
+  }
+
+  Logger.log(`📊 Resumen: ${results.totalSent}/${dataToSend.length} filas enviadas en ${batches.length} lote(s)`);
+  
+  return results;
 }
 
 /**

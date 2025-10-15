@@ -63,6 +63,8 @@ export default function Dashboard() {
     const today = new Date();
     return { from: today, to: today };
   });
+  const [tempDate, setTempDate] = useState<DateRange | undefined>(date);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   
   const { toast } = useToast();
 
@@ -504,7 +506,7 @@ export default function Dashboard() {
                     <SelectItem value="all">Todo</SelectItem>
                 </SelectContent>
             </Select>
-            <Popover>
+            <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
               <PopoverTrigger asChild>
                 <Button id="date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
                   <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
@@ -514,8 +516,12 @@ export default function Dashboard() {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="end">
-                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={1} locale={es} className="sm:hidden" />
-                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} className="hidden sm:block" />
+                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={1} locale={es} className="sm:hidden" />
+                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={2} locale={es} className="hidden sm:block" />
+                <div className="flex items-center justify-end gap-2 p-3 border-t">
+                  <Button variant="outline" size="sm" onClick={() => { setTempDate(date); setIsDatePickerOpen(false); }}>Cancelar</Button>
+                  <Button size="sm" onClick={() => { if (tempDate) { setDate(tempDate); } setIsDatePickerOpen(false); }}>Aplicar</Button>
+                </div>
               </PopoverContent>
             </Popover>
             <Select value={selectedStore} onValueChange={setSelectedStore}>

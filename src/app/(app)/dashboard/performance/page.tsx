@@ -68,6 +68,8 @@ export default function AdvisorPerformancePage() {
   const [performanceData, setPerformanceData] = useState<AdvisorPerformance[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'totalCalls', direction: 'descending' });
   const [date, setDate] = useState<DateRange | undefined>(undefined);
+  const [tempDate, setTempDate] = useState<DateRange | undefined>(date);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [visibleItemsCount, setVisibleItemsCount] = useState(ITEMS_PER_PAGE);
 
   const { toast } = useToast();
@@ -75,7 +77,9 @@ export default function AdvisorPerformancePage() {
   useEffect(() => {
     // Set initial date range to today on client side to avoid hydration errors
     const today = new Date();
-    setDate({ from: today, to: today });
+    const initialDate = { from: today, to: today };
+    setDate(initialDate);
+    setTempDate(initialDate);
   }, []);
 
     const handleDatePreset = (preset: string) => {
@@ -326,7 +330,7 @@ export default function AdvisorPerformancePage() {
                     <SelectItem value="30days">Últimos 30 días</SelectItem>
                 </SelectContent>
             </Select>
-          <Popover>
+          <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
             <PopoverTrigger asChild>
               <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
                 <CalendarIcon className="mr-2 h-4 w-4" />
@@ -334,7 +338,11 @@ export default function AdvisorPerformancePage() {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="end">
-              <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
+              <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={2} locale={es} />
+              <div className="flex items-center justify-end gap-2 p-3 border-t">
+                <Button variant="outline" size="sm" onClick={() => { setTempDate(date); setIsDatePickerOpen(false); }}>Cancelar</Button>
+                <Button size="sm" onClick={() => { if (tempDate) { setDate(tempDate); } setIsDatePickerOpen(false); }}>Aplicar</Button>
+              </div>
             </PopoverContent>
           </Popover>
           <Button variant="outline" size="sm" onClick={() => fetchAndProcessData(true)} disabled={isLoading}>

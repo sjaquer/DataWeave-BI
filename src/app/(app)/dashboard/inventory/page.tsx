@@ -3,9 +3,10 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { DateRange } from "react-day-picker";
-import { subDays } from "date-fns";
+import { subDays, format } from "date-fns";
+import { es } from 'date-fns/locale';
 
-import { Loader, RefreshCw, Truck, Users, LineChart as LineChartIcon, Undo2, ArrowDown, ArrowUp, HelpCircle, Lightbulb } from "lucide-react";
+import { Loader, RefreshCw, Truck, Users, LineChart as LineChartIcon, Undo2, ArrowDown, ArrowUp, HelpCircle, Lightbulb, Calendar as CalendarIcon } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LineChart, Line } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -17,6 +18,9 @@ import { useToast } from "@/hooks/use-toast";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { GetMetricsOutput, GetMetricsInput, CustomerReturn, PurchaseForecastItem } from "@/ai/schemas/getMetricsSchema";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 
 const CACHE_KEY = 'dashboardMetricsCache_inventory';
 const CACHE_EXPIRATION_MS = 15 * 60 * 1000;
@@ -41,6 +45,8 @@ export default function InventoryDetailPage() {
   const [fullMetrics, setFullMetrics] = useState<GetMetricsOutput | null>(null);
   const [displayMetrics, setDisplayMetrics] = useState<GetMetricsOutput | null>(null);
   const [date, setDate] = useState<DateRange | undefined>(undefined);
+  const [tempDate, setTempDate] = useState<DateRange | undefined>(date);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [selectedStore, setSelectedStore] = useState('all');
   const [visibleItemsCount, setVisibleItemsCount] = useState(ITEMS_PER_PAGE);
   
@@ -275,6 +281,21 @@ export default function InventoryDetailPage() {
                   <SelectItem value="6months">Últimos 6 meses</SelectItem>
               </SelectContent>
           </Select>
+            <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+              <PopoverTrigger asChild>
+                <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {date?.from ? (date.to ? (<>{format(date.from, "LLL dd, y", { locale: es })} - {format(date.to, "LLL dd, y", { locale: es })}</>) : (format(date.from, "LLL dd, y", { locale: es }))) : (<span>Selecciona un rango</span>)}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={2} locale={es} />
+                 <div className="flex justify-end gap-2 p-4">
+                    <Button variant="ghost" onClick={() => setIsDatePickerOpen(false)}>Cancelar</Button>
+                    <Button onClick={() => { setDate(tempDate); setIsDatePickerOpen(false); }}>Aplicar</Button>
+                 </div>
+              </PopoverContent>
+            </Popover>
             <Select value={selectedStore} onValueChange={setSelectedStore}>
                 <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue placeholder="Filtrar por Tienda" />

@@ -44,6 +44,8 @@ export default function DailyDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
   const [date, setDate] = useState<DateRange | undefined>(undefined);
+  const [tempDate, setTempDate] = useState<DateRange | undefined>(date);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'date', direction: 'descending' });
   const [visibleItemsCount, setVisibleItemsCount] = useState(ITEMS_PER_PAGE);
   const [selectedStore, setSelectedStore] = useState<string>("all");
@@ -52,7 +54,9 @@ export default function DailyDetailPage() {
 
   useEffect(() => {
     const today = new Date();
-    setDate({ from: today, to: today });
+    const initialDate = { from: today, to: today };
+    setDate(initialDate);
+    setTempDate(initialDate);
   }, []);
 
   const handleDatePreset = (preset: string) => {
@@ -420,7 +424,7 @@ export default function DailyDetailPage() {
                   <SelectItem value="all">Ver todo</SelectItem>
               </SelectContent>
           </Select>
-          <Popover>
+          <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
             <PopoverTrigger asChild>
               <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
                 <CalendarIcon className="mr-2 h-4 w-4" />
@@ -428,7 +432,11 @@ export default function DailyDetailPage() {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="end">
-              <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={es} />
+              <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={2} locale={es} />
+               <div className="flex justify-end gap-2 p-4">
+                  <Button variant="ghost" onClick={() => setIsDatePickerOpen(false)}>Cancelar</Button>
+                  <Button onClick={() => { setDate(tempDate); setIsDatePickerOpen(false); }}>Aplicar</Button>
+               </div>
             </PopoverContent>
           </Popover>
           <Button className="flex-1 sm:flex-initial" variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>

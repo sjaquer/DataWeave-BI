@@ -165,18 +165,22 @@ export async function getSyncMetadata(
  * Prioriza la llamada "answered", sino la de mayor duración
  */
 export function consolidateCalls(calls: ZadarmaCall[]): ZadarmaCall[] {
-  const callsByPbxId: { [pbxId: string]: ZadarmaCall[] } = {};
+  const callsByKey: { [key: string]: ZadarmaCall[] } = {};
 
-  // Agrupar por pbx_call_id
+  // Agrupar por pbx_call_id + fecha (día) para contar llamadas de cada día por separado
   calls.forEach(call => {
-    if (!callsByPbxId[call.pbx_call_id]) {
-      callsByPbxId[call.pbx_call_id] = [];
+    // Extraer solo la fecha (YYYY-MM-DD) del timestamp
+    const callDate = call.callstart ? new Date(call.callstart).toISOString().slice(0, 10) : 'unknown';
+    const key = `${call.pbx_call_id}_${callDate}`;
+    
+    if (!callsByKey[key]) {
+      callsByKey[key] = [];
     }
-    callsByPbxId[call.pbx_call_id].push(call);
+    callsByKey[key].push(call);
   });
 
-  // Consolidar cada grupo
-  return Object.values(callsByPbxId).map(group => {
+  // Consolidar cada grupo (mismo pbx_call_id en el mismo día)
+  return Object.values(callsByKey).map(group => {
     group.sort((a, b) => {
       if (a.disposition === 'answered' && b.disposition !== 'answered') return -1;
       if (a.disposition !== 'answered' && b.disposition === 'answered') return 1;

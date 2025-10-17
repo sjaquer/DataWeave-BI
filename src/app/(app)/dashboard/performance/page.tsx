@@ -160,34 +160,11 @@ export default function AdvisorPerformancePage() {
         };
       });
       
-    const rawCalls: ZadarmaCall[] = data.stats || [];
+      // Las llamadas ya vienen consolidadas del backend (por pbx_call_id + fecha)
+      // No necesitamos volver a consolidar aquí
+      const consolidatedCalls: ZadarmaCall[] = data.stats || [];
 
-    // Agrupamos por pbx_call_id + fecha (día) para evitar deduplicar
-    // intentos que ocurren en días distintos dentro de un mismo rango.
-    const callsByKey: { [key: string]: ZadarmaCall[] } = {};
-
-    // 1. Agrupar todas las llamadas por clave: `${pbx_call_id}_${YYYY-MM-DD}`
-    rawCalls.forEach(call => {
-      const callDateKey = call.callstart ? new Date(call.callstart).toISOString().slice(0,10) : 'unknown';
-      const key = `${call.pbx_call_id}_${callDateKey}`;
-      if (!callsByKey[key]) {
-        callsByKey[key] = [];
-      }
-      callsByKey[key].push(call);
-    });
-
-    // 2. Procesar cada grupo para crear una llamada consolidada (por día)
-    const consolidatedCalls: ZadarmaCall[] = Object.values(callsByKey).map(group => {
-          // Prioriza la llamada que fue 'answered', sino, la de mayor duración.
-          group.sort((a, b) => {
-              if (a.disposition === 'answered' && b.disposition !== 'answered') return -1;
-              if (a.disposition !== 'answered' && b.disposition === 'answered') return 1;
-              return b.seconds - a.seconds;
-          });
-          return group[0];
-      });
-
-      // 3. Calcular métricas basadas en las llamadas consolidadas
+      // Calcular métricas basadas en las llamadas ya consolidadas
       consolidatedCalls.forEach(call => {
         const agentId = call.sip;
 
@@ -245,7 +222,7 @@ export default function AdvisorPerformancePage() {
       if (forceRefresh) {
         toast({
           title: "Informe de Rendimiento Actualizado",
-          description: `Se procesaron ${rawCalls.length} registros de llamadas ${data.fromCache ? '(desde caché)' : '(desde API)'}`,
+          description: `Se procesaron ${consolidatedCalls.length} registros de llamadas ${data.fromCache ? '(desde caché)' : '(desde API)'}`,
         });
       }
     } catch (error: any) {

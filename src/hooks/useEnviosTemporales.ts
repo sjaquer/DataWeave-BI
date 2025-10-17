@@ -14,6 +14,10 @@ export interface EnviosTemporalesStats {
     LIMA: number;
   };
   porEstado: Record<string, number>;
+  estadosPorOrigen?: {
+    PROVINCIA: Record<string, number>;
+    LIMA: Record<string, number>;
+  };
   porTienda: Record<string, number>;
   porProvincia: Record<string, number>;
   porCourier: Record<string, number>;

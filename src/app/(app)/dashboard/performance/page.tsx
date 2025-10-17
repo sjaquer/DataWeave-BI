@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp, Timer, PlayCircle, StopCircle, PhoneForwarded, PhoneOutgoing, BarChartHorizontal } from "lucide-react";
+import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp, Timer, PlayCircle, StopCircle, PhoneForwarded, PhoneOutgoing, BarChartHorizontal, Database, Cloud } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -65,12 +65,15 @@ const agentMap: { [key: string]: string } = {
 
 export default function AdvisorPerformancePage() {
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [performanceData, setPerformanceData] = useState<AdvisorPerformance[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'totalCalls', direction: 'descending' });
   const [date, setDate] = useState<DateRange | undefined>(undefined);
   const [tempDate, setTempDate] = useState<DateRange | undefined>(date);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [visibleItemsCount, setVisibleItemsCount] = useState(ITEMS_PER_PAGE);
+  const [dataSource, setDataSource] = useState<'cache' | 'api'>('cache');
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
   const { toast } = useToast();
   
@@ -120,12 +123,21 @@ export default function AdvisorPerformancePage() {
         params.append('endDate', endDate.toISOString());
       }
       
+      // Agregar parámetro forceRefresh si se solicita
+      if (forceRefresh) {
+        params.append('forceRefresh', 'true');
+      }
+      
       const response = await fetch(`/api/zadarma/stats?${params.toString()}`);
       const data = await response.json();
 
       if (!response.ok || data.status !== 'success') {
         throw new Error(data.message || "Error al obtener los datos de Zadarma.");
       }
+
+      // Actualizar indicadores de fuente de datos
+      setDataSource(data.fromCache ? 'cache' : 'api');
+      setLastSync(data.lastSync || null);
 
       // --- Lógica de Agregación de Datos ---
       const performanceByAgent: { [key: string]: AdvisorPerformance } = {};
@@ -224,7 +236,7 @@ export default function AdvisorPerformancePage() {
       if (forceRefresh) {
         toast({
           title: "Informe de Rendimiento Actualizado",
-          description: `Se procesaron ${rawCalls.length} registros de llamadas.`,
+          description: `Se procesaron ${rawCalls.length} registros de llamadas ${data.fromCache ? '(desde caché)' : '(desde API)'}`,
         });
       }
     } catch (error: any) {
@@ -238,6 +250,62 @@ export default function AdvisorPerformancePage() {
       setIsLoading(false);
     }
   }, [date, toast]);
+
+  // Nueva función para sincronizar datos con Firestore
+  const syncDataToFirestore = useCallback(async () => {
+    if (!date?.from) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Seleccione un rango de fechas primero",
+      });
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      const startDate = new Date(date.from);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(date.to || date.from);
+      endDate.setHours(23, 59, 59, 999);
+
+      const response = await fetch('/api/zadarma/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          forceSync: true, // Siempre forzar al hacer sync manual
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.status !== 'success') {
+        throw new Error(data.message || "Error al sincronizar datos");
+      }
+
+      toast({
+        title: "Sincronización Exitosa",
+        description: `${data.totalCallsSynced || 0} llamadas guardadas en la base de datos`,
+      });
+
+      // Recargar datos después de sincronizar
+      await fetchAndProcessData(false);
+      
+    } catch (error: any) {
+      console.error("Error al sincronizar datos:", error);
+      toast({
+        variant: "destructive",
+        title: "Error de Sincronización",
+        description: error.message,
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [date, fetchAndProcessData, toast]);
 
   useEffect(() => {
     if (date) {
@@ -349,8 +417,43 @@ export default function AdvisorPerformancePage() {
             {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Actualizar
           </Button>
+          <Button 
+            variant="default" 
+            size="sm" 
+            onClick={syncDataToFirestore} 
+            disabled={isSyncing || isLoading}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            {isSyncing ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
+            Guardar en DB
+          </Button>
         </div>
       </div>
+      
+      {/* Indicador de fuente de datos */}
+      {!isLoading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          {dataSource === 'cache' ? (
+            <>
+              <Database className="h-4 w-4 text-green-500" />
+              <span>Datos desde Firestore (caché)</span>
+            </>
+          ) : (
+            <>
+              <Cloud className="h-4 w-4 text-blue-500" />
+              <span>Datos desde API de Zadarma</span>
+            </>
+          )}
+          {lastSync && (
+            <span className="ml-4">
+              Última sincronización: {new Date(lastSync).toLocaleString('es-PE', { 
+                dateStyle: 'short', 
+                timeStyle: 'short' 
+              })}
+            </span>
+          )}
+        </div>
+      )}
       
       {isLoading ? (
         <div className="flex items-center justify-center min-h-[400px]">

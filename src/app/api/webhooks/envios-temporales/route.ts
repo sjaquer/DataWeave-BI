@@ -5,20 +5,21 @@
  * - PROVINCIA_ENVIADOS: Pedidos de provincia en tránsito
  * - LIMA_ENVIADOS: Pedidos de Lima en tránsito
  * 
- * Estados posibles (según imágenes):
- * - ENVIADO
- * - EN TRANSITO
- * - EN DESTINO
- * - TIENDA
- * - DEVOLUCIÓN
- * - PAGADO
- * - ORIGEN
- * - L - EN RUTA
- * - L - PREPARADO
- * - L - DEVOLUCIÓN
- * - L - REPROGRAMAR
- * - L - NO CONTESTA
- * - L - ENTREGADO
+ * IMPORTANTE - DIFERENCIAS CRÍTICAS ENTRE HOJAS:
+ * 
+ * PROVINCIA_ENVIADOS:
+ * - Courier: Columna P (COURIER) - Ej: "SHALOM", "OLVA", "TEPSA"
+ * - Estados: Sin prefijo - "ENVIADO", "EN TRANSITO", "EN DESTINO"
+ * - Claves: Columna W - Código de seguimiento
+ * 
+ * LIMA_ENVIADOS:
+ * - Courier: Columna W (CLAVES) ⚠️ NO columna P - Ej: "DIN", "CLOCK"
+ * - Estados: Con prefijo "L-" - "L-ENTREGADO", "L-EN RUTA"
+ * - Claves: Misma columna W pero aquí ES el courier
+ * 
+ * Estados reconocidos:
+ * PROVINCIA: ENVIADO, EN TRANSITO, EN DESTINO, TIENDA, DEVOLUCIÓN, PAGADO, ORIGEN
+ * LIMA: L-EN RUTA, L-PREPARADO, L-DEVOLUCIÓN, L-REPROGRAMAR, L-NO CONTESTA, L-ENTREGADO, L-RETORNADO
  * 
  * Estrategia: Tabla Temporal con Timestamps
  * - Solo mantiene pedidos ACTIVOS en tránsito
@@ -60,7 +61,7 @@ interface EnvioTemporalRow {
   // Courier y seguimiento (N-P)
   'AGENCIA SHALOM'?: string;     // N - Agencia Shalom
   'PDF URL'?: string;            // O - URL del PDF
-  COURIER: string;               // P - Courier asignado (¡AMBAS HOJAS TIENEN COURIER!)
+  COURIER: string;               // P - Courier asignado (SOLO para PROVINCIA)
   
   // Control interno (Q-T)
   ENVIAR?: boolean | string;     // Q - Flag envío
@@ -73,7 +74,7 @@ interface EnvioTemporalRow {
   OBSERVACIONES?: string;        // V - Observaciones
   
   // Seguimiento (W-Y)
-  CLAVES?: string;               // W - Código seguimiento
+  CLAVES?: string;               // W - IMPORTANTE: Para LIMA, esto es el COURIER (DIN, CLOCK, etc.)
   'LINK SHALOM'?: string;        // X - URL rastreo Shalom
   'PDF SHALOM'?: string;         // Y - PDF comprobante
   
@@ -145,7 +146,15 @@ export async function POST(request: NextRequest) {
       const docSnapshot = await docRef.get();
       const esNuevo = !docSnapshot.exists;
       const estadoAnterior = docSnapshot.exists ? docSnapshot.data()?.estado : null;
-      const estadoActual = row.ESTADO || 'SIN_ESTADO';
+      
+      // IMPORTANTE: Leer ESTADO con múltiples variantes
+      // Puede venir como: ESTADO, Estado, estado, o en datosCompletos
+      const estadoActual = row.ESTADO || row.Estado || row.estado || 'SIN_ESTADO';
+      
+      // DEBUG: Logear si el estado viene vacío para investigar
+      if (estadoActual === 'SIN_ESTADO') {
+        console.warn(`[ENVIOS TEMPORALES] Pedido ${pedidoId} (${tipoOrigen}) sin estado definido. Headers disponibles:`, Object.keys(row).filter(k => k.toUpperCase().includes('ESTADO')));
+      }
 
       // Preparar datos para guardar
       const pedidoData = {
@@ -304,13 +313,32 @@ export async function GET() {
     const couriersCount: { [courier: string]: number } = {};
     const tipoOrigenCount = { PROVINCIA: 0, LIMA: 0 };
 
+    // Contadores por tipo de origen y estado
+    const estadosPorOrigen: {
+      PROVINCIA: { [estado: string]: number };
+      LIMA: { [estado: string]: number };
+    } = {
+      PROVINCIA: {},
+      LIMA: {}
+    };
+
     activosSnapshot.forEach((doc: any) => {
       const data = doc.data();
-      estadosCount[data.estado] = (estadosCount[data.estado] || 0) + 1;
+      const tipoOrigen = data.tipoOrigen as 'PROVINCIA' | 'LIMA';
+      const estado = data.estado || 'SIN_ESTADO';
+      
+      // Contadores globales
+      estadosCount[estado] = (estadosCount[estado] || 0) + 1;
       tiendasCount[data.tienda] = (tiendasCount[data.tienda] || 0) + 1;
       provinciasCount[data.provincia] = (provinciasCount[data.provincia] || 0) + 1;
       couriersCount[data.courier] = (couriersCount[data.courier] || 0) + 1;
-      tipoOrigenCount[data.tipoOrigen as 'PROVINCIA' | 'LIMA']++;
+      tipoOrigenCount[tipoOrigen]++;
+      
+      // Contadores por origen
+      if (!estadosPorOrigen[tipoOrigen][estado]) {
+        estadosPorOrigen[tipoOrigen][estado] = 0;
+      }
+      estadosPorOrigen[tipoOrigen][estado]++;
     });
 
     return NextResponse.json({
@@ -318,6 +346,7 @@ export async function GET() {
       totalActivos: activosSnapshot.size,
       porTipoOrigen: tipoOrigenCount,
       porEstado: estadosCount,
+      estadosPorOrigen, // Nuevo: estados separados por PROVINCIA y LIMA
       porTienda: tiendasCount,
       porProvincia: provinciasCount,
       porCourier: couriersCount,

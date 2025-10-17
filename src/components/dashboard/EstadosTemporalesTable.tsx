@@ -19,40 +19,78 @@ interface EstadosTemporalesTableProps {
   data: EnviosTemporalesStats;
 }
 
-// Colores por tipo de estado
+// Colores por tipo de estado (considerando estados de Provincia y Lima)
 const getEstadoBadgeColor = (estado: string): string => {
-  if (estado.includes('ENTREGADO')) return 'bg-green-500';
-  if (estado.includes('TRANSITO') || estado.includes('RUTA')) return 'bg-blue-500';
-  if (estado.includes('DESTINO')) return 'bg-cyan-500';
-  if (estado.includes('DEVOLUCIÓN')) return 'bg-red-500';
-  if (estado.includes('PREPARADO')) return 'bg-yellow-500';
-  if (estado.includes('PAGADO')) return 'bg-green-600';
+  const estadoUpper = estado.toUpperCase();
+  
+  // Estados de entrega (verde)
+  if (estadoUpper.includes('ENTREGADO') || estadoUpper.includes('PAGADO')) return 'bg-green-500';
+  
+  // Estados en tránsito (azul)
+  if (estadoUpper.includes('TRANSITO') || estadoUpper.includes('EN RUTA') || estadoUpper.includes('ENVIADO')) return 'bg-blue-500';
+  
+  // Estados en destino/preparado (cian/amarillo)
+  if (estadoUpper.includes('DESTINO')) return 'bg-cyan-500';
+  if (estadoUpper.includes('PREPARADO')) return 'bg-yellow-500';
+  
+  // Estados de tienda (púrpura)
+  if (estadoUpper.includes('TIENDA') || estadoUpper.includes('ORIGEN')) return 'bg-purple-500';
+  
+  // Estados problemáticos (rojo/naranja)
+  if (estadoUpper.includes('DEVOLUCIÓN') || estadoUpper.includes('DEVOLUCION')) return 'bg-red-500';
+  if (estadoUpper.includes('NO CONTESTA') || estadoUpper.includes('REPROGRAMAR')) return 'bg-orange-500';
+  
+  // Default
   return 'bg-gray-500';
 };
 
 export function EstadosTemporalesTable({ data }: EstadosTemporalesTableProps) {
   const { porEstado, totalActivos } = data;
 
-  // Calcular distribución por origen para cada estado
-  // Nota: Esto requeriría una query más detallada en el backend
-  // Por ahora mostramos el total por estado
-  
-  const estados = Object.entries(porEstado)
-    .sort(([, a], [, b]) => b - a) // Ordenar por cantidad descendente
-    .map(([estado, total]) => {
-      // Estimar provincia vs lima basado en prefijo "L -"
-      const esLima = estado.startsWith('L -');
-      const provincia = esLima ? 0 : total;
-      const lima = esLima ? total : 0;
-      
-      return {
-        estado,
-        provincia,
-        lima,
-        total,
-        porcentaje: ((total / totalActivos) * 100).toFixed(1),
-      };
-    });
+  // DEBUG: Mostrar estados recibidos
+  console.log('[EstadosTemporalesTable] Estados recibidos:', porEstado);
+  console.log('[EstadosTemporalesTable] Total activos:', totalActivos);
+
+  // Agrupar estados por nombre limpio (sin L-)
+  // Esto permite contar "ENTREGADO" de provincia y "L-ENTREGADO" de Lima juntos
+  const estadosAgrupados: Record<string, { provincia: number; lima: number; total: number }> = {};
+
+  Object.entries(porEstado).forEach(([estadoOriginal, cantidad]) => {
+    // Detectar si es Lima (empieza con "L-" o "L -")
+    const esLima = estadoOriginal.startsWith('L-') || estadoOriginal.startsWith('L -');
+    
+    // Limpiar el nombre del estado (remover "L-" o "L -")
+    const estadoLimpio = esLima 
+      ? estadoOriginal.replace(/^L\s*-\s*/i, '').trim()
+      : estadoOriginal.trim();
+    
+    // Inicializar si no existe
+    if (!estadosAgrupados[estadoLimpio]) {
+      estadosAgrupados[estadoLimpio] = { provincia: 0, lima: 0, total: 0 };
+    }
+    
+    // Acumular por origen
+    if (esLima) {
+      estadosAgrupados[estadoLimpio].lima += cantidad;
+    } else {
+      estadosAgrupados[estadoLimpio].provincia += cantidad;
+    }
+    estadosAgrupados[estadoLimpio].total += cantidad;
+  });
+
+  // DEBUG: Mostrar agrupación
+  console.log('[EstadosTemporalesTable] Estados agrupados:', estadosAgrupados);
+
+  // Convertir a array y ordenar por total descendente
+  const estados = Object.entries(estadosAgrupados)
+    .map(([estado, counts]) => ({
+      estado,
+      provincia: counts.provincia,
+      lima: counts.lima,
+      total: counts.total,
+      porcentaje: ((counts.total / totalActivos) * 100).toFixed(1),
+    }))
+    .sort((a, b) => b.total - a.total);
 
   return (
     <Card>

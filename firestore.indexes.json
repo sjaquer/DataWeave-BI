@@ -86,6 +86,14 @@
         { "fieldPath": "courier", "order": "ASCENDING" },
         { "fieldPath": "timestamp", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "zadarma_calls",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "agentId", "order": "ASCENDING" },
+        { "fieldPath": "callDate", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

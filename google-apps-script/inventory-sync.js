@@ -61,10 +61,12 @@ const CONFIG = {
   
   // Tamaño del lote para envíos (para evitar error 413 FUNCTION_PAYLOAD_TOO_LARGE)
   // Ajusta este valor si sigues recibiendo errores. Valores recomendados: 50-100
-  BATCH_SIZE: 75,
+  // IMPORTANTE: Para hojas muy grandes (>500 filas), usa lotes más pequeños para evitar timeout
+  BATCH_SIZE: 50,
   
   // Delay entre lotes en milisegundos (para evitar rate limits)
-  BATCH_DELAY_MS: 500
+  // Aumentado a 1000ms para evitar timeouts en hojas grandes
+  BATCH_DELAY_MS: 1000
 };
 
 
@@ -90,6 +92,15 @@ function onOpen() {
 
 /**
  * Crea disparadores (triggers) para ambas sincronizaciones.
+ * 
+ * IMPORTANTE: Si ves error de permisos insuficientes:
+ * 1. Cierra el diálogo de error
+ * 2. Ve a: Extensiones → Apps Script
+ * 3. En el editor, selecciona la función "createTriggers" en el menú desplegable
+ * 4. Haz clic en "Ejecutar" (▶️)
+ * 5. Acepta los permisos cuando aparezca el popup de Google
+ * 6. Scope requerido: https://www.googleapis.com/auth/script.scriptapp
+ * 7. Vuelve a Google Sheets y prueba el botón "5. Activar Sincronización Automática"
  */
 function createTriggers() {
   // Intentamos eliminar triggers anteriores — si faltan permisos, informamos al usuario
@@ -97,7 +108,18 @@ function createTriggers() {
     deleteTriggers();
   } catch (e) {
     try {
-      SpreadsheetApp.getUi().alert('No se pudieron gestionar los disparadores automáticos debido a permisos insuficientes. \n\nPara solucionar: abre Extensiones → Apps Script, selecciona la función "createTriggers" y pulsa Ejecutar para autorizar los permisos requeridos (scope: https://www.googleapis.com/auth/script.scriptapp). Si tu cuenta es de G Suite, quizá necesites pedir al admin que permita estos permisos.');
+      const message = 'No se pudieron gestionar los disparadores automáticos debido a permisos insuficientes.\n\n' +
+                     '📋 PASOS PARA SOLUCIONAR:\n\n' +
+                     '1. Cierra este mensaje\n' +
+                     '2. Ve a: Extensiones → Apps Script\n' +
+                     '3. En el menú superior, selecciona "createTriggers"\n' +
+                     '4. Haz clic en el botón "Ejecutar" (▶️)\n' +
+                     '5. Acepta los permisos cuando aparezca el popup\n' +
+                     '6. Vuelve a Sheets y usa el menú nuevamente\n\n' +
+                     'Permiso requerido:\n' +
+                     'https://www.googleapis.com/auth/script.scriptapp';
+      
+      SpreadsheetApp.getUi().alert('⚠️ Permisos Insuficientes', message, SpreadsheetApp.getUi().ButtonSet.OK);
     } catch (uiErr) {
       // fallback logging
       Logger.log('Permisos insuficientes para gestionar triggers: ' + e.message);
@@ -120,7 +142,21 @@ function createTriggers() {
     } catch (err) {
       // Probablemente permisos insuficientes (scope script.scriptapp)
       try {
-        SpreadsheetApp.getUi().alert('No se pudieron crear triggers por permisos insuficientes. Para autorizar: abra Extensiones → Apps Script, ejecute la función "createTriggers" desde el editor y acepte los permisos solicitados. \n\nPermiso requerido: https://www.googleapis.com/auth/script.scriptapp');
+        const message = '⚠️ No se pudieron crear triggers por permisos insuficientes.\n\n' +
+                       '📋 PASOS PARA AUTORIZAR:\n\n' +
+                       '1. Cierra este mensaje\n' +
+                       '2. Abre: Extensiones → Apps Script\n' +
+                       '3. Selecciona "createTriggers" en el menú superior\n' +
+                       '4. Haz clic en "Ejecutar" (▶️)\n' +
+                       '5. En el popup, haz clic en "Revisar permisos"\n' +
+                       '6. Selecciona tu cuenta de Google\n' +
+                       '7. Haz clic en "Avanzado" → "Ir a [nombre del proyecto]"\n' +
+                       '8. Acepta los permisos\n' +
+                       '9. Vuelve a Sheets y usa el menú nuevamente\n\n' +
+                       'Permiso requerido:\n' +
+                       'https://www.googleapis.com/auth/script.scriptapp';
+        
+        SpreadsheetApp.getUi().alert(message);
       } catch (uiErr) {
         Logger.log('No se pudieron crear triggers: ' + err.message);
       }
@@ -329,10 +365,15 @@ function runAutoSyncAll() {
 /**
  * Sincronización especial para hojas temporales (PROVINCIA_ENVIADOS y LIMA_ENVIADOS).
  * Ambas usan el mismo webhook pero con diferentes tipos de origen.
+ * 
+ * IMPORTANTE: Para hojas muy grandes (>500 filas), considera usar la sincronización automática
+ * en lugar de la manual para evitar timeouts de 6 minutos de Google Apps Script.
  */
 function syncSheetTemporal(sheetName, uniqueIdColumn, tipoOrigen) {
   const ui = SpreadsheetApp.getUi();
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const startTime = new Date().getTime();
+  const MAX_EXECUTION_TIME = 5 * 60 * 1000; // 5 minutos (dejamos 1 min de margen)
 
   try {
     const mainSheet = spreadsheet.getSheetByName(sheetName);
@@ -348,11 +389,31 @@ function syncSheetTemporal(sheetName, uniqueIdColumn, tipoOrigen) {
       return;
     }
 
+    // Advertencia si hay muchas filas
+    if (isManualExecution() && dataToSend.length > 500) {
+      const response = ui.alert(
+        'Advertencia: Hoja Grande', 
+        `Esta hoja tiene ${dataToSend.length} filas. La sincronización manual puede tardar varios minutos.\n\n¿Deseas continuar?\n\nRecomendación: Usa "5. Activar Sincronización Automática" para hojas grandes.`,
+        ui.ButtonSet.YES_NO
+      );
+      
+      if (response !== ui.Button.YES) {
+        Logger.log(`Sincronización cancelada por el usuario para ${sheetName}`);
+        return;
+      }
+    }
+
     // Agregar tipo de origen (PROVINCIA o LIMA) a cada registro
     const dataConTipo = dataToSend.map(row => ({
       ...row,
       TIPO_ORIGEN: tipoOrigen
     }));
+
+    // Verificar tiempo transcurrido
+    const elapsedTime = new Date().getTime() - startTime;
+    if (elapsedTime > MAX_EXECUTION_TIME) {
+      throw new Error('Tiempo de ejecución excedido. Usa sincronización automática para hojas grandes.');
+    }
 
     // Enviar en lotes para evitar error 413
     const result = sendDataInBatches(dataConTipo, CONFIG.ENVIOS_TEMPORALES_WEBHOOK_URL, tipoOrigen);
@@ -361,7 +422,7 @@ function syncSheetTemporal(sheetName, uniqueIdColumn, tipoOrigen) {
       const successMsg = `✅ Sincronización exitosa: ${result.totalSent} filas procesadas en ${result.batches} lote(s)`;
       Logger.log(successMsg);
       if (isManualExecution()) {
-        ui.alert('Sincronización Exitosa', `Se han procesado ${result.totalSent} filas desde ${sheetName} en ${result.batches} lote(s).`, ui.ButtonSet.OK);
+        ui.alert('Sincronización Exitosa', `Se han procesado ${result.totalSent} filas desde ${sheetName} en ${result.batches} lote(s).\n\nTiempo: ${Math.round(elapsedTime / 1000)}s`, ui.ButtonSet.OK);
       }
     } else {
       const errorMsg = `⚠️ Sincronización parcial: ${result.totalSent}/${dataToSend.length} filas enviadas. Errores: ${result.errors.length}`;

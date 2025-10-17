@@ -5,7 +5,7 @@
 import { db } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { format, parse } from 'date-fns';
-import type { ZadarmaCall, ZadarmaCallDocument, AGENT_MAP } from '@/types/zadarma';
+import type { ZadarmaCall, ZadarmaCallDocument } from '@/types/zadarma';
 
 const AGENT_MAP: { [key: string]: string } = {
   "101": "Aylen",
@@ -29,7 +29,9 @@ export async function saveZadarmaCalls(calls: ZadarmaCall[]): Promise<number> {
   for (const call of calls) {
     try {
       const callDate = format(new Date(call.callstart), 'yyyy-MM-dd');
-      const docId = `${call.pbx_call_id}_${call.sip}`;
+      // Incluir la fecha en el ID del documento para evitar sobrescrituras
+      // cuando el mismo pbx_call_id + sip ocurre en días distintos
+      const docId = `${call.pbx_call_id}_${call.sip}_${callDate}`;
       
       const docRef = db.collection('zadarma_calls').doc(docId);
       
@@ -45,6 +47,7 @@ export async function saveZadarmaCalls(calls: ZadarmaCall[]): Promise<number> {
         updatedAt: now,
       };
 
+      // Usamos set con merge: true pero ahora el docId es único por día
       batch.set(docRef, callDoc, { merge: true });
       savedCount++;
 
@@ -79,7 +82,7 @@ export async function getZadarmaCallsFromFirestore(
     .where('callDate', '<=', formattedEnd)
     .get();
 
-  return snapshot.docs.map(doc => {
+  return snapshot.docs.map((doc: FirebaseFirestore.QueryDocumentSnapshot) => {
     const data = doc.data();
     return {
       pbx_call_id: data.pbx_call_id,

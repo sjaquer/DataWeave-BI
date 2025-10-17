@@ -160,19 +160,24 @@ export default function AdvisorPerformancePage() {
         };
       });
       
-      const rawCalls: ZadarmaCall[] = data.stats || [];
-      const callsByPbxId: { [pbxId: string]: ZadarmaCall[] } = {};
+    const rawCalls: ZadarmaCall[] = data.stats || [];
 
-      // 1. Agrupar todas las llamadas por pbx_call_id
-      rawCalls.forEach(call => {
-          if (!callsByPbxId[call.pbx_call_id]) {
-              callsByPbxId[call.pbx_call_id] = [];
-          }
-          callsByPbxId[call.pbx_call_id].push(call);
-      });
+    // Agrupamos por pbx_call_id + fecha (día) para evitar deduplicar
+    // intentos que ocurren en días distintos dentro de un mismo rango.
+    const callsByKey: { [key: string]: ZadarmaCall[] } = {};
 
-      // 2. Procesar cada grupo para crear una llamada consolidada
-      const consolidatedCalls: ZadarmaCall[] = Object.values(callsByPbxId).map(group => {
+    // 1. Agrupar todas las llamadas por clave: `${pbx_call_id}_${YYYY-MM-DD}`
+    rawCalls.forEach(call => {
+      const callDateKey = call.callstart ? new Date(call.callstart).toISOString().slice(0,10) : 'unknown';
+      const key = `${call.pbx_call_id}_${callDateKey}`;
+      if (!callsByKey[key]) {
+        callsByKey[key] = [];
+      }
+      callsByKey[key].push(call);
+    });
+
+    // 2. Procesar cada grupo para crear una llamada consolidada (por día)
+    const consolidatedCalls: ZadarmaCall[] = Object.values(callsByKey).map(group => {
           // Prioriza la llamada que fue 'answered', sino, la de mayor duración.
           group.sort((a, b) => {
               if (a.disposition === 'answered' && b.disposition !== 'answered') return -1;

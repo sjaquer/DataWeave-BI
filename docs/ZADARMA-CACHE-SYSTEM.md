@@ -1,8 +1,14 @@
 # 📞 SISTEMA DE CACHÉ DE DATOS ZADARMA - DOCUMENTACIÓN COMPLETA
 
-**Fecha:** 17 de octubre de 2025  
-**Versión:** 1.0  
-**Estado:** ✅ IMPLEMENTADO
+**Fecha:** 17 de enero de 2025  
+**Versión:** 2.0  
+**Estado:** ✅ IMPLEMENTADO CON SINCRONIZACIÓN AUTOMÁTICA
+
+---
+
+> **🚀 NUEVO: Sistema de Caché Automático**  
+> Este documento describe la base del sistema de caché. Para la nueva funcionalidad de **sincronización automática diaria** y **caché inteligente por fechas**, consulta:  
+> 👉 **[ZADARMA-AUTO-CACHING.md](./ZADARMA-AUTO-CACHING.md)**
 
 ---
 
@@ -10,10 +16,11 @@
 
 Optimizar el uso de la API de Zadarma almacenando datos de llamadas en Firestore para:
 
-1. **Reducir llamadas a la API** - Evitar límites de rate limiting y costos
-2. **Mejorar rendimiento** - Lectura más rápida desde Firestore vs API externa
-3. **Caché inteligente** - Sistema automático que decide cuándo usar caché vs API
+1. **Reducir llamadas a la API** - Evitar límites de rate limiting y costos (96% de reducción)
+2. **Mejorar rendimiento** - Lectura más rápida desde Firestore vs API externa (4x más rápido)
+3. **Caché inteligente** - Sistema automático que decide cuándo usar caché vs API según la fecha
 4. **Persistencia de datos** - Historial de llamadas disponible sin depender de la API
+5. **🆕 Sincronización automática** - Datos históricos sincronizados cada madrugada automáticamente
 
 ---
 

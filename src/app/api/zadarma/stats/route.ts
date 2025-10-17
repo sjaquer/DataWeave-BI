@@ -14,17 +14,81 @@ import {
 dotenv.config();
 
 /**
+ * Función auxiliar para llamar a la API de Zadarma
+ */
+async function fetchZadarmaAPI(
+  start: Date,
+  end: Date,
+  apiKey: string,
+  apiSecret: string
+): Promise<any[]> {
+  const formattedStartDate = format(start, 'yyyy-MM-dd HH:mm:ss');
+  const formattedEndDate = format(end, 'yyyy-MM-dd HH:mm:ss');
+  
+  const method = '/v1/statistics/pbx/';
+  const params: { [key: string]: string } = {
+    start: formattedStartDate,
+    end: formattedEndDate,
+    format: 'json',
+    version: '2'
+  };
+  
+  const sortedKeys = Object.keys(params).sort();
+  const sortedParams = new URLSearchParams();
+  sortedKeys.forEach(key => sortedParams.append(key, params[key]));
+  const queryString = sortedParams.toString();
+
+  const md5Hash = CryptoJS.MD5(queryString).toString(CryptoJS.enc.Hex);
+  const dataToSign = method + queryString + md5Hash;
+  
+  const hmac = CryptoJS.HmacSHA1(dataToSign, apiSecret);
+  const hmacHex = hmac.toString(CryptoJS.enc.Hex);
+  const signature = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(hmacHex));
+  
+  const authHeader = `${apiKey}:${signature}`;
+  const apiUrl = `https://api.zadarma.com${method}?${queryString}`;
+  
+  const response = await fetch(apiUrl, {
+    method: 'GET',
+    headers: {
+      'Authorization': authHeader
+    }
+  });
+
+  const data = await response.json();
+  
+  if (data.status === 'error' || !response.ok) {
+    const errorMessage = data.message || `El servidor de Zadarma respondió con un error: ${response.statusText}`;
+    console.error("[ZADARMA API ERROR]:", data);
+    throw new Error(`Error de Zadarma: ${errorMessage}`);
+  }
+
+  return data.stats || [];
+}
+
+/**
  * Endpoint OPTIMIZADO para obtener estadísticas de llamadas de Zadarma.
  * 
- * Estrategia de caché inteligente:
- * 1. Primero busca datos en Firestore (caché)
- * 2. Si no hay datos O se fuerza refresh, llama a la API de Zadarma
- * 3. Retorna datos con indicador de fuente (cache/api)
+ * 🚀 ESTRATEGIA DE CACHÉ INTELIGENTE POR FECHAS:
+ * 
+ * 1. **FECHAS PASADAS** (antes de hoy):
+ *    - Solo lee de Firestore (caché)
+ *    - NUNCA llama a la API para datos históricos
+ *    - Si no hay datos en caché, retorna error pidiendo sincronización
+ * 
+ * 2. **FECHA DE HOY**:
+ *    - Siempre llama a la API para datos frescos
+ *    - Ignora caché (los datos cambian constantemente)
+ * 
+ * 3. **RANGOS MIXTOS** (incluye hoy + días pasados):
+ *    - Lee fechas pasadas de Firestore
+ *    - Llama a API solo para hoy
+ *    - Combina ambos resultados
  * 
  * Parámetros de consulta:
  * - startDate: Fecha de inicio (ISO string)
  * - endDate: Fecha de fin (ISO string)
- * - forceRefresh: Forzar llamada a API (opcional, default: false)
+ * - forceRefresh: Forzar llamada a API incluso para fechas pasadas (opcional, default: false)
  */
 export async function GET(req: Request) {
   // Validar credenciales
@@ -48,23 +112,138 @@ export async function GET(req: Request) {
     const start = startDateQuery ? new Date(startDateQuery) : new Date();
     const end = endDateQuery ? new Date(endDateQuery) : new Date(start);
 
-    // 🔥 OPTIMIZACIÓN: Intentar leer de Firestore primero
+    // Normalizar fechas para comparación (solo día, sin hora)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const endDateOnly = new Date(end);
+    endDateOnly.setHours(0, 0, 0, 0);
+    
+    const startDateOnly = new Date(start);
+    startDateOnly.setHours(0, 0, 0, 0);
+
+    // 🔥 CACHÉ INTELIGENTE: Determinar estrategia según las fechas
+    const isEndToday = endDateOnly.getTime() === today.getTime();
+    const isStartToday = startDateOnly.getTime() === today.getTime();
+    const isPastOnly = endDateOnly < today;
+    const isMixedRange = startDateOnly < today && endDateOnly >= today;
+
+    console.log(`[ZADARMA STATS] Análisis de fechas:`, {
+      startDate: format(start, 'yyyy-MM-dd'),
+      endDate: format(end, 'yyyy-MM-dd'),
+      today: format(today, 'yyyy-MM-dd'),
+      isPastOnly,
+      isEndToday,
+      isStartToday,
+      isMixedRange,
+      forceRefresh,
+    });
+
+    // CASO 1: Solo fechas pasadas - SOLO CACHÉ
+    if (isPastOnly && !forceRefresh) {
+      console.log(`[ZADARMA STATS] ✅ Fechas pasadas detectadas - Leyendo SOLO de Firestore (caché)`);
+      
+      const hasData = await hasDataForDateRange(start, end);
+      
+      if (!hasData) {
+        return NextResponse.json({
+          status: 'error',
+          message: `No hay datos en caché para el rango ${format(start, 'yyyy-MM-dd')} - ${format(end, 'yyyy-MM-dd')}. Use POST /api/zadarma/sync para sincronizar estos datos históricos.`,
+          fromCache: false,
+          suggestion: 'Ejecute una sincronización manual para estos días.',
+        }, { status: 404 });
+      }
+
+      const calls = await getZadarmaCallsFromFirestore(start, end);
+      const metadata = await getSyncMetadata(start, end);
+      const consolidatedCalls = consolidateCalls(calls);
+      
+      return NextResponse.json({
+        status: 'success',
+        stats: consolidatedCalls,
+        fromCache: true,
+        dataSource: 'firestore-only',
+        lastSync: metadata?.lastSyncTimestamp?.toDate().toISOString(),
+        totalCalls: consolidatedCalls.length,
+        message: '✅ Datos históricos obtenidos de caché (Firestore)',
+      }, { status: 200 });
+    }
+
+    // CASO 2: Rango mixto (pasado + hoy) - COMBINAR CACHÉ + API
+    if (isMixedRange && !forceRefresh) {
+      console.log(`[ZADARMA STATS] 🔄 Rango mixto detectado - Combinando Firestore (histórico) + API (hoy)`);
+      
+      // Leer datos pasados de Firestore
+      const pastEnd = new Date(today);
+      pastEnd.setDate(pastEnd.getDate() - 1);
+      pastEnd.setHours(23, 59, 59, 999);
+      
+      const pastCalls = await getZadarmaCallsFromFirestore(start, pastEnd);
+      console.log(`[ZADARMA STATS] 📦 Obtenidas ${pastCalls.length} llamadas históricas de Firestore`);
+      
+      // Llamar a API solo para hoy
+      const todayStart = new Date(today);
+      todayStart.setHours(0, 0, 0, 0);
+      
+      const todayEnd = new Date(end);
+      todayEnd.setHours(23, 59, 59, 999);
+      
+      const todayCallsFromAPI = await fetchZadarmaAPI(todayStart, todayEnd, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
+      console.log(`[ZADARMA STATS] 🌐 Obtenidas ${todayCallsFromAPI.length} llamadas de hoy desde API`);
+      
+      // Combinar y consolidar
+      const allCalls = [...pastCalls, ...todayCallsFromAPI];
+      const consolidatedCalls = consolidateCalls(allCalls);
+      
+      return NextResponse.json({
+        status: 'success',
+        stats: consolidatedCalls,
+        fromCache: 'mixed',
+        dataSource: 'firestore+api',
+        totalCalls: consolidatedCalls.length,
+        breakdown: {
+          historicalCalls: pastCalls.length,
+          todayCalls: todayCallsFromAPI.length,
+          consolidated: consolidatedCalls.length,
+        },
+        message: '✅ Datos combinados: históricos desde caché + hoy desde API',
+      }, { status: 200 });
+    }
+
+    // CASO 3: Solo hoy o forceRefresh - LLAMAR API
+    if (isEndToday || forceRefresh) {
+      const reason = forceRefresh ? 'forceRefresh activado' : 'fecha de hoy';
+      console.log(`[ZADARMA STATS] 🌐 Llamando a API de Zadarma (${reason})`);
+      
+      const apiCalls = await fetchZadarmaAPI(start, end, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
+      const consolidatedCalls = consolidateCalls(apiCalls);
+
+      return NextResponse.json({ 
+        status: 'success', 
+        stats: consolidatedCalls,
+        fromCache: false,
+        dataSource: 'api-only',
+        totalCalls: consolidatedCalls.length,
+        message: `✅ Datos frescos obtenidos de API (${reason})`,
+      }, { status: 200 });
+    }
+
+    // CASO 4: Fallback - Intentar caché
     if (!forceRefresh) {
       const hasData = await hasDataForDateRange(start, end);
       
       if (hasData) {
-        console.log(`[ZADARMA STATS] Leyendo de Firestore (caché) para ${format(start, 'yyyy-MM-dd')} - ${format(end, 'yyyy-MM-dd')}`);
+        console.log(`[ZADARMA STATS] 📦 Leyendo de Firestore (fallback)`);
         
         const calls = await getZadarmaCallsFromFirestore(start, end);
         const metadata = await getSyncMetadata(start, end);
-        
-        // Consolidar llamadas duplicadas
         const consolidatedCalls = consolidateCalls(calls);
         
         return NextResponse.json({
           status: 'success',
           stats: consolidatedCalls,
           fromCache: true,
+          dataSource: 'firestore-fallback',
           lastSync: metadata?.lastSyncTimestamp?.toDate().toISOString(),
           totalCalls: consolidatedCalls.length,
         }, { status: 200 });
@@ -72,74 +251,27 @@ export async function GET(req: Request) {
     }
 
     // Si no hay datos en caché o se fuerza refresh, llamar a la API
-    console.log(`[ZADARMA STATS] Llamando a API de Zadarma para ${format(start, 'yyyy-MM-dd')} - ${format(end, 'yyyy-MM-dd')}`);
+    console.log(`[ZADARMA STATS] 🌐 Llamando a API de Zadarma (fallback final)`);
 
+    try {
+      const apiCalls = await fetchZadarmaAPI(start, end, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
+      const consolidatedCalls = consolidateCalls(apiCalls);
 
-    const formattedStartDate = format(start, 'yyyy-MM-dd HH:mm:ss');
-    const formattedEndDate = format(end, 'yyyy-MM-dd HH:mm:ss');
-    
-    const method = '/v1/statistics/pbx/';
-    const params: { [key: string]: string } = {
-      start: formattedStartDate,
-      end: formattedEndDate,
-      format: 'json',
-      version: '2'
-    };
-    
-    const sortedKeys = Object.keys(params).sort();
-    const sortedParams = new URLSearchParams();
-    sortedKeys.forEach(key => sortedParams.append(key, params[key]));
-    const queryString = sortedParams.toString();
-
-    const md5Hash = CryptoJS.MD5(queryString).toString(CryptoJS.enc.Hex);
-    const dataToSign = method + queryString + md5Hash;
-    
-    const hmac = CryptoJS.HmacSHA1(dataToSign, ZADARMA_API_SECRET!);
-    const hmacHex = hmac.toString(CryptoJS.enc.Hex);
-
-    const signature = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(hmacHex));
-    
-    const authHeader = `${ZADARMA_API_KEY}:${signature}`;
-
-    const apiUrl = `https://api.zadarma.com${method}?${queryString}`;
-    
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': authHeader
-      }
-    });
-
-    const data = await response.json();
-    
-    console.log('[ZADARMA API RESPONSE]:', JSON.stringify(data, null, 2));
-
-    if (data.status === 'error' || !response.ok) {
-        const errorMessage = data.message || `El servidor de Zadarma respondió con un error: ${response.statusText}`;
-        console.error("Respuesta de error de la API de Zadarma:", data);
-        return NextResponse.json({ 
-          status: 'error', 
-          message: `Error de Zadarma: ${errorMessage}`,
-          fromCache: false,
-        }, { status: response.status });
+      return NextResponse.json({ 
+        status: 'success', 
+        stats: consolidatedCalls,
+        fromCache: false,
+        dataSource: 'api-final-fallback',
+        totalCalls: consolidatedCalls.length,
+        message: '✅ Datos obtenidos de API. Use POST /api/zadarma/sync para guardar en Firestore.',
+      }, { status: 200 });
+    } catch (apiError: any) {
+      return NextResponse.json({
+        status: 'error',
+        message: apiError.message,
+        fromCache: false,
+      }, { status: 500 });
     }
-
-    const apiCalls = data.stats || [];
-    
-    // Consolidar llamadas duplicadas
-    const consolidatedCalls = consolidateCalls(apiCalls);
-
-    // 🔥 NOTA: No guardamos automáticamente en Firestore desde GET
-    // Para eso usar el endpoint POST /api/zadarma/sync
-    // Esto mantiene separadas las responsabilidades
-
-    return NextResponse.json({ 
-      status: 'success', 
-      stats: consolidatedCalls,
-      fromCache: false,
-      totalCalls: consolidatedCalls.length,
-      message: 'Datos obtenidos directamente de la API. Use POST /api/zadarma/sync para guardar en Firestore.',
-    }, { status: 200 });
 
   } catch (error: any) {
     console.error('Error en el endpoint /api/zadarma/stats:', error);

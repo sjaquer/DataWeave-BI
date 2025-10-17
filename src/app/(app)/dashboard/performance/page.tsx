@@ -72,7 +72,7 @@ export default function AdvisorPerformancePage() {
   const [tempDate, setTempDate] = useState<DateRange | undefined>(date);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [visibleItemsCount, setVisibleItemsCount] = useState(ITEMS_PER_PAGE);
-  const [dataSource, setDataSource] = useState<'cache' | 'api'>('cache');
+  const [dataSource, setDataSource] = useState<'cache' | 'api' | 'mixed'>('cache');
   const [lastSync, setLastSync] = useState<string | null>(null);
 
   const { toast } = useToast();
@@ -135,8 +135,12 @@ export default function AdvisorPerformancePage() {
         throw new Error(data.message || "Error al obtener los datos de Zadarma.");
       }
 
-      // Actualizar indicadores de fuente de datos
-      setDataSource(data.fromCache ? 'cache' : 'api');
+      // Actualizar indicadores de fuente de datos (compatible con nuevo sistema)
+      if (data.fromCache === 'mixed') {
+        setDataSource('mixed');
+      } else {
+        setDataSource(data.fromCache ? 'cache' : 'api');
+      }
       setLastSync(data.lastSync || null);
 
       // --- Lógica de Agregación de Datos ---
@@ -436,12 +440,18 @@ export default function AdvisorPerformancePage() {
           {dataSource === 'cache' ? (
             <>
               <Database className="h-4 w-4 text-green-500" />
-              <span>Datos desde Firestore (caché)</span>
+              <span>Datos desde Firestore (caché histórico)</span>
+            </>
+          ) : dataSource === 'mixed' ? (
+            <>
+              <Database className="h-4 w-4 text-yellow-500" />
+              <Cloud className="h-4 w-4 text-blue-500 -ml-1" />
+              <span>Datos combinados (histórico + hoy)</span>
             </>
           ) : (
             <>
               <Cloud className="h-4 w-4 text-blue-500" />
-              <span>Datos desde API de Zadarma</span>
+              <span>Datos desde API de Zadarma (hoy)</span>
             </>
           )}
           {lastSync && (

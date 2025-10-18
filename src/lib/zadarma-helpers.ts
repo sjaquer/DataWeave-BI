@@ -29,9 +29,9 @@ export async function saveZadarmaCalls(calls: ZadarmaCall[]): Promise<number> {
   for (const call of calls) {
     try {
       const callDate = format(new Date(call.callstart), 'yyyy-MM-dd');
-      // Incluir la fecha en el ID del documento para evitar sobrescrituras
-      // cuando el mismo pbx_call_id + sip ocurre en días distintos
-      const docId = `${call.pbx_call_id}_${call.sip}_${callDate}`;
+      // Usar pbx_call_id + timestamp completo para permitir múltiples intentos al mismo número
+      // en el mismo día (cada intento es único por timestamp)
+      const docId = `${call.pbx_call_id}_${call.callstart}`;
       
       const docRef = db.collection('zadarma_calls').doc(docId);
       
@@ -41,13 +41,13 @@ export async function saveZadarmaCalls(calls: ZadarmaCall[]): Promise<number> {
         callDate,
         agentId: call.sip,
         agentName: AGENT_MAP[call.sip] || 'Desconocido',
-        isConsolidated: false, // Se marca después en consolidación
+        isConsolidated: false,
         syncedAt: now.toDate().toISOString(),
         createdAt: now,
         updatedAt: now,
       };
 
-      // Usamos set con merge: true pero ahora el docId es único por día
+      // Usamos set con merge: true
       batch.set(docRef, callDoc, { merge: true });
       savedCount++;
 
@@ -167,11 +167,12 @@ export async function getSyncMetadata(
 export function consolidateCalls(calls: ZadarmaCall[]): ZadarmaCall[] {
   const callsByKey: { [key: string]: ZadarmaCall[] } = {};
 
-  // Agrupar por pbx_call_id + fecha (día) para contar llamadas de cada día por separado
+  // Agrupar por pbx_call_id + timestamp EXACTO para eliminar SOLO duplicados exactos
+  // (misma llamada reportada múltiples veces con el mismo segundo)
   calls.forEach(call => {
-    // Extraer solo la fecha (YYYY-MM-DD) del timestamp
-    const callDate = call.callstart ? new Date(call.callstart).toISOString().slice(0, 10) : 'unknown';
-    const key = `${call.pbx_call_id}_${callDate}`;
+    // Usar pbx_call_id + timestamp completo como key
+    // Esto mantiene intentos diferentes al mismo número en el mismo día
+    const key = `${call.pbx_call_id}_${call.callstart}`;
     
     if (!callsByKey[key]) {
       callsByKey[key] = [];
@@ -179,8 +180,11 @@ export function consolidateCalls(calls: ZadarmaCall[]): ZadarmaCall[] {
     callsByKey[key].push(call);
   });
 
-  // Consolidar cada grupo (mismo pbx_call_id en el mismo día)
+  // Consolidar cada grupo (SOLO duplicados con mismo pbx_call_id Y mismo timestamp)
+  // Prioriza la llamada contestada o de mayor duración
   return Object.values(callsByKey).map(group => {
+    if (group.length === 1) return group[0];
+    
     group.sort((a, b) => {
       if (a.disposition === 'answered' && b.disposition !== 'answered') return -1;
       if (a.disposition !== 'answered' && b.disposition === 'answered') return 1;

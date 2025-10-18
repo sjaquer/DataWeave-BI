@@ -139,34 +139,56 @@ export async function GET(req: Request) {
       forceRefresh,
     });
 
-    // CASO 1: Solo fechas pasadas - SOLO CACHÉ
+    // CASO 1: Solo fechas pasadas - CACHÉ O API COMO FALLBACK
     if (isPastOnly && !forceRefresh) {
-      console.log(`[ZADARMA STATS] ✅ Fechas pasadas detectadas - Leyendo SOLO de Firestore (caché)`);
+      console.log(`[ZADARMA STATS] ✅ Fechas pasadas detectadas - Intentando leer de Firestore (caché)`);
       
       const hasData = await hasDataForDateRange(start, end);
       
-      if (!hasData) {
+      if (hasData) {
+        // Si hay datos en caché, usarlos
+        const calls = await getZadarmaCallsFromFirestore(start, end);
+        const metadata = await getSyncMetadata(start, end);
+        const consolidatedCalls = consolidateCalls(calls);
+        
+        console.log(`[ZADARMA STATS] ✅ ${consolidatedCalls.length} llamadas obtenidas de Firestore`);
+        
+        return NextResponse.json({
+          status: 'success',
+          stats: consolidatedCalls,
+          fromCache: true,
+          dataSource: 'firestore-only',
+          lastSync: metadata?.lastSyncTimestamp?.toDate().toISOString(),
+          totalCalls: consolidatedCalls.length,
+          message: '✅ Datos históricos obtenidos de caché (Firestore)',
+        }, { status: 200 });
+      }
+      
+      // Si NO hay datos en caché, llamar a la API como fallback
+      console.log(`[ZADARMA STATS] ⚠️ No hay datos en caché - Llamando a API como fallback`);
+      
+      try {
+        const apiCalls = await fetchZadarmaAPI(start, end, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
+        const consolidatedCalls = consolidateCalls(apiCalls);
+        
+        console.log(`[ZADARMA STATS] ✅ ${consolidatedCalls.length} llamadas obtenidas de API`);
+
+        return NextResponse.json({ 
+          status: 'success', 
+          stats: consolidatedCalls,
+          fromCache: false,
+          dataSource: 'api-fallback',
+          totalCalls: consolidatedCalls.length,
+          message: `⚠️ Datos obtenidos de API (no había caché para ${format(start, 'yyyy-MM-dd')} - ${format(end, 'yyyy-MM-dd')}). Considere sincronizar con "Guardar en DB".`,
+        }, { status: 200 });
+      } catch (apiError: any) {
+        console.error(`[ZADARMA STATS] ❌ Error al llamar API:`, apiError);
         return NextResponse.json({
           status: 'error',
-          message: `No hay datos en caché para el rango ${format(start, 'yyyy-MM-dd')} - ${format(end, 'yyyy-MM-dd')}. Use POST /api/zadarma/sync para sincronizar estos datos históricos.`,
+          message: `No hay datos en caché y falló la llamada a API: ${apiError.message}`,
           fromCache: false,
-          suggestion: 'Ejecute una sincronización manual para estos días.',
-        }, { status: 404 });
+        }, { status: 500 });
       }
-
-      const calls = await getZadarmaCallsFromFirestore(start, end);
-      const metadata = await getSyncMetadata(start, end);
-      const consolidatedCalls = consolidateCalls(calls);
-      
-      return NextResponse.json({
-        status: 'success',
-        stats: consolidatedCalls,
-        fromCache: true,
-        dataSource: 'firestore-only',
-        lastSync: metadata?.lastSyncTimestamp?.toDate().toISOString(),
-        totalCalls: consolidatedCalls.length,
-        message: '✅ Datos históricos obtenidos de caché (Firestore)',
-      }, { status: 200 });
     }
 
     // CASO 2: Rango mixto (pasado + hoy) - COMBINAR CACHÉ + API

@@ -60,6 +60,8 @@ const agentMap: { [key: string]: string } = {
   "110": "Avril",
   "111": "Luz",
   "113": "Fiorela",
+  "114": "Eduardo",
+  "115": "Daiana",
 };
 
 

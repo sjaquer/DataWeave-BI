@@ -1,213 +1,158 @@
-/**
- * Funciones helper para Zadarma
- */
 
 import { db } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
-import { format, parse } from 'date-fns';
+import { format, startOfDay, addDays } from 'date-fns';
 import type { ZadarmaCall, ZadarmaCallDocument } from '@/types/zadarma';
 
+// --- Mapeo de Agentes ---
 const AGENT_MAP: { [key: string]: string } = {
-  "101": "Aylen",
-  "104": "Alanis",
-  "105": "Marisol",
-  "107": "Lisset",
-  "108": "Wendy",
-  "110": "Avril",
-  "111": "Luz",
-  "113": "Fiorela",
-  "114": "Eduardo",
-  "115": "Daiana",
+  "101": "Aylen", "104": "Alanis", "105": "Marisol", "107": "Lisset",
+  "108": "Wendy", "110": "Avril", "111": "Luz", "113": "Fiorela",
+  "114": "Eduardo", "115": "Daiana",
 };
 
+// --- Funciones de Sincronización y Caché ---
+
 /**
- * Guarda llamadas de Zadarma en Firestore
+ * Guarda un lote de llamadas en Firestore.
  */
 export async function saveZadarmaCalls(calls: ZadarmaCall[]): Promise<number> {
+  if (calls.length === 0) return 0;
   const batch = db.batch();
-  let savedCount = 0;
   const now = Timestamp.now();
+  
+  calls.forEach(call => {
+    const callDate = format(new Date(call.callstart), 'yyyy-MM-dd');
+    const docId = `${call.pbx_call_id}_${call.callstart}`;
+    const docRef = db.collection('zadarma_calls').doc(docId);
+    
+    const callDoc: Partial<ZadarmaCallDocument> = {
+      ...call, id: docId, callDate, agentId: call.sip,
+      agentName: AGENT_MAP[call.sip] || 'Desconocido',
+      syncedAt: now.toDate().toISOString(), createdAt: now,
+    };
+    batch.set(docRef, callDoc, { merge: true });
+  });
 
-  for (const call of calls) {
-    try {
-      const callDate = format(new Date(call.callstart), 'yyyy-MM-dd');
-      // Usar pbx_call_id + timestamp completo para permitir múltiples intentos al mismo número
-      // en el mismo día (cada intento es único por timestamp)
-      const docId = `${call.pbx_call_id}_${call.callstart}`;
-      
-      const docRef = db.collection('zadarma_calls').doc(docId);
-      
-      const callDoc: Partial<ZadarmaCallDocument> = {
-        ...call,
-        id: docId,
-        callDate,
-        agentId: call.sip,
-        agentName: AGENT_MAP[call.sip] || 'Desconocido',
-        isConsolidated: false,
-        syncedAt: now.toDate().toISOString(),
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      // Usamos set con merge: true
-      batch.set(docRef, callDoc, { merge: true });
-      savedCount++;
-
-      // Firestore batch limit is 500
-      if (savedCount % 450 === 0) {
-        await batch.commit();
-      }
-    } catch (error) {
-      console.error(`Error procesando llamada ${call.pbx_call_id}:`, error);
-    }
-  }
-
-  if (savedCount % 450 !== 0) {
-    await batch.commit();
-  }
-
-  return savedCount;
+  await batch.commit();
+  return calls.length;
 }
 
 /**
- * Obtiene llamadas de Firestore para un rango de fechas
+ * Obtiene llamadas de Firestore para un rango de fechas.
  */
-export async function getZadarmaCallsFromFirestore(
-  startDate: Date,
-  endDate: Date
-): Promise<ZadarmaCall[]> {
-  const formattedStart = format(startDate, 'yyyy-MM-dd');
-  const formattedEnd = format(endDate, 'yyyy-MM-dd');
-
+export async function getZadarmaCallsFromFirestore(startDate: Date, endDate: Date): Promise<ZadarmaCall[]> {
   const snapshot = await db.collection('zadarma_calls')
-    .where('callDate', '>=', formattedStart)
-    .where('callDate', '<=', formattedEnd)
+    .where('callDate', '>=', format(startDate, 'yyyy-MM-dd'))
+    .where('callDate', '<=', format(endDate, 'yyyy-MM-dd'))
     .get();
 
-  return snapshot.docs.map((doc: FirebaseFirestore.QueryDocumentSnapshot) => {
-    const data = doc.data();
-    return {
-      pbx_call_id: data.pbx_call_id,
-      callstart: data.callstart,
-      sip: data.sip,
-      clid: data.clid,
-      destination: data.destination,
-      disposition: data.disposition,
-      seconds: data.seconds,
-    } as ZadarmaCall;
-  });
+  return snapshot.docs.map(doc => doc.data() as ZadarmaCall);
 }
 
 /**
- * Verifica si ya existen datos para un rango de fechas
+ * Verifica si existen datos en Firestore para un rango de fechas.
  */
-export async function hasDataForDateRange(
-  startDate: Date,
-  endDate: Date
-): Promise<boolean> {
-  const formattedStart = format(startDate, 'yyyy-MM-dd');
-  const formattedEnd = format(endDate, 'yyyy-MM-dd');
-
+export async function hasDataForDateRange(startDate: Date, endDate: Date): Promise<boolean> {
   const snapshot = await db.collection('zadarma_calls')
-    .where('callDate', '>=', formattedStart)
-    .where('callDate', '<=', formattedEnd)
+    .where('callDate', '>=', format(startDate, 'yyyy-MM-dd'))
+    .where('callDate', '<=', format(endDate, 'yyyy-MM-dd'))
     .limit(1)
     .get();
-
   return !snapshot.empty;
 }
 
 /**
- * Guarda metadata de sincronización
+ * Guarda metadatos de una operación de sincronización para UN SOLO DÍA.
  */
-export async function saveSyncMetadata(
-  startDate: Date,
-  endDate: Date,
-  totalCalls: number,
-  status: 'success' | 'error' | 'partial',
-  errorMessage?: string
-): Promise<void> {
-  const syncId = `sync_${format(startDate, 'yyyy-MM-dd')}_${format(endDate, 'yyyy-MM-dd')}`;
+export async function saveSyncMetadata(date: Date, totalCalls: number, status: 'success' | 'error', errorMessage?: string): Promise<void> {
+  const syncId = `sync_${format(date, 'yyyy-MM-dd')}`;
   const now = Timestamp.now();
-
   await db.collection('zadarma_sync_metadata').doc(syncId).set({
-    lastSyncDate: format(new Date(), 'yyyy-MM-dd'),
-    lastSyncTimestamp: now,
-    totalCallsSynced: totalCalls,
-    dateRange: {
-      start: format(startDate, 'yyyy-MM-dd'),
-      end: format(endDate, 'yyyy-MM-dd'),
-    },
-    status,
-    errorMessage: errorMessage || null,
-    createdAt: now,
+    lastSyncTimestamp: now, totalCallsSynced: totalCalls, date: format(date, 'yyyy-MM-dd'),
+    status, errorMessage: errorMessage || null,
   }, { merge: true });
 }
 
 /**
- * Obtiene metadata de sincronización para un rango de fechas
+ * Devuelve una lista de días que NO tienen metadatos de sincronización exitosa.
  */
-export async function getSyncMetadata(
-  startDate: Date,
-  endDate: Date
-): Promise<any | null> {
-  const syncId = `sync_${format(startDate, 'yyyy-MM-dd')}_${format(endDate, 'yyyy-MM-dd')}`;
-  
-  const doc = await db.collection('zadarma_sync_metadata').doc(syncId).get();
-  
-  if (!doc.exists) {
-    return null;
-  }
+export async function getMissingDaysFromFirestore(startDate: Date, endDate: Date): Promise<Date[]> {
+    const daysInRange: Date[] = [];
+    let currentDate = startOfDay(startDate);
+    const finalDate = startOfDay(endDate);
+    
+    while(currentDate <= finalDate) {
+        daysInRange.push(new Date(currentDate));
+        currentDate = addDays(currentDate, 1);
+    }
+    
+    if (daysInRange.length === 0) return [];
+    
+    const syncIds = daysInRange.map(d => `sync_${format(d, 'yyyy-MM-dd')}`);
+    const foundDates = new Set<string>();
 
-  return doc.data();
+    for (let i = 0; i < syncIds.length; i += 30) {
+        const chunk = syncIds.slice(i, i + 30);
+        const foundDocs = await db.collection('zadarma_sync_metadata')
+            .where('__name__', 'in', chunk)
+            .where('status', '==', 'success')
+            .get();
+        foundDocs.docs.forEach(doc => foundDates.add(doc.data().date));
+    }
+    
+    return daysInRange.filter(d => !foundDates.has(format(d, 'yyyy-MM-dd')));
 }
 
+// --- Funciones de Bloqueo (Locking) ---
+
+const getLockRef = (date: Date) => db.collection('zadarma_sync_locks').doc(format(date, 'yyyy-MM-dd'));
+
+export async function setSyncLock(date: Date): Promise<void> {
+  await getLockRef(date).set({ timestamp: Timestamp.now() });
+}
+
+export async function removeSyncLock(date: Date): Promise<void> {
+  await getLockRef(date).delete();
+}
+
+export async function isSyncLocked(date: Date, ttlMinutes: number): Promise<boolean> {
+  const doc = await getLockRef(date).get();
+  if (!doc.exists) return false;
+  
+  const lockTime = (doc.data()?.timestamp as Timestamp).toDate();
+  const expirationTime = new Date(lockTime.getTime() + ttlMinutes * 60000);
+
+  if (new Date() > expirationTime) {
+    await removeSyncLock(date);
+    return false;
+  }
+  return true;
+}
+
+// --- Funciones de Utilidad ---
+
 /**
- * Consolida llamadas duplicadas por pbx_call_id
- * Prioriza la llamada "answered", sino la de mayor duración
+ * Consolida llamadas para eliminar duplicados.
  */
 export function consolidateCalls(calls: ZadarmaCall[]): ZadarmaCall[] {
-  const callsByKey: { [key: string]: ZadarmaCall[] } = {};
-
-  // Agrupar por pbx_call_id + timestamp EXACTO para eliminar SOLO duplicados exactos
-  // (misma llamada reportada múltiples veces con el mismo segundo)
+  const callsMap = new Map<string, ZadarmaCall>();
   calls.forEach(call => {
-    // Usar pbx_call_id + timestamp completo como key
-    // Esto mantiene intentos diferentes al mismo número en el mismo día
     const key = `${call.pbx_call_id}_${call.callstart}`;
-    
-    if (!callsByKey[key]) {
-      callsByKey[key] = [];
+    const existing = callsMap.get(key);
+    if (!existing || (call.disposition === 'answered' && existing.disposition !== 'answered') || (call.seconds > existing.seconds)) {
+      callsMap.set(key, call);
     }
-    callsByKey[key].push(call);
   });
-
-  // Consolidar cada grupo (SOLO duplicados con mismo pbx_call_id Y mismo timestamp)
-  // Prioriza la llamada contestada o de mayor duración
-  return Object.values(callsByKey).map(group => {
-    if (group.length === 1) return group[0];
-    
-    group.sort((a, b) => {
-      if (a.disposition === 'answered' && b.disposition !== 'answered') return -1;
-      if (a.disposition !== 'answered' && b.disposition === 'answered') return 1;
-      return b.seconds - a.seconds;
-    });
-    return group[0];
-  });
+  return Array.from(callsMap.values());
 }
 
 /**
- * Valida credenciales de Zadarma
+ * Valida que las credenciales de la API de Zadarma estén configuradas.
  */
 export function validateZadarmaCredentials(): { valid: boolean; message?: string } {
-  const { ZADARMA_API_KEY, ZADARMA_API_SECRET } = process.env;
-
-  if (!ZADARMA_API_KEY || !ZADARMA_API_SECRET) {
-    return {
-      valid: false,
-      message: 'Las credenciales de la API de Zadarma no están configuradas en .env.',
-    };
+  if (!process.env.ZADARMA_API_KEY || !process.env.ZADARMA_API_SECRET) {
+    return { valid: false, message: 'Las credenciales de la API de Zadarma no están configuradas.' };
   }
-
   return { valid: true };
 }

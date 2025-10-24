@@ -145,7 +145,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
     <>
       <Sidebar>
         <SidebarContent>
-          <SidebarHeader className="justify-between">
+          <SidebarHeader>
               <div className="flex items-center gap-2">
                   <Logo className="size-7 text-primary" />
                    <span className={cn("text-xl font-semibold", state === 'collapsed' && 'hidden')}>DataWeave</span>
@@ -179,7 +179,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
         <SidebarFooter>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start gap-2 px-2">
+              <Button variant="ghost" className="w-full justify-center group-data-[collapsible=icon]:justify-start gap-2 px-2">
                 <Avatar className="size-7">
                   <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${userProfile.email}`} alt={userProfile.displayName} />
                   <AvatarFallback>{userProfile.email?.charAt(0).toUpperCase()}</AvatarFallback>

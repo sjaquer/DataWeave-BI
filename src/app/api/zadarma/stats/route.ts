@@ -1,6 +1,7 @@
 
 import { NextResponse, NextRequest } from 'next/server';
 import { format, startOfDay, addDays } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz'; // Corregido: importando toZonedTime
 import * as dotenv from 'dotenv';
 import CryptoJS from 'crypto-js';
 import {
@@ -8,6 +9,8 @@ import {
   consolidateCalls,
   validateZadarmaCredentials,
 } from '@/lib/zadarma-helpers';
+
+const LIMA_TIME_ZONE = 'America/Lima';
 
 dotenv.config();
 
@@ -68,9 +71,13 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ status: 'error', message: 'Los parámetros startDate y endDate son requeridos.' }, { status: 400 });
     }
 
+    // *** CORRECCIÓN DE ZONA HORARIA AL LEER ***
+    // Se obtiene la fecha actual en la zona horaria de Lima.
+    const limaDate = toZonedTime(new Date(), LIMA_TIME_ZONE); // Corregido: usando toZonedTime
+    const today = startOfDay(limaDate);
+    
     const start = startOfDay(new Date(startDateQuery));
     const end = startOfDay(new Date(endDateQuery));
-    const today = startOfDay(new Date());
 
     let calls: any[] = [];
     let fromCache: boolean | 'mixed' = false;
@@ -79,25 +86,21 @@ export async function GET(req: NextRequest) {
     const isTodayIncluded = end >= today;
     const pastEndDate = isTodayIncluded ? addDays(today, -1) : end;
 
-    // --- LÓGICA DE FUSIÓN (CACHE + API) ---
-
     // 1. Obtener todos los días pasados del caché
     if (start <= pastEndDate) {
         const pastCalls = await getZadarmaCallsFromFirestore(start, pastEndDate);
         calls.push(...pastCalls);
         fromCache = true;
-        console.log(`[ZADARMA STATS] ✅ Obtenidas ${pastCalls.length} llamadas históricas del caché.`);
     }
 
     // 2. Si se incluye hoy, obtener solo los datos de hoy de la API
     if (isTodayIncluded) {
         const todayCalls = await fetchZadarmaAPI(today, today, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
         calls.push(...todayCalls);
-        fromCache = fromCache === true ? 'mixed' : false; // Si ya teníamos datos del caché, es mixto
-        console.log(`[ZADARMA STATS] 🌐 Obtenidas ${todayCalls.length} llamadas de hoy desde la API.`);
+        fromCache = fromCache === true ? 'mixed' : false;
     }
 
-    // 3. Disparar auto-sincronización en segundo plano para los días pasados (no bloquea la respuesta)
+    // 3. Disparar auto-sincronización en segundo plano para los días pasados
     if (start < today) {
         fetch(`${req.nextUrl.origin}/api/zadarma/sync`, {
             method: 'POST',
@@ -106,14 +109,10 @@ export async function GET(req: NextRequest) {
         }).catch(err => console.error('[AUTO-SYNC BKG] Error:', err));
     }
     
-    // 4. Determinar el mensaje final para el usuario
-    if (fromCache === 'mixed') {
-        message = 'Datos combinados: históricos desde caché y de hoy desde API.';
-    } else if (fromCache === true) {
-        message = 'Datos históricos obtenidos de caché.';
-    } else {
-        message = 'Datos en tiempo real obtenidos de API.';
-    }
+    // 4. Determinar el mensaje final
+    if (fromCache === 'mixed') message = 'Datos combinados: históricos desde caché y de hoy desde API.';
+    else if (fromCache === true) message = 'Datos históricos obtenidos de caché.';
+    else message = 'Datos en tiempo real obtenidos de API.';
 
     return NextResponse.json({
       status: 'success',

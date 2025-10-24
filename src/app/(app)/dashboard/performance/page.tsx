@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp, Timer, PlayCircle, StopCircle, PhoneForwarded, PhoneOutgoing, BarChartHorizontal, Database, Cloud, Percent, ChevronDown } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp, Timer, PlayCircle, StopCircle, PhoneForwarded, PhoneOutgoing, BarChartHorizontal, Database, Cloud, Percent, ChevronDown, Download, Cog, Target } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,62 +10,63 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
-import { format, subDays, startOfDay, differenceInCalendarDays } from "date-fns";
+import { format, subDays, startOfDay, differenceInCalendarDays, eachDayOfInterval, getDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { formatInTimeZone } from 'date-fns-tz';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine } from "recharts";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-
+import { toPng } from 'html-to-image';
+import download from 'downloadjs';
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import agentMap from '@/lib/agents.json';
+import { ScheduleManager } from "@/components/dashboard/ScheduleManager";
+import { PerformanceCalendar } from "@/components/dashboard/PerformanceCalendar"; // Importar Calendario
 
 const LIMA_TIME_ZONE = 'America/Lima';
+const CALLS_PER_HOUR_TARGET = 15;
 
 // --- Tipos de Datos ---
-interface ZadarmaCall {
-  pbx_call_id: string; callstart: string; sip: string;
-  destination: string | number; disposition: string; seconds: number;
-}
-interface PerformanceMetrics {
-  totalCalls: number; effectiveCalls: number; effectivenessRate: number;
-  totalSeconds: number; averageCallDuration: number;
-  firstCallTime: string | null; lastCallTime: string | null;
-}
-interface AdvisorPerformance extends PerformanceMetrics {
-  id: string; name: string;
-}
-interface DailyPerformanceData {
-  [agentId: string]: { [date: string]: PerformanceMetrics };
-}
+interface DaySchedule { active: boolean; start: string; end: string; }
+interface Schedule { [day: string]: DaySchedule; }
+interface ZadarmaCall { pbx_call_id: string; callstart: string; sip: string; destination: string | number; disposition: string; seconds: number; }
+interface PerformanceMetrics { totalCalls: number; effectiveCalls: number; effectivenessRate: number; totalSeconds: number; averageCallDuration: number; firstCallTime: string | null; lastCallTime: string | null; }
+interface AdvisorPerformance extends PerformanceMetrics { id: string; name: string; callTarget?: number; compliance?: number; }
+interface DailyPerformanceData { [agentId: string]: { [date: string]: PerformanceMetrics & { callTarget?: number; compliance?: number; } }; }
 type SortConfig = { key: keyof AdvisorPerformance; direction: 'ascending' | 'descending'; };
+
+const dayMapping = [ "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday" ];
+
+const calculateHoursForDay = (schedule: Schedule, date: Date): number => {
+    const dayName = dayMapping[getDay(date)];
+    const daySchedule = schedule[dayName];
+    if (!daySchedule || !daySchedule.active) return 0;
+    const [startH, startM] = daySchedule.start.split(':').map(Number);
+    const [endH, endM] = daySchedule.end.split(':').map(Number);
+    return (endH + endM / 60) - (startH + startM / 60);
+};
 
 export default function AdvisorPerformancePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [performanceData, setPerformanceData] = useState<AdvisorPerformance[]>([]);
   const [dailyPerformanceData, setDailyPerformanceData] = useState<DailyPerformanceData>({});
   const [openAdvisorId, setOpenAdvisorId] = useState<string | null>(null);
-
+  const [isScheduleManagerOpen, setIsScheduleManagerOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'totalCalls', direction: 'descending' });
   const [date, setDate] = useState<DateRange | undefined>(undefined);
   const [tempDate, setTempDate] = useState<DateRange | undefined>(undefined);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [dataSource, setDataSource] = useState<'cache' | 'api' | 'mixed'>('cache');
   const { toast } = useToast();
+  const tableRef = useRef<HTMLDivElement>(null);
 
-  const showDailyBreakdown = useMemo(() => {
-    if (!date?.from || !date?.to) return false;
-    return differenceInCalendarDays(date.to, date.from) > 0;
-  }, [date]);
+  const showDailyBreakdown = useMemo(() => (date?.from && date.to) ? differenceInCalendarDays(date.to, date.from) > 0 : false, [date]);
   
-  useEffect(() => {
-    const today = new Date();
-    setDate({ from: today, to: today });
-  }, []);
+  useEffect(() => { setDate({ from: new Date(), to: new Date() }); }, []);
 
   const handleDatePreset = (preset: string) => {
       const to = new Date(); let from: Date;
@@ -77,26 +78,37 @@ export default function AdvisorPerformancePage() {
       }
   };
 
+  const handleDownloadReport = useCallback(() => {
+    if (!tableRef.current) return;
+    const filter = (node: HTMLElement) => (node.tagName !== 'LINK') || !node.hasAttribute('href') || !(node.getAttribute('href') || '').includes('googleapis');
+    toPng(tableRef.current, { cacheBust: true, backgroundColor: '#ffffff', filter })
+      .then((dataUrl) => {
+        download(dataUrl, 'reporte-rendimiento.png');
+        toast({ title: "¡Éxito!", description: "El reporte se está descargando." });
+      })
+      .catch((err) => toast({ variant: "destructive", title: "Error", description: "No se pudo generar la imagen del reporte." }));
+  }, [toast]);
+
   const fetchAndProcessData = useCallback(async () => {
     if (!date?.from) return;
     setIsLoading(true);
     setOpenAdvisorId(null);
     try {
-      const params = new URLSearchParams({
-        startDate: startOfDay(date.from).toISOString(),
-        endDate: startOfDay(date.to || date.from).toISOString(),
-      });
-      
-      const response = await fetch(`/api/zadarma/stats?${params.toString()}`);
+      const params = new URLSearchParams({ startDate: startOfDay(date.from).toISOString(), endDate: startOfDay(date.to || date.from).toISOString() });
+      const [statsRes, ...schedulesRes] = await Promise.all([
+        fetch(`/api/zadarma/stats?${params.toString()}`),
+        ...Object.keys(agentMap).map(id => fetch(`/api/schedules/${id}`))
+      ]);
 
-      if (!response.ok) {
-        let msg = `Error: ${response.status}`;
-        try { msg = (await response.json()).message; } catch (e) {}
-        throw new Error(msg);
+      if (!statsRes.ok) throw new Error((await statsRes.json()).message || 'Error al cargar estadísticas');
+      const statsData = await statsRes.json();
+      setDataSource(statsData.fromCache || 'api');
+
+      const schedules: { [id: string]: Schedule } = {};
+      for (let i = 0; i < schedulesRes.length; i++) {
+        const agentId = Object.keys(agentMap)[i];
+        if (schedulesRes[i].ok) schedules[agentId] = await schedulesRes[i].json();
       }
-      
-      const data = await response.json();
-      setDataSource(data.fromCache || 'api');
 
       const performanceByAgent: { [k: string]: AdvisorPerformance } = {};
       const dailyPerformance: DailyPerformanceData = {};
@@ -105,22 +117,17 @@ export default function AdvisorPerformancePage() {
         dailyPerformance[id] = {};
       });
       
-      (data.stats || []).forEach((call: ZadarmaCall) => {
+      (statsData.stats || []).forEach((call: ZadarmaCall) => {
         if (!performanceByAgent[call.sip] || String(call.destination).length < 5) return;
-        
-        const callDate = new Date(call.callstart);
-        const dayKey = format(callDate, 'yyyy-MM-dd');
+        const dayKey = formatInTimeZone(new Date(call.callstart), LIMA_TIME_ZONE, 'yyyy-MM-dd');
         if (!dailyPerformance[call.sip][dayKey]) {
           dailyPerformance[call.sip][dayKey] = { totalCalls: 0, effectiveCalls: 0, effectivenessRate: 0, totalSeconds: 0, averageCallDuration: 0, firstCallTime: null, lastCallTime: null };
         }
-        
         const agentTotal = performanceByAgent[call.sip];
         const agentDaily = dailyPerformance[call.sip][dayKey];
-        const callIso = callDate.toISOString();
-
+        const callIso = new Date(call.callstart).toISOString();
         [agentTotal, agentDaily].forEach(p => {
-          p.totalCalls++;
-          p.totalSeconds += call.seconds;
+          p.totalCalls++; p.totalSeconds += call.seconds;
           if (call.disposition === 'answered') p.effectiveCalls++;
           if (!p.firstCallTime || callIso < p.firstCallTime) p.firstCallTime = callIso;
           if (!p.lastCallTime || callIso > p.lastCallTime) p.lastCallTime = callIso;
@@ -135,11 +142,30 @@ export default function AdvisorPerformancePage() {
         return p;
       };
 
+      const daysInInterval = eachDayOfInterval({ start: date.from, end: date.to || date.from });
+      Object.keys(performanceByAgent).forEach(agentId => {
+        const agentSchedule = schedules[agentId];
+        let totalHours = 0;
+        if (agentSchedule) {
+          daysInInterval.forEach(day => {
+            const hours = calculateHoursForDay(agentSchedule, day);
+            totalHours += hours;
+            const dayKey = format(day, 'yyyy-MM-dd');
+            if (dailyPerformance[agentId][dayKey]) {
+              dailyPerformance[agentId][dayKey].callTarget = hours * CALLS_PER_HOUR_TARGET;
+              dailyPerformance[agentId][dayKey].compliance = dailyPerformance[agentId][dayKey].callTarget! > 0 ? (dailyPerformance[agentId][dayKey].totalCalls / dailyPerformance[agentId][dayKey].callTarget!) * 100 : 100;
+            }
+          });
+        }
+        performanceByAgent[agentId].callTarget = totalHours * CALLS_PER_HOUR_TARGET;
+        performanceByAgent[agentId].compliance = performanceByAgent[agentId].callTarget! > 0 ? (performanceByAgent[agentId].totalCalls / performanceByAgent[agentId].callTarget!) * 100 : 100;
+      });
+
       setPerformanceData(Object.values(performanceByAgent).map(p => formatMetrics(p as AdvisorPerformance) as AdvisorPerformance));
       Object.values(dailyPerformance).forEach(agentDays => Object.values(agentDays).forEach(formatMetrics));
       setDailyPerformanceData(dailyPerformance);
       
-      toast({ title: data.fromCache ? "Datos desde Caché" : "Datos en Tiempo Real", description: data.message });
+      toast({ title: statsData.fromCache ? "Datos desde Caché" : "Datos en Tiempo Real", description: statsData.message });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error de Conexión", description: error.message });
     } finally {
@@ -169,9 +195,10 @@ export default function AdvisorPerformancePage() {
     return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
   };
 
-  const getCallCountColor = (count: number) => {
-    if (count < 60) return "bg-red-500/20 text-red-500 border-red-500/50";
-    if (count >= 60 && count <= 100) return "bg-yellow-500/20 text-yellow-500 border-yellow-500/50";
+  const getComplianceColor = (compliance: number | undefined): string => {
+    if (compliance === undefined) return "";
+    if (compliance < 75) return "bg-red-500/20 text-red-500 border-red-500/50";
+    if (compliance < 95) return "bg-yellow-500/20 text-yellow-500 border-yellow-500/50";
     return "bg-green-500/20 text-green-500 border-green-500/50";
   };
   
@@ -181,155 +208,94 @@ export default function AdvisorPerformancePage() {
   
   const chartData = useMemo(() => performanceData.filter(d => d.totalCalls > 0).sort((a,b) => a.name.localeCompare(b.name)), [performanceData]);
 
+  const calendarData = useMemo(() => {
+    const data: { [date: string]: { total: number; count: number; compliance: number } } = {};
+    Object.values(dailyPerformanceData).forEach(agentDays => {
+        Object.entries(agentDays).forEach(([date, stats]) => {
+            if (!data[date]) data[date] = { total: 0, count: 0, compliance: 0 };
+            data[date].total += stats.totalCalls;
+            data[date].count++;
+            data[date].compliance += stats.compliance ?? 0;
+        });
+    });
+    return Object.entries(data).map(([date, { total, count, compliance }]) => {
+        const avgCompliance = count > 0 ? compliance / count : 0;
+        let colorLevel = 0;
+        if (avgCompliance >= 95) colorLevel = 3;
+        else if (avgCompliance >= 75) colorLevel = 2;
+        else if (avgCompliance > 0) colorLevel = 1;
+        return { date, count: colorLevel, tooltip: `${format(new Date(date), 'dd LLL')}: ${total} llamadas, Cumplimiento: ${avgCompliance.toFixed(0)}%` };
+    });
+  }, [dailyPerformanceData]);
+  
   return (
     <div className="space-y-8">
-        {/* Encabezado y Filtros */}
+        <ScheduleManager open={isScheduleManagerOpen} onOpenChange={setIsScheduleManagerOpen} />
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-4">
                 <SidebarTrigger className="md:hidden"/>
-                <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Rendimiento de Asesores</h2>
-                    <p className="text-muted-foreground">Métricas clave de la actividad de llamadas.</p>
-                </div>
+                <div><h2 className="text-3xl font-bold tracking-tight">Rendimiento de Asesores</h2><p className="text-muted-foreground">Métricas clave de la actividad de llamadas.</p></div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-                <Select onValueChange={handleDatePreset}>
-                    <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Filtro Rápido" /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="today">Hoy</SelectItem>
-                        <SelectItem value="yesterday">Ayer</SelectItem>
-                        <SelectItem value="7days">Últimos 7 días</SelectItem>
-                        <SelectItem value="30days">Últimos 30 días</SelectItem>
-                    </SelectContent>
-                </Select>
-                <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
-                    <PopoverTrigger asChild>
-                    <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {date?.from ? (date.to && date.to > date.from ? `${format(date.from, "LLL dd, y", { locale: es })} - ${format(date.to, "LLL dd, y", { locale: es })}` : format(date.from, "LLL dd, y", { locale: es })) : <span>Selecciona un rango</span>}
-                    </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="end">
-                    <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={2} locale={es} />
-                    <div className="flex items-center justify-end gap-2 p-3 border-t">
-                        <Button variant="outline" size="sm" onClick={() => setIsDatePickerOpen(false)}>Cancelar</Button>
-                        <Button size="sm" onClick={() => { setDate(tempDate); setIsDatePickerOpen(false); }}>Aplicar</Button>
-                    </div>
-                    </PopoverContent>
-                </Popover>
-                <Button variant="outline" size="sm" onClick={fetchAndProcessData} disabled={isLoading}>
-                    {isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                    Refrescar
-                </Button>
+                <Button variant="outline" onClick={() => setIsScheduleManagerOpen(true)}><Cog className="mr-2 h-4 w-4" />Gestionar Horarios</Button>
+                <Select onValueChange={handleDatePreset}><SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Filtro Rápido" /></SelectTrigger><SelectContent><SelectItem value="today">Hoy</SelectItem><SelectItem value="yesterday">Ayer</SelectItem><SelectItem value="7days">Últimos 7 días</SelectItem><SelectItem value="30days">Últimos 30 días</SelectItem></SelectContent></Select>
+                <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}><PopoverTrigger asChild><Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{date?.from ? (date.to && date.to > date.from ? `${format(date.from, "LLL dd, y", { locale: es })} - ${format(date.to, "LLL dd, y", { locale: es })}` : format(date.from, "LLL dd, y", { locale: es })) : <span>Selecciona un rango</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="end"><Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={2} locale={es} /><div className="flex items-center justify-end gap-2 p-3 border-t"><Button variant="outline" size="sm" onClick={() => setIsDatePickerOpen(false)}>Cancelar</Button><Button size="sm" onClick={() => { setDate(tempDate); setIsDatePickerOpen(false); }}>Aplicar</Button></div></PopoverContent></Popover>
+                <Button variant="outline" size="sm" onClick={fetchAndProcessData} disabled={isLoading}>{isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Refrescar</Button>
             </div>
         </div>
 
-        {/* Indicador de Fuente de Datos */}
-        {!isLoading && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {dataSource === 'cache' || dataSource === true ? <><Database className="h-4 w-4 text-green-500" /><span>Datos desde Caché</span></>
-            : dataSource === 'mixed' ? <><Database className="h-4 w-4 text-yellow-500" /><Cloud className="h-4 w-4 text-blue-500 -ml-1" /><span>Datos Combinados</span></>
-            : <><Cloud className="h-4 w-4 text-blue-500" /><span>Datos en Tiempo Real</span></>}
-            </div>
-        )}
+        {!isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground">{dataSource === 'cache' || dataSource === true ? <><Database className="h-4 w-4 text-green-500" /><span>Datos desde Caché</span></> : dataSource === 'mixed' ? <><Database className="h-4 w-4 text-yellow-500" /><Cloud className="h-4 w-4 text-blue-500 -ml-1" /><span>Datos Combinados</span></> : <><Cloud className="h-4 w-4 text-blue-500" /><span>Datos en Tiempo Real</span></>}</div>}
       
         {isLoading ? ( <div className="flex items-center justify-center min-h-[400px]"><Loader className="h-8 w-8 animate-spin text-primary" /><p className="ml-4 text-muted-foreground">Calculando rendimiento...</p></div> ) :
         (<div className="space-y-8">
-            {/* Tarjetas de Resumen */}
             <div className="grid gap-4 md:grid-cols-3">
                 <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Total de Intentos</CardTitle><PhoneOutgoing className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalCalls}</div><p className="text-xs text-muted-foreground">Llamadas salientes realizadas</p></CardContent></Card>
                 <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Llamadas Efectivas</CardTitle><PhoneForwarded className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalEffectiveCalls}</div><p className="text-xs text-muted-foreground">Llamadas que fueron contestadas</p></CardContent></Card>
                 <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Tasa de Efectividad</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{averageEffectiveness.toFixed(1)}%</div><p className="text-xs text-muted-foreground">Efectividad promedio del equipo</p></CardContent></Card>
             </div>
-            
-            {/* Gráficos */}
-            <Card>
-                <CardHeader><CardTitle className="flex items-center"><BarChartHorizontal className="mr-2 h-5 w-5" />Rendimiento de Llamadas</CardTitle><CardDescription>Comparativa de intentos vs. llamadas efectivas por asesor.</CardDescription></CardHeader>
-                <CardContent>
-                    <ChartContainer config={{}} className="min-h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 40)}>
-                            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" /><XAxis type="number" /><YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
-                                <Tooltip content={<ChartTooltipContent />} cursor={{fill: "hsl(var(--muted))"}}/><Legend />
-                                <Bar dataKey="totalCalls" name="Intentos" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
-                                <Bar dataKey="effectiveCalls" name="Efectivas" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </ChartContainer>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader><CardTitle className="flex items-center"><Percent className="mr-2 h-5 w-5" />Tasa de Efectividad por Asesor</CardTitle><CardDescription>Porcentaje de llamadas contestadas sobre el total de intentos.</CardDescription></CardHeader>
-                <CardContent>
-                    <ChartContainer config={{}} className="min-h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 40)}>
-                            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" /><XAxis type="number" domain={[0, 100]} unit="%" /><YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} interval={0} />
-                                <Tooltip content={<ChartTooltipContent formatter={(v) => `${(v as number).toFixed(1)}%`} />} cursor={{fill: "hsl(var(--muted))"}}/>
-                                <ReferenceLine x={averageEffectiveness} stroke="hsl(var(--destructive))" strokeDasharray="3 3" label={{ value: `Promedio: ${averageEffectiveness.toFixed(1)}%`, position: 'insideTopLeft' }} />
-                                <Bar dataKey="effectivenessRate" name="Efectividad" fill="hsl(var(--chart-3))" radius={[0, 4, 4, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </ChartContainer>
-                </CardContent>
-            </Card>
 
-            {/* Tabla de Detalles */}
+            <Card><CardHeader><CardTitle className="flex items-center"><CalendarIcon className="mr-2 h-5 w-5" />Resumen de Cumplimiento Mensual</CardTitle><CardDescription>Mapa de calor del cumplimiento promedio del equipo en los últimos meses.</CardDescription></CardHeader><CardContent><PerformanceCalendar data={calendarData} /></CardContent></Card>
+            
             <Card>
-                <CardHeader><CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Detalle de Rendimiento por Asesor</CardTitle><CardDescription>{showDailyBreakdown ? "Haz clic en una fila para ver el desglose por día." : "Selecciona un rango de más de un día para ver el desglose diario."}</CardDescription></CardHeader>
-                <CardContent className="p-0 sm:p-2">
+                <CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Detalle de Rendimiento por Asesor</CardTitle><CardDescription>{showDailyBreakdown ? "Haz clic en una fila para ver el desglose por día." : "Selecciona un rango de más de un día para ver el desglose diario."}</CardDescription></div><Button variant="outline" size="icon" onClick={handleDownloadReport}><Download className="h-4 w-4" /></Button></CardHeader>
+                <CardContent className="p-0 sm:p-2"><div ref={tableRef}>
                     <Table>
-                        <TableHeader>
-                            <TableRow>
-                                {showDailyBreakdown && <TableHead className="w-8 p-0"></TableHead>}
-                                <TableHead><Button variant="ghost" onClick={() => handleSort('name')}>Asesor {renderSortArrow('name')}</Button></TableHead>
-                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('totalCalls')}>Intentos {renderSortArrow('totalCalls')}</Button></TableHead>
-                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('effectiveCalls')}>Efectivas {renderSortArrow('effectiveCalls')}</Button></TableHead>
-                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('effectivenessRate')}>Efectividad {renderSortArrow('effectivenessRate')}</Button></TableHead>
-                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('totalSeconds')}>Minutos Totales {renderSortArrow('totalSeconds')}</Button></TableHead>
-                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('averageCallDuration')}>Duración Prom. {renderSortArrow('averageCallDuration')}</Button></TableHead>
-                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('firstCallTime')}>Primera Llamada {renderSortArrow('firstCallTime')}</Button></TableHead>
-                                <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('lastCallTime')}>Última Llamada {renderSortArrow('lastCallTime')}</Button></TableHead>
-                            </TableRow>
-                        </TableHeader>
+                        <TableHeader><TableRow>
+                            {showDailyBreakdown && <TableHead className="w-8 p-0"></TableHead>}
+                            <TableHead><Button variant="ghost" onClick={() => handleSort('name')}>Asesor {renderSortArrow('name')}</Button></TableHead>
+                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('totalCalls')}>Intentos {renderSortArrow('totalCalls')}</Button></TableHead>
+                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('compliance')}>Cumplimiento {renderSortArrow('compliance')}</Button></TableHead>
+                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('effectiveCalls')}>Efectivas {renderSortArrow('effectiveCalls')}</Button></TableHead>
+                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('effectivenessRate')}>Efectividad {renderSortArrow('effectivenessRate')}</Button></TableHead>
+                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('firstCallTime')}>Primera Llamada {renderSortArrow('firstCallTime')}</Button></TableHead>
+                            <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('lastCallTime')}>Última Llamada {renderSortArrow('lastCallTime')}</Button></TableHead>
+                        </TableRow></TableHeader>
                         {sortedPerformanceData.map((agent) => (
                         <Collapsible asChild key={agent.id} open={openAdvisorId === agent.id} onOpenChange={() => showDailyBreakdown && setOpenAdvisorId(p => p === agent.id ? null : agent.id)}>
                             <TableBody>
-                                <CollapsibleTrigger asChild>
-                                    <TableRow className={cn(showDailyBreakdown && "cursor-pointer hover:bg-muted/50")}>
-                                        {showDailyBreakdown && <TableCell className="p-2"><ChevronDown className={cn("h-4 w-4 transition-transform", openAdvisorId === agent.id && "rotate-180")}/></TableCell>}
-                                        <TableCell className="font-bold">{agent.name} ({agent.id})</TableCell>
-                                        <TableCell className="text-center"><Badge variant="outline" className={cn("text-base font-bold", getCallCountColor(agent.totalCalls))}>{agent.totalCalls}</Badge></TableCell>
-                                        <TableCell className="text-center font-semibold"><div className="flex items-center justify-center gap-2 text-green-600"><CheckCircle className="h-4 w-4" />{agent.effectiveCalls}</div></TableCell>
-                                        <TableCell className="text-center font-mono">{agent.effectivenessRate.toFixed(1)}%</TableCell>
-                                        <TableCell className="text-center"><div className="flex items-center justify-center gap-2"><Clock className="h-4 w-4 text-muted-foreground" />{Math.ceil(agent.totalSeconds / 60)} min</div></TableCell>
-                                        <TableCell className="text-center"><div className="flex items-center justify-center gap-2"><Timer className="h-4 w-4 text-muted-foreground" />{agent.averageCallDuration.toFixed(0)} s</div></TableCell>
-                                        <TableCell className="text-center font-mono"><div className="flex items-center justify-center gap-2 text-green-600"><PlayCircle className="h-4 w-4" />{agent.firstCallTime || "N/A"}</div></TableCell>
-                                        <TableCell className="text-right font-mono"><div className="flex items-center justify-end gap-2 text-red-500"><StopCircle className="h-4 w-4" />{agent.lastCallTime || "N/A"}</div></TableCell>
-                                    </TableRow>
-                                </CollapsibleTrigger>
-                                {showDailyBreakdown && <CollapsibleContent asChild>
-                                    <TableRow>
-                                        <TableCell colSpan={9} className="p-0">
-                                            <div className="p-4 bg-muted/50">
-                                                <h4 className="font-bold mb-2">Desglose Diario para {agent.name}</h4>
-                                                <Table>
-                                                    <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead className="text-center">Intentos</TableHead><TableHead className="text-center">Efectivas</TableHead><TableHead className="text-center">Efectividad</TableHead><TableHead className="text-center">Minutos</TableHead></TableRow></TableHeader>
-                                                    <TableBody>
-                                                        {Object.entries(dailyPerformanceData[agent.id] || {}).sort(([a], [b]) => a.localeCompare(b)).map(([d, stats]) => (
-                                                        <TableRow key={d}><TableCell>{format(new Date(d), "dd LLL, y", { locale: es })}</TableCell><TableCell className="text-center"><Badge variant="secondary">{stats.totalCalls}</Badge></TableCell><TableCell className="text-center font-semibold text-green-600">{stats.effectiveCalls}</TableCell><TableCell className="text-center font-mono">{stats.effectivenessRate.toFixed(1)}%</TableCell><TableCell className="text-center">{Math.ceil(stats.totalSeconds / 60)}</TableCell></TableRow>
-                                                        ))}
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                </CollapsibleContent>}
+                                <CollapsibleTrigger asChild><TableRow className={cn(showDailyBreakdown && "cursor-pointer hover:bg-muted/50")}>
+                                    {showDailyBreakdown && <TableCell className="p-2"><ChevronDown className={cn("h-4 w-4 transition-transform", openAdvisorId === agent.id && "rotate-180")}/></TableCell>}
+                                    <TableCell className="font-bold">{agent.name} ({agent.id})</TableCell>
+                                    <TableCell className="text-center font-semibold">{agent.totalCalls}</TableCell>
+                                    <TableCell className="text-center"><Badge variant="outline" className={cn("text-base font-bold", getComplianceColor(agent.compliance))}>{agent.compliance?.toFixed(0) ?? 'N/A'}%</Badge></TableCell>
+                                    <TableCell className="text-center font-semibold text-green-600">{agent.effectiveCalls}</TableCell>
+                                    <TableCell className="text-center font-mono">{agent.effectivenessRate.toFixed(1)}%</TableCell>
+                                    <TableCell className="text-center font-mono text-green-600">{agent.firstCallTime || "N/A"}</TableCell>
+                                    <TableCell className="text-right font-mono text-red-500">{agent.lastCallTime || "N/A"}</TableCell>
+                                </TableRow></CollapsibleTrigger>
+                                {showDailyBreakdown && <CollapsibleContent asChild><TableRow><TableCell colSpan={8} className="p-0"><div className="p-4 bg-muted/50">
+                                    <h4 className="font-bold mb-2">Desglose Diario para {agent.name}</h4>
+                                    <Table><TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead className="text-center">Intentos</TableHead><TableHead className="text-center">Objetivo</TableHead><TableHead className="text-center">Cumplimiento</TableHead></TableRow></TableHeader><TableBody>
+                                        {Object.entries(dailyPerformanceData[agent.id] || {}).sort(([a], [b]) => b.localeCompare(a)).map(([d, stats]) => (
+                                        <TableRow key={d}><TableCell>{format(new Date(d), "dd LLL, y", { locale: es })}</TableCell><TableCell className="text-center">{stats.totalCalls}</TableCell><TableCell className="text-center">{stats.callTarget?.toFixed(0) ?? 'N/A'}</TableCell><TableCell className="text-center"><Badge variant="outline" className={cn(getComplianceColor(stats.compliance))}>{stats.compliance?.toFixed(0) ?? 'N/A'}%</Badge></TableCell></TableRow>
+                                        ))}
+                                    </TableBody></Table>
+                                </div></TableCell></TableRow></CollapsibleContent>}
                             </TableBody>
                         </Collapsible>
                         ))}
-                      </Table>
-                </CardContent>
+                    </Table>
+                </div></CardContent>
             </Card>
         </div>)}
     </div>

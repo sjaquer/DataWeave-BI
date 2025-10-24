@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -69,6 +68,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Logo className="h-7 w-7 text-primary" />
           <span className="text-xl group-data-[collapsible=icon]:hidden">DataWeave</span>
         </Link>
+        <SidebarTrigger />
       </SidebarHeader>
 
       <SidebarContent>
@@ -129,7 +129,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Sidebar>
             {sidebarContent}
         </Sidebar>
-        <main>
+        <main className="p-4 md:p-6">
           {children}
         </main>
     </SidebarProvider>

@@ -146,9 +146,9 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
       <Sidebar>
         <SidebarContent>
           <SidebarHeader>
-              <div className="flex items-center gap-2">
+              <div className={cn("flex items-center gap-2", state === 'collapsed' && 'hidden')}>
                   <Logo className="size-7 text-primary" />
-                   <span className={cn("text-xl font-semibold", state === 'collapsed' && 'hidden')}>DataWeave</span>
+                   <span className="text-xl font-semibold">DataWeave</span>
               </div>
               <Button
                 variant="ghost"
@@ -179,17 +179,15 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
         <SidebarFooter>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-center group-data-[collapsible=icon]:justify-start gap-2 px-2">
+              <Button variant="ghost" className="w-full justify-center group-data-[collapsible=icon]:justify-center gap-2 px-2">
                 <Avatar className="size-7">
                   <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${userProfile.email}`} alt={userProfile.displayName} />
                   <AvatarFallback>{userProfile.email?.charAt(0).toUpperCase()}</AvatarFallback>
                 </Avatar>
-                {state !== 'collapsed' && (
-                  <div className="flex flex-col items-start text-left flex-1 min-w-0">
-                    <span className="text-sm font-medium truncate w-full">{userProfile.displayName}</span>
-                    <span className="text-xs text-muted-foreground capitalize">{userProfile.role}</span>
-                  </div>
-                )}
+                <div className={cn("flex flex-col items-start text-left flex-1 min-w-0", state === 'collapsed' && 'hidden')}>
+                  <span className="text-sm font-medium truncate w-full">{userProfile.displayName}</span>
+                  <span className="text-xs text-muted-foreground capitalize">{userProfile.role}</span>
+                </div>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">

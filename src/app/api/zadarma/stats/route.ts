@@ -1,16 +1,18 @@
 
 import { NextResponse, NextRequest } from 'next/server';
-import { format, startOfDay, addDays } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz'; // Corregido: importando toZonedTime
+import { format, startOfDay, addDays, differenceInCalendarDays, getHours } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 import * as dotenv from 'dotenv';
 import CryptoJS from 'crypto-js';
 import {
   getZadarmaCallsFromFirestore,
   consolidateCalls,
   validateZadarmaCredentials,
+  updateZadarmaCallsInFirestore, // Importar la función para actualizar
 } from '@/lib/zadarma-helpers';
 
 const LIMA_TIME_ZONE = 'America/Lima';
+const RESYNC_THRESHOLD_HOUR = 23; // 11 PM
 
 dotenv.config();
 
@@ -71,9 +73,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ status: 'error', message: 'Los parámetros startDate y endDate son requeridos.' }, { status: 400 });
     }
 
-    // *** CORRECCIÓN DE ZONA HORARIA AL LEER ***
-    // Se obtiene la fecha actual en la zona horaria de Lima.
-    const limaDate = toZonedTime(new Date(), LIMA_TIME_ZONE); // Corregido: usando toZonedTime
+    const limaDate = toZonedTime(new Date(), LIMA_TIME_ZONE);
     const today = startOfDay(limaDate);
     
     const start = startOfDay(new Date(startDateQuery));
@@ -86,22 +86,42 @@ export async function GET(req: NextRequest) {
     const isTodayIncluded = end >= today;
     const pastEndDate = isTodayIncluded ? addDays(today, -1) : end;
 
-    // 1. Obtener todos los días pasados del caché
+    // 1. Obtener datos pasados del caché
     if (start <= pastEndDate) {
-        const pastCalls = await getZadarmaCallsFromFirestore(start, pastEndDate);
-        calls.push(...pastCalls);
+        calls = await getZadarmaCallsFromFirestore(start, pastEndDate);
         fromCache = true;
+
+        // *** NUEVA REGLA DE VERIFICACIÓN AUTOMÁTICA ***
+        const isSinglePastDay = differenceInCalendarDays(end, start) === 0;
+        if (isSinglePastDay && calls.length > 0) {
+            const lastCallUTC = new Date(calls.reduce((max, call) => call.callstart > max ? call.callstart : max, calls[0].callstart));
+            const lastCallLima = toZonedTime(lastCallUTC, LIMA_TIME_ZONE);
+
+            if (getHours(lastCallLima) < RESYNC_THRESHOLD_HOUR) {
+                message = 'Caché de día pasado incompleto detectado. Forzando resincronización... ';
+                console.log(`[AUTO-HEAL]: Incomplete cache for ${format(start, 'yyyy-MM-dd')}. Last call at ${format(lastCallLima, 'HH:mm')}. Fetching fresh data.`);
+
+                const freshCalls = await fetchZadarmaAPI(start, start, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
+                await updateZadarmaCallsInFirestore(freshCalls, start);
+                calls = freshCalls; // Usar los datos frescos
+                message += '¡Caché actualizado! ';
+            }
+        }
     }
 
     // 2. Si se incluye hoy, obtener solo los datos de hoy de la API
     if (isTodayIncluded) {
         const todayCalls = await fetchZadarmaAPI(today, today, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
-        calls.push(...todayCalls);
-        fromCache = fromCache === true ? 'mixed' : false;
+        if (fromCache) {
+          calls.push(...todayCalls);
+          fromCache = 'mixed';
+        } else {
+          calls = todayCalls;
+        }
     }
 
-    // 3. Disparar auto-sincronización en segundo plano para los días pasados
-    if (start < today) {
+    // 3. Disparar auto-sincronización en segundo plano para los días pasados (si no se forzó ya)
+    if (start < today && !message.includes('Forzando resincronización')) {
         fetch(`${req.nextUrl.origin}/api/zadarma/sync`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -110,8 +130,8 @@ export async function GET(req: NextRequest) {
     }
     
     // 4. Determinar el mensaje final
-    if (fromCache === 'mixed') message = 'Datos combinados: históricos desde caché y de hoy desde API.';
-    else if (fromCache === true) message = 'Datos históricos obtenidos de caché.';
+    if (fromCache === 'mixed') message += 'Datos combinados: históricos desde caché y de hoy desde API.';
+    else if (fromCache === true) message += 'Datos históricos obtenidos de caché.';
     else message = 'Datos en tiempo real obtenidos de API.';
 
     return NextResponse.json({

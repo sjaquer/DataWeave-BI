@@ -39,6 +39,45 @@ export async function saveZadarmaCalls(calls: ZadarmaCall[]): Promise<number> {
 }
 
 /**
+ * Borra todas las llamadas de un día específico y las reemplaza con un nuevo conjunto de llamadas.
+ * Esto es útil para corregir cachés incompletos.
+ */
+export async function updateZadarmaCallsInFirestore(calls: ZadarmaCall[], date: Date): Promise<number> {
+  const callDate = format(date, 'yyyy-MM-dd');
+
+  const querySnapshot = await db.collection('zadarma_calls')
+    .where('callDate', '==', callDate)
+    .get();
+
+  const batch = db.batch();
+  const now = Timestamp.now();
+
+  querySnapshot.docs.forEach(doc => {
+    batch.delete(doc.ref);
+  });
+
+  calls.forEach(call => {
+    const docId = `${call.pbx_call_id}_${call.callstart}`;
+    const docRef = db.collection('zadarma_calls').doc(docId);
+    
+    const callDoc: Partial<ZadarmaCallDocument> = {
+      ...call,
+      id: docId,
+      callDate: format(new Date(call.callstart), 'yyyy-MM-dd'),
+      agentId: call.sip,
+      agentName: AGENT_MAP[call.sip] || 'Desconocido',
+      syncedAt: now.toDate().toISOString(),
+      createdAt: now,
+    };
+    batch.set(docRef, callDoc, { merge: true });
+  });
+
+  await batch.commit();
+  console.log(`[Firestore]: Replaced ${querySnapshot.size} old calls with ${calls.length} new calls for date ${callDate}.`);
+  return calls.length;
+}
+
+/**
  * Obtiene llamadas de Firestore para un rango de fechas.
  */
 export async function getZadarmaCallsFromFirestore(startDate: Date, endDate: Date): Promise<ZadarmaCall[]> {
@@ -133,19 +172,56 @@ export async function isSyncLocked(date: Date, ttlMinutes: number): Promise<bool
 // --- Funciones de Utilidad ---
 
 /**
- * Consolida llamadas para eliminar duplicados.
+ * Consolida múltiples registros de llamadas de Zadarma para el mismo evento de llamada (mismo pbx_call_id)
+ * en un único registro definitivo.
+ * La lógica de selección prioriza los estados finales ('answered') y la mayor duración.
  */
 export function consolidateCalls(calls: ZadarmaCall[]): ZadarmaCall[] {
-  const callsMap = new Map<string, ZadarmaCall>();
+  // 1. Agrupar todos los registros de llamada por 'pbx_call_id'.
+  const callsMap = new Map<string, ZadarmaCall[]>();
   calls.forEach(call => {
-    const key = `${call.pbx_call_id}_${call.callstart}`;
-    const existing = callsMap.get(key);
-    if (!existing || (call.disposition === 'answered' && existing.disposition !== 'answered') || (call.seconds > existing.seconds)) {
-      callsMap.set(key, call);
+    // Ignorar llamadas sin pbx_call_id, ya que no se pueden consolidar de forma fiable.
+    if (!call.pbx_call_id) {
+      return;
     }
+    const group = callsMap.get(call.pbx_call_id) || [];
+    group.push(call);
+    callsMap.set(call.pbx_call_id, group);
   });
-  return Array.from(callsMap.values());
+
+  // 2. Para cada grupo, seleccionar el mejor registro.
+  const finalCalls: ZadarmaCall[] = [];
+  for (const callGroup of callsMap.values()) {
+    if (callGroup.length === 1) {
+      finalCalls.push(callGroup[0]);
+      continue;
+    }
+
+    // Reducir el grupo a un solo registro "mejor".
+    const bestCall = callGroup.reduce((best, current) => {
+      // Prioridad 1: El estado 'answered' siempre es preferible.
+      if (current.disposition === 'answered' && best.disposition !== 'answered') {
+        return current;
+      }
+      if (best.disposition === 'answered' && current.disposition !== 'answered') {
+        return best;
+      }
+
+      // Prioridad 2: Si ambos (o ninguno) son 'answered', el de mayor duración es preferible.
+      // Esto ayuda a resolver empates y a elegir el registro más completo.
+      if (current.seconds > best.seconds) {
+        return current;
+      }
+
+      return best;
+    });
+    
+    finalCalls.push(bestCall);
+  }
+
+  return finalCalls;
 }
+
 
 /**
  * Valida que las credenciales de la API de Zadarma estén configuradas.

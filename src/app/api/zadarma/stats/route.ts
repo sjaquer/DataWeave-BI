@@ -1,6 +1,6 @@
 
 import { NextResponse, NextRequest } from 'next/server';
-import { format, startOfDay, addDays, differenceInCalendarDays, getHours } from 'date-fns';
+import { format, startOfDay, addDays, getHours, parseISO } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import * as dotenv from 'dotenv';
 import CryptoJS from 'crypto-js';
@@ -8,24 +8,22 @@ import {
   getZadarmaCallsFromFirestore,
   consolidateCalls,
   validateZadarmaCredentials,
-  updateZadarmaCallsInFirestore, // Importar la función para actualizar
+  updateZadarmaCallsInFirestore,
 } from '@/lib/zadarma-helpers';
 
 const LIMA_TIME_ZONE = 'America/Lima';
-const RESYNC_THRESHOLD_HOUR = 23; // 11 PM
+const RESYNC_THRESHOLD_HOUR = 23; // 11 PM Lima time, a safe threshold for end-of-day.
 
 dotenv.config();
 
 async function fetchZadarmaAPI(
-  start: Date,
-  end: Date,
+  utcStart: Date,
+  utcEnd: Date,
   apiKey: string,
   apiSecret: string
 ): Promise<any[]> {
-  const formattedStartDate = format(start, 'yyyy-MM-dd HH:mm:ss');
-  const fullEndDate = new Date(end);
-  fullEndDate.setHours(23, 59, 59, 999);
-  const formattedEndDate = format(fullEndDate, 'yyyy-MM-dd HH:mm:ss');
+  const formattedStartDate = format(utcStart, 'yyyy-MM-dd HH:mm:ss');
+  const formattedEndDate = format(utcEnd, 'yyyy-MM-dd HH:mm:ss');
   
   const method = '/v1/statistics/pbx/';
   const params = { start: formattedStartDate, end: formattedEndDate, format: 'json', version: '2' };
@@ -73,70 +71,62 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ status: 'error', message: 'Los parámetros startDate y endDate son requeridos.' }, { status: 400 });
     }
 
-    const limaDate = toZonedTime(new Date(), LIMA_TIME_ZONE);
-    const today = startOfDay(limaDate);
+    // --- CORE TIMEZONE FIX ---
+    // The dates from the query ("2025-10-23") represent days in Lima.
+    const startLimaDate = parseISO(startDateQuery);
+    const endLimaDate = parseISO(endDateQuery);
     
-    const start = startOfDay(new Date(startDateQuery));
-    const end = startOfDay(new Date(endDateQuery));
-
-    let calls: any[] = [];
+    const todayInLima = startOfDay(toZonedTime(new Date(), LIMA_TIME_ZONE));
+    
+    let allCalls: any[] = [];
     let fromCache: boolean | 'mixed' = false;
     let message = '';
 
-    const isTodayIncluded = end >= today;
-    const pastEndDate = isTodayIncluded ? addDays(today, -1) : end;
+    let currentDate = startLimaDate;
+    while (currentDate <= endLimaDate) {
+      const dayToFetch = currentDate; // This is a date object representing the Lima day, e.g., 2025-10-23T00:00:00.000Z
 
-    // 1. Obtener datos pasados del caché
-    if (start <= pastEndDate) {
-        calls = await getZadarmaCallsFromFirestore(start, pastEndDate);
-        fromCache = true;
+      if (dayToFetch < todayInLima) {
+        // --- PAST DAY: Use Cache + Auto-Healing ---
+        if (!fromCache) fromCache = true;
+        
+        let callsForDay = await getZadarmaCallsFromFirestore(dayToFetch, dayToFetch);
+        
+        const lastCall = callsForDay.length > 0 ? callsForDay.reduce((max, call) => new Date(call.callstart) > new Date(max.callstart) ? call : max) : null;
+        const lastCallHourInLima = lastCall ? getHours(toZonedTime(new Date(lastCall.callstart), LIMA_TIME_ZONE)) : -1;
 
-        // *** NUEVA REGLA DE VERIFICACIÓN AUTOMÁTICA ***
-        const isSinglePastDay = differenceInCalendarDays(end, start) === 0;
-        if (isSinglePastDay && calls.length > 0) {
-            const lastCallUTC = new Date(calls.reduce((max, call) => call.callstart > max ? call.callstart : max, calls[0].callstart));
-            const lastCallLima = toZonedTime(lastCallUTC, LIMA_TIME_ZONE);
-
-            if (getHours(lastCallLima) < RESYNC_THRESHOLD_HOUR) {
-                message = 'Caché de día pasado incompleto detectado. Forzando resincronización... ';
-                console.log(`[AUTO-HEAL]: Incomplete cache for ${format(start, 'yyyy-MM-dd')}. Last call at ${format(lastCallLima, 'HH:mm')}. Fetching fresh data.`);
-
-                const freshCalls = await fetchZadarmaAPI(start, start, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
-                await updateZadarmaCallsInFirestore(freshCalls, start);
-                calls = freshCalls; // Usar los datos frescos
-                message += '¡Caché actualizado! ';
-            }
+        if (lastCallHourInLima < RESYNC_THRESHOLD_HOUR) {
+          message += `Caché para ${format(dayToFetch, 'dd/MM')} incompleto. Resincronizando... `;
+          
+          const startOfLimaDay = toZonedTime(`${format(dayToFetch, 'yyyy-MM-dd')}T00:00:00`, LIMA_TIME_ZONE);
+          const endOfLimaDay = toZonedTime(`${format(dayToFetch, 'yyyy-MM-dd')}T23:59:59`, LIMA_TIME_ZONE);
+          
+          const freshCalls = await fetchZadarmaAPI(startOfLimaDay, endOfLimaDay, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
+          await updateZadarmaCallsInFirestore(freshCalls, dayToFetch);
+          callsForDay = freshCalls;
         }
-    }
+        allCalls.push(...callsForDay);
 
-    // 2. Si se incluye hoy, obtener solo los datos de hoy de la API
-    if (isTodayIncluded) {
-        const todayCalls = await fetchZadarmaAPI(today, today, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
-        if (fromCache) {
-          calls.push(...todayCalls);
-          fromCache = 'mixed';
-        } else {
-          calls = todayCalls;
-        }
-    }
-
-    // 3. Disparar auto-sincronización en segundo plano para los días pasados (si no se forzó ya)
-    if (start < today && !message.includes('Forzando resincronización')) {
-        fetch(`${req.nextUrl.origin}/api/zadarma/sync`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ startDate: start.toISOString(), endDate: pastEndDate.toISOString() }),
-        }).catch(err => console.error('[AUTO-SYNC BKG] Error:', err));
+      } else {
+        // --- TODAY: Fetch directly from API ---
+        if (fromCache) fromCache = 'mixed'; else fromCache = false;
+        
+        const startOfTodayLima = toZonedTime(`${format(dayToFetch, 'yyyy-MM-dd')}T00:00:00`, LIMA_TIME_ZONE);
+        const nowInLima = toZonedTime(new Date(), LIMA_TIME_ZONE);
+        
+        const todayCalls = await fetchZadarmaAPI(startOfTodayLima, nowInLima, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
+        allCalls.push(...todayCalls);
+        message = 'Datos de hoy obtenidos de la API en tiempo real. ';
+      }
+      
+      currentDate = addDays(currentDate, 1);
     }
     
-    // 4. Determinar el mensaje final
-    if (fromCache === 'mixed') message += 'Datos combinados: históricos desde caché y de hoy desde API.';
-    else if (fromCache === true) message += 'Datos históricos obtenidos de caché.';
-    else message = 'Datos en tiempo real obtenidos de API.';
+    const finalStats = consolidateCalls(allCalls);
 
     return NextResponse.json({
       status: 'success',
-      stats: consolidateCalls(calls),
+      stats: finalStats,
       fromCache,
       message,
     });

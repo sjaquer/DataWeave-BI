@@ -122,9 +122,9 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
   // Mostrar loading mientras se verifica la autenticación
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Logo className="size-12 text-primary animate-pulse mx-auto mb-4" />
+      <div className="fixed inset-0 flex items-center justify-center bg-background z-50">
+        <div className="flex flex-col items-center gap-4">
+          <Logo className="size-12 text-primary animate-pulse" />
           <p className="text-muted-foreground">Cargando...</p>
         </div>
       </div>
@@ -146,9 +146,9 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
       <Sidebar>
         <SidebarContent>
           <SidebarHeader>
-              <div className={cn("flex items-center gap-2", state === 'collapsed' && 'hidden')}>
+              <div className={cn("flex items-center gap-2", state === 'collapsed' && 'justify-center')}>
                   <Logo className="size-7 text-primary" />
-                   <span className="text-xl font-semibold">DataWeave</span>
+                   <span className={cn("text-xl font-semibold", state === 'collapsed' && 'hidden')}>DataWeave</span>
               </div>
               <Button
                 variant="ghost"
@@ -179,7 +179,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
         <SidebarFooter>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-center group-data-[collapsible=icon]:justify-center gap-2 px-2">
+              <Button variant="ghost" className={cn("w-full justify-start group-data-[collapsible=icon]:justify-center gap-2 px-2", state === 'collapsed' && 'justify-center')}>
                 <Avatar className="size-7">
                   <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${userProfile.email}`} alt={userProfile.displayName} />
                   <AvatarFallback>{userProfile.email?.charAt(0).toUpperCase()}</AvatarFallback>

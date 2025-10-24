@@ -479,74 +479,73 @@ export default function Dashboard() {
 
 
   return (
-    <div className="space-y-4 md:space-y-8 p-2 sm:p-4 md:p-6">
+    <div className="space-y-6">
       <div className="flex flex-col gap-4">
-         <div className="flex items-center gap-2 sm:gap-4">
-            <SidebarTrigger className="md:hidden"/>
-            <div className="flex-1">
-                <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Dashboard</h2>
-                <p className="text-xs sm:text-sm text-muted-foreground">
-                    {selectedStore === 'all' ? 'Vista general de métricas clave.' : `Métricas para: ${capitalize(selectedStore)}`}
-                </p>
-            </div>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            <Select onValueChange={handleDatePreset}>
-                <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Filtro Rápido" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="today">Hoy</SelectItem>
-                    <SelectItem value="yesterday">Ayer</SelectItem>
-                    <SelectItem value="7days">7 días</SelectItem>
-                    <SelectItem value="30days">30 días</SelectItem>
-                    <SelectItem value="6months">6 meses</SelectItem>
-                    <SelectItem value="all">Todo</SelectItem>
-                </SelectContent>
-            </Select>
-            <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
-              <PopoverTrigger asChild>
-                <Button id="date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                  <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
-                  <span className="truncate text-xs sm:text-sm">
-                    {date?.from ? (date.to ? (<>{format(date.from, "dd/MM", { locale: es })} - {format(date.to, "dd/MM", { locale: es })}</>) : (format(date.from, "dd/MM/yy", { locale: es }))) : ("Rango")}
-                  </span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={1} locale={es} className="sm:hidden" />
-                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={2} locale={es} className="hidden sm:block" />
-                <div className="flex items-center justify-end gap-2 p-3 border-t">
-                  <Button variant="outline" size="sm" onClick={() => { setTempDate(date); setIsDatePickerOpen(false); }}>Cancelar</Button>
-                  <Button size="sm" onClick={() => { if (tempDate) { setDate(tempDate); } setIsDatePickerOpen(false); }}>Aplicar</Button>
-                </div>
-              </PopoverContent>
-            </Popover>
-            <Select value={selectedStore} onValueChange={setSelectedStore}>
-                <SelectTrigger className="w-full col-span-2 sm:col-span-1">
-                    <SelectValue placeholder="Filtrar Tienda" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    {fullMetrics?.storeMetrics.map(store => (
-                      <SelectItem key={store.name} value={store.name.toLowerCase()}>{store.name}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Dashboard</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              {selectedStore === 'all' ? 'Vista general de métricas clave.' : `Métricas para: ${capitalize(selectedStore)}`}
+            </p>
           </div>
-          <div className="flex gap-2">
-            <Button className="flex-1" variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>
-              {isLoading ? <Loader className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              <span className="ml-2 hidden sm:inline">Actualizar</span>
-            </Button>
-            <Link href="/dashboard/upload-data" passHref className="flex-1">
-              <Button variant="outline" size="sm" className="w-full">
-                <Upload className="h-4 w-4" />
-                <span className="ml-2 hidden sm:inline">Subir Datos</span>
+
+          <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <Select onValueChange={handleDatePreset}>
+                  <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Filtro Rápido" />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="today">Hoy</SelectItem>
+                      <SelectItem value="yesterday">Ayer</SelectItem>
+                      <SelectItem value="7days">7 días</SelectItem>
+                      <SelectItem value="30days">30 días</SelectItem>
+                      <SelectItem value="6months">6 meses</SelectItem>
+                      <SelectItem value="all">Todo</SelectItem>
+                  </SelectContent>
+              </Select>
+              <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button id="date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
+                    <span className="truncate text-xs sm:text-sm">
+                      {date?.from ? (date.to ? (<>{format(date.from, "dd/MM", { locale: es })} - {format(date.to, "dd/MM", { locale: es })}</>) : (format(date.from, "dd/MM/yy", { locale: es }))) : ("Rango")}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={1} locale={es} className="sm:hidden" />
+                  <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={2} locale={es} className="hidden sm:block" />
+                  <div className="flex items-center justify-end gap-2 p-3 border-t">
+                    <Button variant="outline" size="sm" onClick={() => { setTempDate(date); setIsDatePickerOpen(false); }}>Cancelar</Button>
+                    <Button size="sm" onClick={() => { if (tempDate) { setDate(tempDate); } setIsDatePickerOpen(false); }}>Aplicar</Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <Select value={selectedStore} onValueChange={setSelectedStore}>
+                  <SelectTrigger className="w-full col-span-2 sm:col-span-1">
+                      <SelectValue placeholder="Filtrar Tienda" />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      {fullMetrics?.storeMetrics.map(store => (
+                        <SelectItem key={store.name} value={store.name.toLowerCase()}>{store.name}</SelectItem>
+                      ))}
+                  </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-2">
+              <Button className="flex-1" variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>
+                {isLoading ? <Loader className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                <span className="ml-2 hidden sm:inline">Actualizar</span>
               </Button>
-            </Link>
+              <Link href="/dashboard/upload-data" passHref className="flex-1">
+                <Button variant="outline" size="sm" className="w-full">
+                  <Upload className="h-4 w-4" />
+                  <span className="ml-2 hidden sm:inline">Subir Datos</span>
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </div>

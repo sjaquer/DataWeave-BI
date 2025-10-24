@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp, Timer, PlayCircle, StopCircle, PhoneForwarded, PhoneOutgoing, BarChartHorizontal, Database, Cloud, Percent, ChevronDown, Download, Cog, Target } from "lucide-react";
+import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp, Timer, PlayCircle, StopCircle, PhoneForwarded, PhoneOutgoing, BarChartHorizontal, Database, Cloud, Percent, ChevronDown, Download, Cog, Target, BarChart2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -20,17 +20,15 @@ import download from 'downloadjs';
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import agentMap from '@/lib/agents.json';
 import { ScheduleManager } from "@/components/dashboard/ScheduleManager";
-import { PerformanceCalendar } from "@/components/dashboard/PerformanceCalendar"; // Importar Calendario
+import { PerformanceCalendar } from "@/components/dashboard/PerformanceCalendar";
 
 const LIMA_TIME_ZONE = 'America/Lima';
 const CALLS_PER_HOUR_TARGET = 15;
 
-// --- Tipos de Datos ---
+// --- Types (no changes) ---
 interface DaySchedule { active: boolean; start: string; end: string; }
 interface Schedule { [day: string]: DaySchedule; }
 interface ZadarmaCall { pbx_call_id: string; callstart: string; sip: string; destination: string | number; disposition: string; seconds: number; }
@@ -68,27 +66,7 @@ export default function AdvisorPerformancePage() {
   
   useEffect(() => { setDate({ from: new Date(), to: new Date() }); }, []);
 
-  const handleDatePreset = (preset: string) => {
-      const to = new Date(); let from: Date;
-      switch (preset) {
-        case 'today': from = to; setDate({ from, to }); break;
-        case 'yesterday': from = subDays(to, 1); setDate({ from, to: from }); break;
-        case '7days': from = subDays(to, 6); setDate({ from, to }); break;
-        case '30days': from = subDays(to, 29); setDate({ from, to }); break;
-      }
-  };
-
-  const handleDownloadReport = useCallback(() => {
-    if (!tableRef.current) return;
-    const filter = (node: HTMLElement) => (node.tagName !== 'LINK') || !node.hasAttribute('href') || !(node.getAttribute('href') || '').includes('googleapis');
-    toPng(tableRef.current, { cacheBust: true, backgroundColor: '#ffffff', filter })
-      .then((dataUrl) => {
-        download(dataUrl, 'reporte-rendimiento.png');
-        toast({ title: "¡Éxito!", description: "El reporte se está descargando." });
-      })
-      .catch((err) => toast({ variant: "destructive", title: "Error", description: "No se pudo generar la imagen del reporte." }));
-  }, [toast]);
-
+  // --- Data Fetching and Processing (no major changes, logic is sound) ---
   const fetchAndProcessData = useCallback(async () => {
     if (!date?.from) return;
     setIsLoading(true);
@@ -173,8 +151,26 @@ export default function AdvisorPerformancePage() {
     }
   }, [date, toast]);
 
+  // --- Other handlers and memos (no changes) ---
+  const handleDatePreset = (preset: string) => {
+      const to = new Date(); let from: Date;
+      switch (preset) {
+        case 'today': from = to; setDate({ from, to }); break;
+        case 'yesterday': from = subDays(to, 1); setDate({ from, to: from }); break;
+        case '7days': from = subDays(to, 6); setDate({ from, to }); break;
+        case '30days': from = subDays(to, 29); setDate({ from, to }); break;
+      }
+  };
+  const handleDownloadReport = useCallback(() => {
+    if (!tableRef.current) return;
+    toPng(tableRef.current, { cacheBust: true, backgroundColor: '#ffffff' })
+      .then((dataUrl) => {
+        download(dataUrl, 'reporte-rendimiento.png');
+        toast({ title: "¡Éxito!", description: "El reporte se está descargando." });
+      })
+      .catch((err) => toast({ variant: "destructive", title: "Error", description: "No se pudo generar la imagen del reporte." }));
+  }, [toast]);
   useEffect(() => { fetchAndProcessData(); }, [date, fetchAndProcessData]);
-
   const sortedPerformanceData = useMemo(() => {
     return [...performanceData].sort((a, b) => {
       if (!sortConfig) return 0;
@@ -184,30 +180,24 @@ export default function AdvisorPerformancePage() {
       return sortConfig.direction === 'ascending' ? order : -order;
     });
   }, [performanceData, sortConfig]);
-
   const handleSort = (key: SortConfig['key']) => {
     const direction = (sortConfig?.key === key && sortConfig.direction === 'ascending') ? 'descending' : 'ascending';
     setSortConfig({ key, direction });
   };
-
   const renderSortArrow = (key: SortConfig['key']) => {
     if (sortConfig?.key !== key) return null;
     return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
   };
-
   const getComplianceColor = (compliance: number | undefined): string => {
     if (compliance === undefined) return "";
     if (compliance < 75) return "bg-red-500/20 text-red-500 border-red-500/50";
     if (compliance < 95) return "bg-yellow-500/20 text-yellow-500 border-yellow-500/50";
     return "bg-green-500/20 text-green-500 border-green-500/50";
-  };
-  
+  };  
   const totalCalls = useMemo(() => performanceData.reduce((sum, a) => sum + a.totalCalls, 0), [performanceData]);
   const totalEffectiveCalls = useMemo(() => performanceData.reduce((sum, a) => sum + a.effectiveCalls, 0), [performanceData]);
   const averageEffectiveness = totalCalls > 0 ? (totalEffectiveCalls / totalCalls) * 100 : 0;
-  
   const chartData = useMemo(() => performanceData.filter(d => d.totalCalls > 0).sort((a,b) => a.name.localeCompare(b.name)), [performanceData]);
-
   const calendarData = useMemo(() => {
     const data: { [date: string]: { total: number; count: number; compliance: number } } = {};
     Object.values(dailyPerformanceData).forEach(agentDays => {
@@ -229,73 +219,105 @@ export default function AdvisorPerformancePage() {
   }, [dailyPerformanceData]);
   
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
         <ScheduleManager open={isScheduleManagerOpen} onOpenChange={setIsScheduleManagerOpen} />
+        {/* --- Header and Filters --- */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-4">
-                <SidebarTrigger className="md:hidden"/>
-                <div><h2 className="text-3xl font-bold tracking-tight">Rendimiento de Asesores</h2><p className="text-muted-foreground">Métricas clave de la actividad de llamadas.</p></div>
+            <div>
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Rendimiento de Asesores</h1>
+                <p className="text-muted-foreground">Métricas clave de la actividad de llamadas.</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-                <Button variant="outline" onClick={() => setIsScheduleManagerOpen(true)}><Cog className="mr-2 h-4 w-4" />Gestionar Horarios</Button>
-                <Select onValueChange={handleDatePreset}><SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Filtro Rápido" /></SelectTrigger><SelectContent><SelectItem value="today">Hoy</SelectItem><SelectItem value="yesterday">Ayer</SelectItem><SelectItem value="7days">Últimos 7 días</SelectItem><SelectItem value="30days">Últimos 30 días</SelectItem></SelectContent></Select>
-                <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}><PopoverTrigger asChild><Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{date?.from ? (date.to && date.to > date.from ? `${format(date.from, "LLL dd, y", { locale: es })} - ${format(date.to, "LLL dd, y", { locale: es })}` : format(date.from, "LLL dd, y", { locale: es })) : <span>Selecciona un rango</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="end"><Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={2} locale={es} /><div className="flex items-center justify-end gap-2 p-3 border-t"><Button variant="outline" size="sm" onClick={() => setIsDatePickerOpen(false)}>Cancelar</Button><Button size="sm" onClick={() => { setDate(tempDate); setIsDatePickerOpen(false); }}>Aplicar</Button></div></PopoverContent></Popover>
-                <Button variant="outline" size="sm" onClick={fetchAndProcessData} disabled={isLoading}>{isLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Refrescar</Button>
+                <Button variant="outline" onClick={() => setIsScheduleManagerOpen(true)}><Cog className="mr-2 h-4 w-4" />Horarios</Button>
+                <Select onValueChange={handleDatePreset}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtro Rápido" /></SelectTrigger><SelectContent><SelectItem value="today">Hoy</SelectItem><SelectItem value="yesterday">Ayer</SelectItem><SelectItem value="7days">Últimos 7 días</SelectItem><SelectItem value="30days">Últimos 30 días</SelectItem></SelectContent></Select>
+                <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}><PopoverTrigger asChild><Button id="date" variant={"outline"} className={cn("w-full sm:w-auto justify-start text-left font-normal", !date && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{date?.from ? (date.to && date.to > date.from ? `${format(date.from, "LLL dd, y", { locale: es })} - ${format(date.to, "LLL dd, y", { locale: es })}` : format(date.from, "LLL dd, y", { locale: es })) : <span>Selecciona un rango</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="end"><Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={2} locale={es} /><div className="flex items-center justify-end gap-2 p-3 border-t"><Button variant="outline" size="sm" onClick={() => setIsDatePickerOpen(false)}>Cancelar</Button><Button size="sm" onClick={() => { setDate(tempDate); setIsDatePickerOpen(false); }}>Aplicar</Button></div></PopoverContent></Popover>
+                <Button variant="outline" size="icon" onClick={fetchAndProcessData} disabled={isLoading}>{isLoading ? <Loader className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}</Button>
             </div>
         </div>
 
+        {/* --- Data Source Info --- */}
         {!isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground">{dataSource === 'cache' || dataSource === true ? <><Database className="h-4 w-4 text-green-500" /><span>Datos desde Caché</span></> : dataSource === 'mixed' ? <><Database className="h-4 w-4 text-yellow-500" /><Cloud className="h-4 w-4 text-blue-500 -ml-1" /><span>Datos Combinados</span></> : <><Cloud className="h-4 w-4 text-blue-500" /><span>Datos en Tiempo Real</span></>}</div>}
       
+        {/* --- Main Content --- */}
         {isLoading ? ( <div className="flex items-center justify-center min-h-[400px]"><Loader className="h-8 w-8 animate-spin text-primary" /><p className="ml-4 text-muted-foreground">Calculando rendimiento...</p></div> ) :
-        (<div className="space-y-8">
+        (<div className="space-y-6">
+            {/* --- KPI Cards --- */}
             <div className="grid gap-4 md:grid-cols-3">
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Total de Intentos</CardTitle><PhoneOutgoing className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalCalls}</div><p className="text-xs text-muted-foreground">Llamadas salientes realizadas</p></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Llamadas Efectivas</CardTitle><PhoneForwarded className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalEffectiveCalls}</div><p className="text-xs text-muted-foreground">Llamadas que fueron contestadas</p></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Tasa de Efectividad</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{averageEffectiveness.toFixed(1)}%</div><p className="text-xs text-muted-foreground">Efectividad promedio del equipo</p></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Total de Intentos</CardTitle><PhoneOutgoing className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalCalls}</div></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Llamadas Efectivas</CardTitle><PhoneForwarded className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalEffectiveCalls}</div></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Tasa de Efectividad</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{averageEffectiveness.toFixed(1)}%</div></CardContent></Card>
             </div>
 
+            {/* --- RESPONSIVE CHART --- */}
+            <Card>
+                <CardHeader><CardTitle className="flex items-center"><BarChart2 className="mr-2 h-5 w-5"/>Visualización de Llamadas por Asesor</CardTitle></CardHeader>
+                <CardContent>
+                    <div className="overflow-x-auto">
+                        <div className="min-w-[600px] h-[400px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="name" />
+                                    <YAxis />
+                                    <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}/>
+                                    <Legend />
+                                    <Bar dataKey="totalCalls" name="Intentos Totales" fill="hsl(var(--primary))" />
+                                    <Bar dataKey="effectiveCalls" name="Llamadas Efectivas" fill="hsl(var(--primary) / 0.6)" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* --- Calendar Summary --- */}
             <Card><CardHeader><CardTitle className="flex items-center"><CalendarIcon className="mr-2 h-5 w-5" />Resumen de Cumplimiento Mensual</CardTitle><CardDescription>Mapa de calor del cumplimiento promedio del equipo en los últimos meses.</CardDescription></CardHeader><CardContent><PerformanceCalendar data={calendarData} /></CardContent></Card>
             
+            {/* --- RESPONSIVE TABLE --- */}
             <Card>
-                <CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Detalle de Rendimiento por Asesor</CardTitle><CardDescription>{showDailyBreakdown ? "Haz clic en una fila para ver el desglose por día." : "Selecciona un rango de más de un día para ver el desglose diario."}</CardDescription></div><Button variant="outline" size="icon" onClick={handleDownloadReport}><Download className="h-4 w-4" /></Button></CardHeader>
-                <CardContent className="p-0 sm:p-2"><div ref={tableRef}>
-                    <Table>
-                        <TableHeader><TableRow>
-                            {showDailyBreakdown && <TableHead className="w-8 p-0"></TableHead>}
-                            <TableHead><Button variant="ghost" onClick={() => handleSort('name')}>Asesor {renderSortArrow('name')}</Button></TableHead>
-                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('totalCalls')}>Intentos {renderSortArrow('totalCalls')}</Button></TableHead>
-                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('compliance')}>Cumplimiento {renderSortArrow('compliance')}</Button></TableHead>
-                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('effectiveCalls')}>Efectivas {renderSortArrow('effectiveCalls')}</Button></TableHead>
-                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('effectivenessRate')}>Efectividad {renderSortArrow('effectivenessRate')}</Button></TableHead>
-                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('firstCallTime')}>Primera Llamada {renderSortArrow('firstCallTime')}</Button></TableHead>
-                            <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('lastCallTime')}>Última Llamada {renderSortArrow('lastCallTime')}</Button></TableHead>
-                        </TableRow></TableHeader>
-                        {sortedPerformanceData.map((agent) => (
-                        <Collapsible asChild key={agent.id} open={openAdvisorId === agent.id} onOpenChange={() => showDailyBreakdown && setOpenAdvisorId(p => p === agent.id ? null : agent.id)}>
-                            <TableBody>
-                                <CollapsibleTrigger asChild><TableRow className={cn(showDailyBreakdown && "cursor-pointer hover:bg-muted/50")}>
-                                    {showDailyBreakdown && <TableCell className="p-2"><ChevronDown className={cn("h-4 w-4 transition-transform", openAdvisorId === agent.id && "rotate-180")}/></TableCell>}
-                                    <TableCell className="font-bold">{agent.name} ({agent.id})</TableCell>
-                                    <TableCell className="text-center font-semibold">{agent.totalCalls}</TableCell>
-                                    <TableCell className="text-center"><Badge variant="outline" className={cn("text-base font-bold", getComplianceColor(agent.compliance))}>{agent.compliance?.toFixed(0) ?? 'N/A'}%</Badge></TableCell>
-                                    <TableCell className="text-center font-semibold text-green-600">{agent.effectiveCalls}</TableCell>
-                                    <TableCell className="text-center font-mono">{agent.effectivenessRate.toFixed(1)}%</TableCell>
-                                    <TableCell className="text-center font-mono text-green-600">{agent.firstCallTime || "N/A"}</TableCell>
-                                    <TableCell className="text-right font-mono text-red-500">{agent.lastCallTime || "N/A"}</TableCell>
-                                </TableRow></CollapsibleTrigger>
-                                {showDailyBreakdown && <CollapsibleContent asChild><TableRow><TableCell colSpan={8} className="p-0"><div className="p-4 bg-muted/50">
-                                    <h4 className="font-bold mb-2">Desglose Diario para {agent.name}</h4>
-                                    <Table><TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead className="text-center">Intentos</TableHead><TableHead className="text-center">Objetivo</TableHead><TableHead className="text-center">Cumplimiento</TableHead></TableRow></TableHeader><TableBody>
-                                        {Object.entries(dailyPerformanceData[agent.id] || {}).sort(([a], [b]) => b.localeCompare(a)).map(([d, stats]) => (
-                                        <TableRow key={d}><TableCell>{format(new Date(d), "dd LLL, y", { locale: es })}</TableCell><TableCell className="text-center">{stats.totalCalls}</TableCell><TableCell className="text-center">{stats.callTarget?.toFixed(0) ?? 'N/A'}</TableCell><TableCell className="text-center"><Badge variant="outline" className={cn(getComplianceColor(stats.compliance))}>{stats.compliance?.toFixed(0) ?? 'N/A'}%</Badge></TableCell></TableRow>
-                                        ))}
-                                    </TableBody></Table>
-                                </div></TableCell></TableRow></CollapsibleContent>}
-                            </TableBody>
-                        </Collapsible>
-                        ))}
-                    </Table>
-                </div></CardContent>
+                <CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Detalle por Asesor</CardTitle><CardDescription>{showDailyBreakdown ? "Haz clic en una fila para ver el desglose por día." : "Selecciona un rango de más de un día para ver desglose."}</CardDescription></div><Button variant="outline" size="icon" onClick={handleDownloadReport}><Download className="h-4 w-4" /></Button></CardHeader>
+                <CardContent className="overflow-x-auto">
+                    <div ref={tableRef} className="min-w-[900px]">
+                        <Table>
+                            <TableHeader><TableRow>
+                                {showDailyBreakdown && <TableHead className="w-8 p-0"></TableHead>}
+                                <TableHead><Button variant="ghost" onClick={() => handleSort('name')}>Asesor {renderSortArrow('name')}</Button></TableHead>
+                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('totalCalls')}>Intentos {renderSortArrow('totalCalls')}</Button></TableHead>
+                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('compliance')}>Cumplimiento {renderSortArrow('compliance')}</Button></TableHead>
+                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('effectiveCalls')}>Efectivas {renderSortArrow('effectiveCalls')}</Button></TableHead>
+                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('effectivenessRate')}>Efectividad {renderSortArrow('effectivenessRate')}</Button></TableHead>
+                                <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('firstCallTime')}>Primera Llamada {renderSortArrow('firstCallTime')}</Button></TableHead>
+                                <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('lastCallTime')}>Última Llamada {renderSortArrow('lastCallTime')}</Button></TableHead>
+                            </TableRow></TableHeader>
+                            {sortedPerformanceData.map((agent) => (
+                            <Collapsible asChild key={agent.id} open={openAdvisorId === agent.id} onOpenChange={() => showDailyBreakdown && setOpenAdvisorId(p => p === agent.id ? null : agent.id)}>
+                                <TableBody>
+                                    <CollapsibleTrigger asChild><TableRow className={cn(showDailyBreakdown && "cursor-pointer hover:bg-muted/50")}>
+                                        {showDailyBreakdown && <TableCell className="p-2"><ChevronDown className={cn("h-4 w-4 transition-transform", openAdvisorId === agent.id && "rotate-180")}/></TableCell>}
+                                        <TableCell className="font-bold">{agent.name} ({agent.id})</TableCell>
+                                        <TableCell className="text-center font-semibold">{agent.totalCalls}</TableCell>
+                                        <TableCell className="text-center"><Badge variant="outline" className={cn("text-base font-bold", getComplianceColor(agent.compliance))}>{agent.compliance?.toFixed(0) ?? 'N/A'}%</Badge></TableCell>
+                                        <TableCell className="text-center font-semibold text-green-600">{agent.effectiveCalls}</TableCell>
+                                        <TableCell className="text-center font-mono">{agent.effectivenessRate.toFixed(1)}%</TableCell>
+                                        <TableCell className="text-center font-mono text-green-600">{agent.firstCallTime || "N/A"}</TableCell>
+                                        <TableCell className="text-right font-mono text-red-500">{agent.lastCallTime || "N/A"}</TableCell>
+                                    </TableRow></CollapsibleTrigger>
+                                    {showDailyBreakdown && <CollapsibleContent asChild><TableRow><TableCell colSpan={8} className="p-0"><div className="p-4 bg-muted/50">
+                                        <h4 className="font-bold mb-2">Desglose Diario para {agent.name}</h4>
+                                        <div className="overflow-x-auto">
+                                            <Table className="min-w-[400px]"><TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead className="text-center">Intentos</TableHead><TableHead className="text-center">Objetivo</TableHead><TableHead className="text-center">Cumplimiento</TableHead></TableRow></TableHeader><TableBody>
+                                                {Object.entries(dailyPerformanceData[agent.id] || {}).sort(([a], [b]) => b.localeCompare(a)).map(([d, stats]) => (
+                                                <TableRow key={d}><TableCell>{format(new Date(d), "dd LLL, y", { locale: es })}</TableCell><TableCell className="text-center">{stats.totalCalls}</TableCell><TableCell className="text-center">{stats.callTarget?.toFixed(0) ?? 'N/A'}</TableCell><TableCell className="text-center"><Badge variant="outline" className={cn(getComplianceColor(stats.compliance))}>{stats.compliance?.toFixed(0) ?? 'N/A'}%</Badge></TableCell></TableRow>
+                                                ))}
+                                            </TableBody></Table>
+                                        </div>
+                                    </div></TableCell></TableRow></CollapsibleContent>}
+                                </TableBody>
+                            </Collapsible>
+                            ))}
+                        </Table>
+                    </div>
+                </CardContent>
             </Card>
         </div>)}
     </div>

@@ -12,7 +12,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
 import { format, subDays, startOfDay, differenceInCalendarDays, eachDayOfInterval, getDay, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { formatInTimeZone } from 'date-fns-tz';
+// formatInTimeZone import removed - using Zadarma data directly without timezone conversions
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine } from "recharts";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toPng } from 'html-to-image';
@@ -26,14 +26,14 @@ import { ScheduleManager } from "@/components/dashboard/ScheduleManager";
 import { PerformanceCalendar } from "@/components/dashboard/PerformanceCalendar";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 
-const LIMA_TIME_ZONE = 'America/Lima';
+// LIMA_TIME_ZONE constant removed - using Zadarma data directly
 const CALLS_PER_HOUR_TARGET = 15;
 
 // --- Types ---
 interface DaySchedule { active: boolean; start: string; end: string; }
 interface Schedule { [day: string]: DaySchedule; }
 interface ZadarmaCall { pbx_call_id: string; callstart: string; sip: string; destination: string | number; disposition: string; seconds: number; }
-interface PerformanceMetrics { totalCalls: number; effectiveCalls: number; effectivenessRate: number; totalSeconds: number; averageCallDuration: number; firstCallTime: string | null; lastCallTime: string | null; }
+interface PerformanceMetrics { totalCalls: number; effectiveCalls: number; effectivenessRate: number; totalSeconds: number; averageCallDuration: number; }
 interface AdvisorPerformance extends PerformanceMetrics { id: string; name: string; callTarget?: number; compliance?: number; }
 interface DailyPerformanceData { [agentId: string]: { [date: string]: PerformanceMetrics & { callTarget?: number; compliance?: number; } }; }
 type SortConfig = { key: keyof AdvisorPerformance; direction: 'ascending' | 'descending'; };
@@ -65,6 +65,15 @@ export default function AdvisorPerformancePage() {
 
   const showDailyBreakdown = useMemo(() => (date?.from && date.to) ? differenceInCalendarDays(date.to, date.from) > 0 : false, [date]);
   
+  // Detectar si estamos viendo datos de HOY para auto-refresh
+  const isViewingToday = useMemo(() => {
+    if (!date?.from) return false;
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const fromDate = format(date.from, 'yyyy-MM-dd');
+    const toDate = format(date.to || date.from, 'yyyy-MM-dd');
+    return fromDate === today || toDate === today;
+  }, [date]);
+  
   useEffect(() => { setDate({ from: new Date(), to: new Date() }); }, []);
 
   const fetchAndProcessData = useCallback(async () => {
@@ -94,18 +103,18 @@ export default function AdvisorPerformancePage() {
       const performanceByAgent: { [k: string]: AdvisorPerformance } = {};
       const dailyPerformance: DailyPerformanceData = {};
       Object.keys(agentMap).forEach(id => {
-        performanceByAgent[id] = { id, name: (agentMap as any)[id], totalCalls: 0, effectiveCalls: 0, effectivenessRate: 0, totalSeconds: 0, averageCallDuration: 0, firstCallTime: null, lastCallTime: null };
+        performanceByAgent[id] = { id, name: (agentMap as any)[id], totalCalls: 0, effectiveCalls: 0, effectivenessRate: 0, totalSeconds: 0, averageCallDuration: 0 };
         dailyPerformance[id] = {};
       });
       
       (statsData.stats || []).forEach((call: ZadarmaCall) => {
         if (!performanceByAgent[call.sip] || String(call.destination).length < 5) return;
         
-        const callTimeUTC = parseISO(call.callstart); // La fecha ya está en UTC
-        const dayKey = formatInTimeZone(callTimeUTC, LIMA_TIME_ZONE, 'yyyy-MM-dd');
+        const callTimeUTC = parseISO(call.callstart);
+        const dayKey = format(callTimeUTC, 'yyyy-MM-dd'); // Using local date without timezone conversion
 
         if (!dailyPerformance[call.sip][dayKey]) {
-          dailyPerformance[call.sip][dayKey] = { totalCalls: 0, effectiveCalls: 0, effectivenessRate: 0, totalSeconds: 0, averageCallDuration: 0, firstCallTime: null, lastCallTime: null };
+          dailyPerformance[call.sip][dayKey] = { totalCalls: 0, effectiveCalls: 0, effectivenessRate: 0, totalSeconds: 0, averageCallDuration: 0 };
         }
         
         const agentTotal = performanceByAgent[call.sip];
@@ -114,18 +123,12 @@ export default function AdvisorPerformancePage() {
         [agentTotal, agentDaily].forEach(p => {
           p.totalCalls++; p.totalSeconds += call.seconds;
           if (call.disposition === 'answered') p.effectiveCalls++;
-          // Almacenamos la fecha ISO (UTC) para comparaciones
-          if (!p.firstCallTime || call.callstart < p.firstCallTime) p.firstCallTime = call.callstart;
-          if (!p.lastCallTime || call.callstart > p.lastCallTime) p.lastCallTime = call.callstart;
         });
       });
       
       const formatMetrics = (p: PerformanceMetrics) => {
         p.effectivenessRate = p.totalCalls > 0 ? (p.effectiveCalls / p.totalCalls) * 100 : 0;
         p.averageCallDuration = p.effectiveCalls > 0 ? p.totalSeconds / p.effectiveCalls : 0;
-        // --- TRADUCTOR DE SALIDA: Convertimos de UTC a Lima para MOSTRAR ---
-        if (p.firstCallTime) p.firstCallTime = formatInTimeZone(parseISO(p.firstCallTime), LIMA_TIME_ZONE, 'HH:mm:ss');
-        if (p.lastCallTime) p.lastCallTime = formatInTimeZone(parseISO(p.lastCallTime), LIMA_TIME_ZONE, 'HH:mm:ss');
         return p;
       };
 
@@ -162,6 +165,18 @@ export default function AdvisorPerformancePage() {
   }, [date, toast]);
 
   useEffect(() => { fetchAndProcessData(); }, [date, fetchAndProcessData]);
+  
+  // Auto-refresh para datos de HOY cada 2 minutos
+  useEffect(() => {
+    if (!isViewingToday || isLoading) return;
+    
+    const interval = setInterval(() => {
+      console.log('[AUTO-REFRESH] Actualizando datos de HOY...');
+      fetchAndProcessData();
+    }, 2 * 60 * 1000); // 2 minutos
+    
+    return () => clearInterval(interval);
+  }, [isViewingToday, isLoading, fetchAndProcessData]);
   
   // ... (El resto del JSX y funciones auxiliares no necesitan cambios)
   const sortedPerformanceData = useMemo(() => {
@@ -254,7 +269,37 @@ export default function AdvisorPerformancePage() {
             </div>
         </div>
 
-        {!isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground">{dataSource === 'cache' ? <><Database className="h-4 w-4 text-green-500" /><span>Datos desde Caché</span></> : dataSource === 'mixed' ? <><Database className="h-4 w-4 text-yellow-500" /><Cloud className="h-4 w-4 text-blue-500 -ml-1" /><span>Datos Combinados</span></> : <><Cloud className="h-4 w-4 text-blue-500" /><span>Datos en Tiempo Real</span></>}</div>}
+        {!isLoading && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              {dataSource === true || dataSource === 'cache' ? (
+                <>
+                  <Database className="h-4 w-4 text-green-500" />
+                  <span className="text-green-700">Datos Históricos desde Caché</span>
+                  <span className="text-xs text-muted-foreground">(Optimizado para velocidad)</span>
+                </>
+              ) : dataSource === 'mixed' ? (
+                <>
+                  <Database className="h-4 w-4 text-yellow-500" />
+                  <Cloud className="h-4 w-4 text-blue-500 -ml-1" />
+                  <span className="text-yellow-700">Datos Combinados</span>
+                </>
+              ) : (
+                <>
+                  <Cloud className="h-4 w-4 text-blue-500" />
+                  <span className="text-blue-700">Datos en Tiempo Real</span>
+                  {isViewingToday && <span className="text-xs text-muted-foreground">(Auto-refresh cada 2min)</span>}
+                </>
+              )}
+            </div>
+            {!dataSource && isViewingToday && (
+              <div className="flex items-center gap-1 text-xs text-blue-600">
+                <Timer className="h-3 w-3" />
+                <span>Actualizando automáticamente...</span>
+              </div>
+            )}
+          </div>
+        )}
       
         {isLoading ? ( <div className="flex items-center justify-center min-h-[400px]"><Loader className="h-8 w-8 animate-spin text-primary" /><p className="ml-4 text-muted-foreground">Calculando rendimiento...</p></div> ) :
         (<div className="space-y-6">
@@ -277,8 +322,7 @@ export default function AdvisorPerformancePage() {
                             <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('compliance')}>Cumplimiento {renderSortArrow('compliance')}</Button></TableHead>
                             <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('effectiveCalls')}>Efectivas {renderSortArrow('effectiveCalls')}</Button></TableHead>
                             <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('effectivenessRate')}>Efectividad {renderSortArrow('effectivenessRate')}</Button></TableHead>
-                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('firstCallTime')}>Primera Llamada {renderSortArrow('firstCallTime')}</Button></TableHead>
-                            <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('lastCallTime')}>Última Llamada {renderSortArrow('lastCallTime')}</Button></TableHead>
+                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('averageCallDuration')}>Tiempo Prom. {renderSortArrow('averageCallDuration')}</Button></TableHead>
                         </TableRow></TableHeader>
                         {sortedPerformanceData.map((agent) => (
                         <Collapsible asChild key={agent.id} open={openAdvisorId === agent.id} onOpenChange={() => showDailyBreakdown && setOpenAdvisorId(p => p === agent.id ? null : agent.id)}>
@@ -290,15 +334,14 @@ export default function AdvisorPerformancePage() {
                                     <TableCell className="text-center"><Badge variant="outline" className={cn("text-base font-bold", getComplianceColor(agent.compliance))}>{agent.compliance?.toFixed(0) ?? 'N/A'}%</Badge></TableCell>
                                     <TableCell className="text-center font-semibold text-green-600">{agent.effectiveCalls}</TableCell>
                                     <TableCell className="text-center font-mono">{agent.effectivenessRate.toFixed(1)}%</TableCell>
-                                    <TableCell className="text-center font-mono text-green-600">{agent.firstCallTime || "N/A"}</TableCell>
-                                    <TableCell className="text-right font-mono text-red-500">{agent.lastCallTime || "N/A"}</TableCell>
+                                    <TableCell className="text-center font-mono">{agent.averageCallDuration > 0 ? `${Math.round(agent.averageCallDuration)}s` : 'N/A'}</TableCell>
                                 </TableRow></CollapsibleTrigger>
-                                {showDailyBreakdown && <CollapsibleContent asChild><TableRow><TableCell colSpan={8} className="p-0"><div className="p-4 bg-muted/50">
+                                {showDailyBreakdown && <CollapsibleContent asChild><TableRow><TableCell colSpan={7} className="p-0"><div className="p-4 bg-muted/50">
                                     <h4 className="font-bold mb-2">Desglose Diario para {agent.name}</h4>
                                     <div className="overflow-x-auto">
-                                        <Table className="min-w-[400px]"><TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead className="text-center">Intentos</TableHead><TableHead className="text-center">Objetivo</TableHead><TableHead className="text-center">Cumplimiento</TableHead></TableRow></TableHeader><TableBody>
+                                        <Table className="min-w-[600px]"><TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead className="text-center">Intentos</TableHead><TableHead className="text-center">Efectivas</TableHead><TableHead className="text-center">Efectividad</TableHead><TableHead className="text-center">Tiempo Prom.</TableHead></TableRow></TableHeader><TableBody>
                                             {Object.entries(dailyPerformanceData[agent.id] || {}).sort(([a], [b]) => b.localeCompare(a)).map(([d, stats]) => (
-                                            <TableRow key={d}><TableCell>{format(new Date(d), "dd LLL, y", { locale: es })}</TableCell><TableCell className="text-center">{stats.totalCalls}</TableCell><TableCell className="text-center">{stats.callTarget?.toFixed(0) ?? 'N/A'}</TableCell><TableCell className="text-center"><Badge variant="outline" className={cn(getComplianceColor(stats.compliance))}>{stats.compliance?.toFixed(0) ?? 'N/A'}%</Badge></TableCell></TableRow>
+                                            <TableRow key={d}><TableCell>{format(new Date(d), "dd LLL, y", { locale: es })}</TableCell><TableCell className="text-center">{stats.totalCalls}</TableCell><TableCell className="text-center font-semibold text-green-600">{stats.effectiveCalls}</TableCell><TableCell className="text-center">{stats.effectivenessRate.toFixed(1)}%</TableCell><TableCell className="text-center">{stats.averageCallDuration > 0 ? `${Math.round(stats.averageCallDuration)}s` : 'N/A'}</TableCell></TableRow>
                                             ))}
                                         </TableBody></Table>
                                     </div>

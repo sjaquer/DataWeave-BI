@@ -44,8 +44,6 @@ export interface AdvisorPerformance {
   effectivenessRate: number;
   totalSeconds: number;
   averageCallDuration: number;
-  firstCallTime: string | null;
-  lastCallTime: string | null;
 }
 
 export interface ZadarmaStatsQuery {

@@ -32,6 +32,7 @@ import {
   saveSyncMetadata,
   validateZadarmaCredentials,
   hasDataForDateRange,
+  convertZadarmaCallToUTC,
 } from '@/lib/zadarma-helpers';
 
 export async function GET(req: NextRequest) {
@@ -149,7 +150,7 @@ export async function GET(req: NextRequest) {
       const errorMessage = data.message || `El servidor de Zadarma respondió con un error: ${response.statusText}`;
       console.error("[CRON ERROR]:", data);
       
-      await saveSyncMetadata(startDate, endDate, 0, 'error', errorMessage);
+      await saveSyncMetadata(targetDate, 0, 'error', errorMessage);
       
       return NextResponse.json({
         status: 'error',
@@ -158,15 +159,20 @@ export async function GET(req: NextRequest) {
       }, { status: response.status });
     }
 
-    const calls = data.stats || [];
-    console.log(`[CRON] 📥 Recibidas ${calls.length} llamadas de la API`);
+    const rawCalls = data.stats || [];
+    console.log(`[CRON] 📥 Recibidas ${rawCalls.length} llamadas de la API`);
 
-    // Guardar en Firestore
-    const savedCount = await saveZadarmaCalls(calls);
-    console.log(`[CRON] ✅ Guardadas ${savedCount} llamadas en Firestore`);
+    // 🔧 CORRECCIÓN: Convertir zona horaria Madrid → UTC
+    console.log(`[CRON] 🌍 Convirtiendo zona horaria Madrid → UTC...`);
+    const callsInUTC = rawCalls.map((call: any) => convertZadarmaCallToUTC(call));
+    console.log(`[CRON] ✅ Conversión completada: ${callsInUTC.length} llamadas`);
+
+    // Guardar TODOS los datos sin consolidar
+    const savedCount = await saveZadarmaCalls(callsInUTC);
+    console.log(`[CRON] ✅ Guardadas ${savedCount} llamadas en Firestore (sin consolidar)`);
 
     // Guardar metadata de sincronización
-    await saveSyncMetadata(startDate, endDate, savedCount, 'success');
+    await saveSyncMetadata(targetDate, savedCount, 'success');
 
     return NextResponse.json({
       status: 'success',

@@ -9,7 +9,8 @@ import {
   getMissingDaysFromFirestore,
   setSyncLock,
   isSyncLocked,
-  removeSyncLock
+  removeSyncLock,
+  convertZadarmaCallToUTC,
 } from '@/lib/zadarma-helpers';
 
 const API_RETRY_DELAY_MS = 10000;
@@ -98,10 +99,14 @@ export async function POST(req: NextRequest) {
         }
         await setSyncLock(day);
         
-        const calls = await fetchZadarmaForDay(day, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
+        const rawCalls = await fetchZadarmaForDay(day, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
         
-        if (calls.length > 0) {
-          const savedCount = await saveZadarmaCalls(calls);
+        if (rawCalls.length > 0) {
+          // 🔧 CORRECCIÓN: Convertir zona horaria Madrid → UTC
+          const callsInUTC = rawCalls.map((call: any) => convertZadarmaCallToUTC(call));
+          
+          // Guardar TODOS los datos sin consolidar
+          const savedCount = await saveZadarmaCalls(callsInUTC);
           totalSyncedCalls += savedCount;
           await saveSyncMetadata(day, savedCount, 'success');
         } else {

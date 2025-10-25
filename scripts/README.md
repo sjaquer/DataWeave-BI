@@ -1,8 +1,80 @@
-# Scripts de Seed - DataWeave BI
+# Scripts - DataWeave BI
 
-Este directorio contiene scripts para poblar la base de datos con usuarios demo.
+Este directorio contiene scripts para mantenimiento, seed de datos y operaciones del sistema.
 
-## 📦 Usuarios Demo
+---
+
+## 🗑️ LIMPIEZA COMPLETA DE BASE DE DATOS ZADARMA
+
+### ⚠️ NUEVA OPCIÓN: Limpieza Completa de Zadarma
+
+Para empezar completamente desde cero, elimina TODOS los datos de Zadarma:
+
+**Opción 1: Script PowerShell (Recomendado)**
+```powershell
+# Simulación (ver qué se eliminaría)
+.\scripts\cleanup-zadarma.ps1 -DryRun
+
+# Limpieza real (elimina todo)
+.\scripts\cleanup-zadarma.ps1 -Confirm
+```
+
+**Opción 2: Script TypeScript directo**
+```powershell
+# Simulación
+npx ts-node scripts/cleanup-zadarma-database.ts --dry-run
+
+# Limpieza real
+npx ts-node scripts/cleanup-zadarma-database.ts --confirm
+```
+
+### 🧹 LIMPIEZA DE DUPLICADOS (Método anterior)
+
+**Paso 1: Configurar Firebase**
+```powershell
+.\scripts\setup-firebase.ps1
+```
+
+Este script interactivo te guiará para:
+- Buscar automáticamente el archivo service-account.json
+- Configurar la variable de entorno necesaria
+- Verificar que todo esté listo
+
+**Paso 2: Ejecutar limpieza en modo prueba**
+```powershell
+.\scripts\run-cleanup.ps1 -DryRun
+```
+
+**Paso 3: Ejecutar limpieza real**
+```powershell
+.\scripts\run-cleanup.ps1
+```
+
+### Uso Avanzado
+
+**Limpiar solo una fecha específica:**
+```powershell
+.\scripts\run-cleanup.ps1 -DryRun -Date "2025-10-25"
+.\scripts\run-cleanup.ps1 -Date "2025-10-25"
+```
+
+**Uso manual directo:**
+```powershell
+# Dry-run (ver qué se eliminaría)
+npx tsx scripts/clean-zadarma-duplicates.ts --dry-run
+
+# Limpieza real
+npx tsx scripts/clean-zadarma-duplicates.ts
+
+# Fecha específica
+npx tsx scripts/clean-zadarma-duplicates.ts --dry-run --date 2025-10-25
+```
+
+📖 **Documentación completa**: Ver `scripts/setup-firebase.md`
+
+---
+
+## 📦 SEED DE USUARIOS DEMO
 
 El sistema incluye 4 roles diferentes:
 

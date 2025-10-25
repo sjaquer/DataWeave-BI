@@ -1,7 +1,7 @@
 
 import { NextResponse, NextRequest } from 'next/server';
 import { format, startOfDay, addDays, getHours, parseISO } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { toZonedTime } from 'date-fns-tz'; // Importar la función clave
 import * as dotenv from 'dotenv';
 import CryptoJS from 'crypto-js';
 import {

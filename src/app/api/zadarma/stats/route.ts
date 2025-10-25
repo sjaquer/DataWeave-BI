@@ -1,29 +1,30 @@
 
 import { NextResponse, NextRequest } from 'next/server';
-import { format, startOfDay, addDays, getHours, parseISO } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz'; // Importar la función clave
+import { format, startOfDay, endOfDay, parseISO } from 'date-fns';
+// CORRECCIÓN: Se importan los nombres de función correctos para la versión actual de date-fns-tz
+import { toZonedTime, fromZonedTime, formatInTimeZone } from 'date-fns-tz';
 import * as dotenv from 'dotenv';
 import CryptoJS from 'crypto-js';
 import {
-  getZadarmaCallsFromFirestore,
   consolidateCalls,
   validateZadarmaCredentials,
-  updateZadarmaCallsInFirestore,
+  saveZadarmaCalls,
 } from '@/lib/zadarma-helpers';
-
-const LIMA_TIME_ZONE = 'America/Lima';
-const RESYNC_THRESHOLD_HOUR = 23; // 11 PM Lima time, a safe threshold for end-of-day.
 
 dotenv.config();
 
+const LIMA_TIME_ZONE = 'America/Lima';
+const MADRID_TIME_ZONE = 'Europe/Madrid';
+
 async function fetchZadarmaAPI(
-  utcStart: Date,
-  utcEnd: Date,
+  start: Date, // Se espera una fecha que representa la hora de Madrid
+  end: Date,   // Se espera una fecha que representa la hora de Madrid
   apiKey: string,
   apiSecret: string
 ): Promise<any[]> {
-  const formattedStartDate = format(utcStart, 'yyyy-MM-dd HH:mm:ss');
-  const formattedEndDate = format(utcEnd, 'yyyy-MM-dd HH:mm:ss');
+  // La función format usará la representación local de la fecha, que ya está ajustada a Madrid
+  const formattedStartDate = format(start, 'yyyy-MM-dd HH:mm:ss');
+  const formattedEndDate = format(end, 'yyyy-MM-dd HH:mm:ss');
   
   const method = '/v1/statistics/pbx/';
   const params = { start: formattedStartDate, end: formattedEndDate, format: 'json', version: '2' };
@@ -44,14 +45,16 @@ async function fetchZadarmaAPI(
   
   const response = await fetch(apiUrl, { method: 'GET', headers: { 'Authorization': authHeader } });
 
-  if (!response.ok) {
-      throw new Error(`Error de red de Zadarma: ${response.status} ${response.statusText}`);
-  }
+  if (!response.ok) throw new Error(`Error de red de Zadarma: ${response.status} ${response.statusText}`);
   const data = await response.json();
-  if (data.status === 'error') {
-    throw new Error(`Error de API de Zadarma: ${data.message}`);
-  }
-  return data.stats || [];
+  if (data.status === 'error') throw new Error(`Error de API de Zadarma: ${data.message}`);
+  
+  // --- CONVERSIÓN DE MADRID A UTC ---
+  return (data.stats || []).map((call: any) => ({
+    ...call,
+    // CORRECCIÓN: Se usa fromZonedTime para interpretar la fecha de Zadarma como hora de Madrid y convertirla a un objeto Date (UTC)
+    callstart: fromZonedTime(call.callstart, MADRID_TIME_ZONE).toISOString(),
+  }));
 }
 
 export async function GET(req: NextRequest) {
@@ -71,64 +74,30 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ status: 'error', message: 'Los parámetros startDate y endDate son requeridos.' }, { status: 400 });
     }
 
-    // --- CORE TIMEZONE FIX ---
-    // The dates from the query ("2025-10-23") represent days in Lima.
-    const startLimaDate = parseISO(startDateQuery);
-    const endLimaDate = parseISO(endDateQuery);
+    // 1. Entender la petición del usuario como un día en Lima.
+    const startLima = startOfDay(parseISO(startDateQuery));
+    const endLima = endOfDay(parseISO(endDateQuery));
+
+    // 2. Traducir el rango de Lima a los equivalentes en hora de Madrid para la API.
+    // CORRECCIÓN: Se usa toZonedTime para obtener el objeto Date cuya representación local sea la hora de Madrid
+    const startMadrid = toZonedTime(startLima, MADRID_TIME_ZONE);
+    const endMadrid = toZonedTime(endLima, MADRID_TIME_ZONE);
     
-    const todayInLima = startOfDay(toZonedTime(new Date(), LIMA_TIME_ZONE));
+    // 3. Pedir los datos correctos a Zadarma.
+    const callsInUTC = await fetchZadarmaAPI(startMadrid, endMadrid, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
+
+    // 4. Procesar y guardar los datos (que ya están en UTC).
+    const finalStats = consolidateCalls(callsInUTC);
     
-    let allCalls: any[] = [];
-    let fromCache: boolean | 'mixed' = false;
-    let message = '';
-
-    let currentDate = startLimaDate;
-    while (currentDate <= endLimaDate) {
-      const dayToFetch = currentDate; // This is a date object representing the Lima day, e.g., 2025-10-23T00:00:00.000Z
-
-      if (dayToFetch < todayInLima) {
-        // --- PAST DAY: Use Cache + Auto-Healing ---
-        if (!fromCache) fromCache = true;
-        
-        let callsForDay = await getZadarmaCallsFromFirestore(dayToFetch, dayToFetch);
-        
-        const lastCall = callsForDay.length > 0 ? callsForDay.reduce((max, call) => new Date(call.callstart) > new Date(max.callstart) ? call : max) : null;
-        const lastCallHourInLima = lastCall ? getHours(toZonedTime(new Date(lastCall.callstart), LIMA_TIME_ZONE)) : -1;
-
-        if (lastCallHourInLima < RESYNC_THRESHOLD_HOUR) {
-          message += `Caché para ${format(dayToFetch, 'dd/MM')} incompleto. Resincronizando... `;
-          
-          const startOfLimaDay = toZonedTime(`${format(dayToFetch, 'yyyy-MM-dd')}T00:00:00`, LIMA_TIME_ZONE);
-          const endOfLimaDay = toZonedTime(`${format(dayToFetch, 'yyyy-MM-dd')}T23:59:59`, LIMA_TIME_ZONE);
-          
-          const freshCalls = await fetchZadarmaAPI(startOfLimaDay, endOfLimaDay, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
-          await updateZadarmaCallsInFirestore(freshCalls, dayToFetch);
-          callsForDay = freshCalls;
-        }
-        allCalls.push(...callsForDay);
-
-      } else {
-        // --- TODAY: Fetch directly from API ---
-        if (fromCache) fromCache = 'mixed'; else fromCache = false;
-        
-        const startOfTodayLima = toZonedTime(`${format(dayToFetch, 'yyyy-MM-dd')}T00:00:00`, LIMA_TIME_ZONE);
-        const nowInLima = toZonedTime(new Date(), LIMA_TIME_ZONE);
-        
-        const todayCalls = await fetchZadarmaAPI(startOfTodayLima, nowInLima, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
-        allCalls.push(...todayCalls);
-        message = 'Datos de hoy obtenidos de la API en tiempo real. ';
-      }
-      
-      currentDate = addDays(currentDate, 1);
+    if (finalStats.length > 0) {
+      saveZadarmaCalls(finalStats).catch(err => console.error('[AUTO-SYNC BKG] Error:', err));
     }
-    
-    const finalStats = consolidateCalls(allCalls);
 
     return NextResponse.json({
       status: 'success',
       stats: finalStats,
-      fromCache,
-      message,
+      fromCache: false, // En esta arquitectura siempre se obtienen datos frescos.
+      message: 'Datos obtenidos y estandarizados a UTC.',
     });
 
   } catch (error: any) {

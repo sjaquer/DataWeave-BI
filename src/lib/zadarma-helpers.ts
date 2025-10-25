@@ -122,32 +122,9 @@ export async function isSyncLocked(date: Date, ttlMinutes: number): Promise<bool
 }
 
 export function consolidateCalls(calls: ZadarmaCall[]): ZadarmaCall[] {
-  const callsMap = new Map<string, ZadarmaCall[]>();
-  calls.forEach(call => {
-    if (!call.pbx_call_id) return;
-    const group = callsMap.get(call.pbx_call_id) || [];
-    group.push(call);
-    callsMap.set(call.pbx_call_id, group);
-  });
-
-  const finalCalls: ZadarmaCall[] = [];
-  for (const callGroup of callsMap.values()) {
-    if (callGroup.length === 1) {
-      finalCalls.push(callGroup[0]);
-      continue;
-    }
-
-    const bestCall = callGroup.reduce((best, current) => {
-      if (current.disposition === 'answered' && best.disposition !== 'answered') return current;
-      if (best.disposition === 'answered' && current.disposition !== 'answered') return best;
-      if (current.seconds > best.seconds) return current;
-      return best;
-    });
-    
-    finalCalls.push(bestCall);
-  }
-
-  return finalCalls;
+  // Se elimina la lógica de consolidación.
+  // Ahora, esta función devuelve todas las llamadas sin filtrar.
+  return calls;
 }
 
 export function validateZadarmaCredentials(): { valid: boolean; message?: string } {

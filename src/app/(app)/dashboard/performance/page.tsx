@@ -25,6 +25,8 @@ import agentMap from '@/lib/agents.json';
 import { ScheduleManager } from "@/components/dashboard/ScheduleManager";
 import { PerformanceCalendar } from "@/components/dashboard/PerformanceCalendar";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+
 
 const LIMA_TIME_ZONE = 'America/Lima';
 const CALLS_PER_HOUR_TARGET = 15;
@@ -33,9 +35,10 @@ const CALLS_PER_HOUR_TARGET = 15;
 interface DaySchedule { active: boolean; start: string; end: string; }
 interface Schedule { [day: string]: DaySchedule; }
 interface ZadarmaCall { pbx_call_id: string; callstart: string; sip: string; destination: string | number; disposition: string; seconds: number; }
-interface PerformanceMetrics { totalCalls: number; effectiveCalls: number; effectivenessRate: number; totalSeconds: number; averageCallDuration: number; firstCallTime: string | null; lastCallTime: string | null; }
-interface AdvisorPerformance extends PerformanceMetrics { id: string; name: string; callTarget?: number; compliance?: number; }
-interface DailyPerformanceData { [agentId: string]: { [date: string]: PerformanceMetrics & { callTarget?: number; compliance?: number; } }; }
+interface PerformanceMetrics { totalCalls: number; effectiveCalls: number; effectivenessRate: number; totalSeconds: number; averageCallDuration: number; }
+interface ActivityMetrics { firstCallTime: string | null; lastCallTime: string | null; }
+interface AdvisorPerformance extends PerformanceMetrics, ActivityMetrics { id: string; name: string; callTarget?: number; compliance?: number; }
+interface DailyPerformanceData { [agentId: string]: { [date: string]: PerformanceMetrics & ActivityMetrics & { callTarget?: number; compliance?: number; } }; }
 type SortConfig = { key: keyof AdvisorPerformance; direction: 'ascending' | 'descending'; };
 
 const dayMapping = [ "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday" ];
@@ -56,23 +59,24 @@ export default function AdvisorPerformancePage() {
   const [openAdvisorId, setOpenAdvisorId] = useState<string | null>(null);
   const [isScheduleManagerOpen, setIsScheduleManagerOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'totalCalls', direction: 'descending' });
-  const [date, setDate] = useState<DateRange | undefined>(undefined);
-  const [tempDate, setTempDate] = useState<DateRange | undefined>(undefined);
+  const [date, setDate] = useState<DateRange | undefined>({ from: new Date(), to: new Date() });
+  const [tempDate, setTempDate] = useState<DateRange | undefined>(date);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const [dataSource, setDataSource] = useState<'cache' | 'api' | 'mixed' | boolean>('api');
+  const [dataSource, setDataSource] = useState<boolean | 'mixed'> (false);
   const { toast } = useToast();
   const tableRef = useRef<HTMLDivElement>(null);
 
   const showDailyBreakdown = useMemo(() => (date?.from && date.to) ? differenceInCalendarDays(date.to, date.from) > 0 : false, [date]);
-  
-  useEffect(() => { setDate({ from: new Date(), to: new Date() }); }, []);
 
   const fetchAndProcessData = useCallback(async () => {
     if (!date?.from) return;
     setIsLoading(true);
     setOpenAdvisorId(null);
     try {
-      const params = new URLSearchParams({ startDate: startOfDay(date.from).toISOString(), endDate: startOfDay(date.to || date.from).toISOString() });
+      const params = new URLSearchParams({
+        startDate: format(date.from, 'yyyy-MM-dd'),
+        endDate: format(date.to || date.from, 'yyyy-MM-dd'),
+      });
       const [statsRes, ...schedulesRes] = await Promise.all([
         fetch(`/api/zadarma/stats?${params.toString()}`),
         ...Object.keys(agentMap).map(id => fetch(`/api/schedules/${id}`))
@@ -82,13 +86,10 @@ export default function AdvisorPerformancePage() {
       const statsData = await statsRes.json();
       setDataSource(statsData.fromCache);
 
-      // CORRECCIÓN: 'schedules' se define aquí, antes de ser usada.
       const schedules: { [id: string]: Schedule } = {};
       for (let i = 0; i < schedulesRes.length; i++) {
         const agentId = Object.keys(agentMap)[i];
-        if (schedulesRes[i].ok) {
-          schedules[agentId] = await schedulesRes[i].json();
-        }
+        if (schedulesRes[i].ok) schedules[agentId] = await schedulesRes[i].json(); else schedules[agentId] = {};
       }
 
       const performanceByAgent: { [k: string]: AdvisorPerformance } = {};
@@ -99,11 +100,10 @@ export default function AdvisorPerformancePage() {
       });
       
       (statsData.stats || []).forEach((call: ZadarmaCall) => {
-        if (!performanceByAgent[call.sip] || String(call.destination).length < 5) return;
-        
-        const callTimeUTC = parseISO(call.callstart); // La fecha ya está en UTC
+        if (!performanceByAgent[call.sip]) return;
+        const callTimeUTC = parseISO(call.callstart);
         const dayKey = formatInTimeZone(callTimeUTC, LIMA_TIME_ZONE, 'yyyy-MM-dd');
-
+        
         if (!dailyPerformance[call.sip][dayKey]) {
           dailyPerformance[call.sip][dayKey] = { totalCalls: 0, effectiveCalls: 0, effectivenessRate: 0, totalSeconds: 0, averageCallDuration: 0, firstCallTime: null, lastCallTime: null };
         }
@@ -111,19 +111,25 @@ export default function AdvisorPerformancePage() {
         const agentTotal = performanceByAgent[call.sip];
         const agentDaily = dailyPerformance[call.sip][dayKey];
 
-        [agentTotal, agentDaily].forEach(p => {
-          p.totalCalls++; p.totalSeconds += call.seconds;
-          if (call.disposition === 'answered') p.effectiveCalls++;
-          // Almacenamos la fecha ISO (UTC) para comparaciones
-          if (!p.firstCallTime || call.callstart < p.firstCallTime) p.firstCallTime = call.callstart;
-          if (!p.lastCallTime || call.callstart > p.lastCallTime) p.lastCallTime = call.callstart;
-        });
+        // 1. Cálculo de Actividad (para horas): usa TODAS las llamadas.
+        if (!agentTotal.firstCallTime || call.callstart < agentTotal.firstCallTime) agentTotal.firstCallTime = call.callstart;
+        if (!agentTotal.lastCallTime || call.callstart > agentTotal.lastCallTime) agentTotal.lastCallTime = call.callstart;
+        if (!agentDaily.firstCallTime || call.callstart < agentDaily.firstCallTime) agentDaily.firstCallTime = call.callstart;
+        if (!agentDaily.lastCallTime || call.callstart > agentDaily.lastCallTime) agentDaily.lastCallTime = call.callstart;
+        
+        // 2. Cálculo de Rendimiento: solo usa llamadas salientes.
+        if (String(call.destination).length >= 5) {
+            agentTotal.totalCalls++; agentDaily.totalCalls++;
+            agentTotal.totalSeconds += call.seconds; agentDaily.totalSeconds += call.seconds;
+            if (call.disposition === 'answered') {
+                agentTotal.effectiveCalls++; agentDaily.effectiveCalls++;
+            }
+        }
       });
       
-      const formatMetrics = (p: PerformanceMetrics) => {
+      const formatMetrics = (p: PerformanceMetrics & ActivityMetrics) => {
         p.effectivenessRate = p.totalCalls > 0 ? (p.effectiveCalls / p.totalCalls) * 100 : 0;
         p.averageCallDuration = p.effectiveCalls > 0 ? p.totalSeconds / p.effectiveCalls : 0;
-        // --- TRADUCTOR DE SALIDA: Convertimos de UTC a Lima para MOSTRAR ---
         if (p.firstCallTime) p.firstCallTime = formatInTimeZone(parseISO(p.firstCallTime), LIMA_TIME_ZONE, 'HH:mm:ss');
         if (p.lastCallTime) p.lastCallTime = formatInTimeZone(parseISO(p.lastCallTime), LIMA_TIME_ZONE, 'HH:mm:ss');
         return p;
@@ -131,7 +137,6 @@ export default function AdvisorPerformancePage() {
 
       const daysInInterval = eachDayOfInterval({ start: date.from, end: date.to || date.from });
       Object.keys(performanceByAgent).forEach(agentId => {
-        // CORRECCIÓN: Se usa la variable 'schedules' que ya fue definida.
         const agentSchedule = schedules[agentId];
         let totalHours = 0;
         if (agentSchedule) {
@@ -140,16 +145,18 @@ export default function AdvisorPerformancePage() {
             totalHours += hours;
             const dayKey = format(day, 'yyyy-MM-dd');
             if (dailyPerformance[agentId][dayKey]) {
-              dailyPerformance[agentId][dayKey].callTarget = hours * CALLS_PER_HOUR_TARGET;
-              dailyPerformance[agentId][dayKey].compliance = dailyPerformance[agentId][dayKey].callTarget! > 0 ? (dailyPerformance[agentId][dayKey].totalCalls / dailyPerformance[agentId][dayKey].callTarget!) * 100 : 100;
+              const dailyStats = dailyPerformance[agentId][dayKey];
+              dailyStats.callTarget = hours * CALLS_PER_HOUR_TARGET;
+              dailyStats.compliance = dailyStats.callTarget! > 0 ? (dailyStats.totalCalls / dailyStats.callTarget!) * 100 : 100;
             }
           });
         }
-        performanceByAgent[agentId].callTarget = totalHours * CALLS_PER_HOUR_TARGET;
-        performanceByAgent[agentId].compliance = performanceByAgent[agentId].callTarget! > 0 ? (performanceByAgent[agentId].totalCalls / performanceByAgent[agentId].callTarget!) * 100 : 100;
+        const agentPerformance = performanceByAgent[agentId];
+        agentPerformance.callTarget = totalHours * CALLS_PER_HOUR_TARGET;
+        agentPerformance.compliance = agentPerformance.callTarget! > 0 ? (agentPerformance.totalCalls / agentPerformance.callTarget!) * 100 : 100;
       });
 
-      setPerformanceData(Object.values(performanceByAgent).map(p => formatMetrics(p as AdvisorPerformance) as AdvisorPerformance));
+      setPerformanceData(Object.values(performanceByAgent).map(p => formatMetrics(p) as AdvisorPerformance));
       Object.values(dailyPerformance).forEach(agentDays => Object.values(agentDays).forEach(formatMetrics));
       setDailyPerformanceData(dailyPerformance);
       
@@ -160,115 +167,129 @@ export default function AdvisorPerformancePage() {
       setIsLoading(false);
     }
   }, [date, toast]);
-
-  useEffect(() => { fetchAndProcessData(); }, [date, fetchAndProcessData]);
   
-  // ... (El resto del JSX y funciones auxiliares no necesitan cambios)
-  const sortedPerformanceData = useMemo(() => {
-    return [...performanceData].sort((a, b) => {
+  useEffect(() => { fetchAndProcessData(); }, [fetchAndProcessData]);
+
+  const sortedPerformanceData = useMemo(() => [...performanceData].sort((a, b) => {
       if (!sortConfig) return 0;
       const aVal = a[sortConfig.key]; const bVal = b[sortConfig.key];
       if (aVal === null) return 1; if (bVal === null) return -1;
       const order = typeof aVal === 'string' ? aVal.localeCompare(bVal as string) : (aVal as number) - (bVal as number);
       return sortConfig.direction === 'ascending' ? order : -order;
-    });
-  }, [performanceData, sortConfig]);
+  }), [performanceData, sortConfig]);
 
-  const handleSort = (key: SortConfig['key']) => {
-    const direction = (sortConfig?.key === key && sortConfig.direction === 'ascending') ? 'descending' : 'ascending';
-    setSortConfig({ key, direction });
-  };
-
+  const handleSort = (key: SortConfig['key']) => setSortConfig(sc => ({ key, direction: (sc?.key === key && sc.direction === 'ascending') ? 'descending' : 'ascending' }));
   const renderSortArrow = (key: SortConfig['key']) => {
     if (sortConfig?.key !== key) return null;
     return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
   };
-
-  const getComplianceColor = (compliance: number | undefined): string => {
-    if (compliance === undefined) return "";
-    if (compliance < 75) return "bg-red-500/20 text-red-500 border-red-500/50";
-    if (compliance < 95) return "bg-yellow-500/20 text-yellow-500 border-yellow-500/50";
-    return "bg-green-500/20 text-green-500 border-green-500/50";
-  };
-  
-  const totalCalls = useMemo(() => performanceData.reduce((sum, a) => sum + a.totalCalls, 0), [performanceData]);
-  const totalEffectiveCalls = useMemo(() => performanceData.reduce((sum, a) => sum + a.effectiveCalls, 0), [performanceData]);
+  const getComplianceColor = (c?: number) => c === undefined ? "" : c < 75 ? "bg-red-500/20 text-red-500" : c < 95 ? "bg-yellow-500/20 text-yellow-500" : "bg-green-500/20 text-green-500";
+  const totalCalls = useMemo(() => performanceData.reduce((s, a) => s + a.totalCalls, 0), [performanceData]);
+  const totalEffectiveCalls = useMemo(() => performanceData.reduce((s, a) => s + a.effectiveCalls, 0), [performanceData]);
   const averageEffectiveness = totalCalls > 0 ? (totalEffectiveCalls / totalCalls) * 100 : 0;
-  
   const chartData = useMemo(() => performanceData.filter(d => d.totalCalls > 0).sort((a,b) => a.name.localeCompare(b.name)), [performanceData]);
-
   const calendarData = useMemo(() => {
-    const data: { [date: string]: { total: number; count: number; compliance: number } } = {};
+    const data: { [date: string]: { value: number; tooltip: string[] } } = {};
     Object.values(dailyPerformanceData).forEach(agentDays => {
-        Object.entries(agentDays).forEach(([date, stats]) => {
-            if (!data[date]) data[date] = { total: 0, count: 0, compliance: 0 };
-            data[date].total += stats.totalCalls;
-            data[date].count++;
-            data[date].compliance += stats.compliance ?? 0;
-        });
+      Object.entries(agentDays).forEach(([dayKey, stats]) => {
+        if (!data[dayKey]) data[dayKey] = { value: 0, tooltip: [] };
+        if (stats.compliance !== undefined) {
+          data[dayKey].value += stats.compliance;
+          data[dayKey].tooltip.push(`${(agentMap as any)[Object.keys(agentDays)[0]]}: ${stats.compliance.toFixed(0)}%`);
+        }
+      });
     });
-    return Object.entries(data).map(([date, { total, count, compliance }]) => {
-        const avgCompliance = count > 0 ? compliance / count : 0;
-        let colorLevel = 0;
-        if (avgCompliance >= 95) colorLevel = 3;
-        else if (avgCompliance >= 75) colorLevel = 2;
-        else if (avgCompliance > 0) colorLevel = 1;
-        return { date, count: colorLevel, tooltip: `${format(new Date(date), 'dd LLL')}: ${total} llamadas, Cumplimiento: ${avgCompliance.toFixed(0)}%` };
+    return Object.entries(data).map(([date, { value, tooltip }]) => {
+      const numAgents = tooltip.length;
+      const avgCompliance = numAgents > 0 ? value / numAgents : 0;
+      let count = 0;
+      if (avgCompliance < 75) count = 1;
+      else if (avgCompliance < 95) count = 2;
+      else if (avgCompliance >= 95) count = 3;
+      return {
+        date,
+        count,
+        tooltip: `${format(parseISO(date), "dd LLL", { locale: es })}: ${avgCompliance.toFixed(0)}% promedio. ${tooltip.join(', ')}`
+      };
     });
   }, [dailyPerformanceData]);
-
-  const handleDatePreset = (preset: string) => {
-      const to = new Date(); let from: Date;
-      switch (preset) {
-        case 'today': from = to; setDate({ from, to }); break;
-        case 'yesterday': from = subDays(to, 1); setDate({ from, to: from }); break;
-        case '7days': from = subDays(to, 6); setDate({ from, to }); break;
-        case '30days': from = subDays(to, 29); setDate({ from, to }); break;
-      }
-  };
-
+  
   const handleDownloadReport = useCallback(() => {
-    if (!tableRef.current) return;
-    const filter = (node: HTMLElement) => (node.tagName !== 'LINK') || !node.hasAttribute('href') || !(node.getAttribute('href') || '').includes('googleapis');
-    toPng(tableRef.current, { cacheBust: true, backgroundColor: '#ffffff', filter })
-      .then((dataUrl) => {
-        download(dataUrl, 'reporte-rendimiento.png');
-        toast({ title: "¡Éxito!", description: "El reporte se está descargando." });
-      })
-      .catch((err) => toast({ variant: "destructive", title: "Error", description: "No se pudo generar la imagen del reporte." }));
-  }, [toast]);
+    if (tableRef.current === null) return;
+    toPng(tableRef.current, { cacheBust: true, backgroundColor: 'white' })
+      .then((dataUrl) => download(dataUrl, 'reporte-rendimiento.png'))
+      .catch(() => toast({ variant: "destructive", title: "Error", description: "No se pudo generar la imagen del reporte." }));
+  }, []);
+  
+  const handleDatePreset = (preset: string) => {
+    const to = new Date();
+    let from: Date | undefined;
+    switch (preset) {
+      case 'today': from = new Date(); break;
+      case 'yesterday': from = subDays(to, 1); setDate({ from, to: from }); return;
+      case '7days': from = subDays(to, 6); break;
+      case '30days': from = subDays(to, 29); break;
+      default: from = undefined;
+    }
+    setDate(from ? { from, to } : undefined);
+  };
   
   return (
     <div className="space-y-6">
         <ScheduleManager open={isScheduleManagerOpen} onOpenChange={setIsScheduleManagerOpen} />
+        {/* Header and Filters */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Rendimiento de Asesores</h1>
-                <p className="text-muted-foreground">Métricas clave de la actividad de llamadas.</p>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-                <Button variant="outline" onClick={() => setIsScheduleManagerOpen(true)}><Cog className="mr-2 h-4 w-4" />Horarios</Button>
-                <Select onValueChange={handleDatePreset}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtro Rápido" /></SelectTrigger><SelectContent><SelectItem value="today">Hoy</SelectItem><SelectItem value="yesterday">Ayer</SelectItem><SelectItem value="7days">Últimos 7 días</SelectItem><SelectItem value="30days">Últimos 30 días</SelectItem></SelectContent></Select>
-                <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}><PopoverTrigger asChild><Button id="date" variant={"outline"} className={cn("w-full sm:w-auto justify-start text-left font-normal", !date && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{date?.from ? (date.to && date.to > date.from ? `${format(date.from, "LLL dd, y", { locale: es })} - ${format(date.to, "LLL dd, y", { locale: es })}` : format(date.from, "LLL dd, y", { locale: es })) : <span>Selecciona un rango</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="end"><Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={2} locale={es} /><div className="flex items-center justify-end gap-2 p-3 border-t"><Button variant="outline" size="sm" onClick={() => setIsDatePickerOpen(false)}>Cancelar</Button><Button size="sm" onClick={() => { setDate(tempDate); setIsDatePickerOpen(false); }}>Aplicar</Button></div></PopoverContent></Popover>
-                <Button variant="outline" size="icon" onClick={fetchAndProcessData} disabled={isLoading}>{isLoading ? <Loader className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}</Button>
-            </div>
+          <div className="flex items-center gap-4">
+              <SidebarTrigger className="md:hidden"/>
+              <div>
+                  <h2 className="text-3xl font-bold tracking-tight">Rendimiento de Asesores</h2>
+                  <p className="text-muted-foreground">Métricas de llamadas y cumplimiento de objetivos.</p>
+              </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+              <Select onValueChange={handleDatePreset}>
+                  <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Filtro Rápido" /></SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="today">Hoy</SelectItem>
+                      <SelectItem value="yesterday">Ayer</SelectItem>
+                      <SelectItem value="7days">Últimos 7 días</SelectItem>
+                      <SelectItem value="30days">Últimos 30 días</SelectItem>
+                  </SelectContent>
+              </Select>
+              <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {date?.from ? (date.to ? (<>{format(date.from, "LLL dd, y", { locale: es })} - {format(date.to, "LLL dd, y", { locale: es })}</>) : (format(date.from, "LLL dd, y", { locale: es }))) : (<span>Selecciona un rango</span>)}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={tempDate} onSelect={setTempDate} numberOfMonths={2} locale={es} />
+                   <div className="flex justify-end gap-2 p-4">
+                      <Button variant="ghost" onClick={() => setIsDatePickerOpen(false)}>Cancelar</Button>
+                      <Button onClick={() => { setDate(tempDate); setIsDatePickerOpen(false); }}>Aplicar</Button>
+                   </div>
+                </PopoverContent>
+              </Popover>
+              <Button variant="outline" size="sm" onClick={() => setIsScheduleManagerOpen(true)}><Cog className="h-4 w-4 mr-2"/>Gestionar Horarios</Button>
+              <Button variant="outline" size="sm" onClick={() => fetchAndProcessData()} disabled={isLoading}><RefreshCw className="h-4 w-4 mr-2"/>Actualizar</Button>
+          </div>
         </div>
-
-        {!isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground">{dataSource === 'cache' ? <><Database className="h-4 w-4 text-green-500" /><span>Datos desde Caché</span></> : dataSource === 'mixed' ? <><Database className="h-4 w-4 text-yellow-500" /><Cloud className="h-4 w-4 text-blue-500 -ml-1" /><span>Datos Combinados</span></> : <><Cloud className="h-4 w-4 text-blue-500" /><span>Datos en Tiempo Real</span></>}</div>}
+        {!isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground">{dataSource === 'mixed' ? <><Database className="h-4 w-4 text-green-500" /><Cloud className="h-4 w-4 text-blue-500" /></> : dataSource ? <Database className="h-4 w-4 text-green-500" /> : <Cloud className="h-4 w-4 text-blue-500" />}<p>{dataSource === 'mixed' ? "Datos combinados (histórico + hoy)" : dataSource ? "Datos desde Firestore (caché histórico)" : "Datos desde API de Zadarma (hoy)"}</p></div>}
       
         {isLoading ? ( <div className="flex items-center justify-center min-h-[400px]"><Loader className="h-8 w-8 animate-spin text-primary" /><p className="ml-4 text-muted-foreground">Calculando rendimiento...</p></div> ) :
         (<div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-3">
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Total de Intentos</CardTitle><PhoneOutgoing className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalCalls}</div></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Llamadas Efectivas</CardTitle><PhoneForwarded className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalEffectiveCalls}</div></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Tasa de Efectividad</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{averageEffectiveness.toFixed(1)}%</div></CardContent></Card>
+              <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Total de Intentos</CardTitle><PhoneForwarded className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalCalls}</div></CardContent></Card>
+              <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Llamadas Efectivas</CardTitle><CheckCircle className="h-4 w-4 text-green-500" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalEffectiveCalls}</div></CardContent></Card>
+              <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Efectividad Promedio</CardTitle><Percent className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className={cn("text-2xl font-bold", averageEffectiveness < 30 ? "text-red-500" : averageEffectiveness < 50 ? "text-yellow-500" : "text-green-500")}>{averageEffectiveness.toFixed(1)}%</div></CardContent></Card>
             </div>
 
-            <Card><CardHeader><CardTitle className="flex items-center"><CalendarIcon className="mr-2 h-5 w-5" />Resumen de Cumplimiento Mensual</CardTitle><CardDescription>Mapa de calor del cumplimiento promedio del equipo en los últimos meses.</CardDescription></CardHeader><CardContent><PerformanceCalendar data={calendarData} /></CardContent></Card>
+            <Card><CardHeader><CardTitle className="flex items-center"><CalendarIcon className="mr-2 h-5 w-5" />Resumen de Cumplimiento Mensual</CardTitle></CardHeader><CardContent><PerformanceCalendar data={calendarData} /></CardContent></Card>
             
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Detalle por Asesor</CardTitle><CardDescription>{showDailyBreakdown ? "Haz clic en una fila para ver el desglose por día." : "Selecciona un rango de más de un día para ver desglose."}</CardDescription></div><Button variant="outline" size="icon" onClick={handleDownloadReport}><Download className="h-4 w-4" /></Button></CardHeader>
-                <CardContent className="overflow-x-auto"><div ref={tableRef} className="min-w-[900px]">
+                <CardContent className="overflow-x-auto"><div ref={tableRef} className="min-w-[1000px]">
                     <Table>
                         <TableHeader><TableRow>
                             {showDailyBreakdown && <TableHead className="w-8 p-0"></TableHead>}
@@ -277,6 +298,7 @@ export default function AdvisorPerformancePage() {
                             <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('compliance')}>Cumplimiento {renderSortArrow('compliance')}</Button></TableHead>
                             <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('effectiveCalls')}>Efectivas {renderSortArrow('effectiveCalls')}</Button></TableHead>
                             <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('effectivenessRate')}>Efectividad {renderSortArrow('effectivenessRate')}</Button></TableHead>
+                            <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('totalSeconds')}>Minutos Totales {renderSortArrow('totalSeconds')}</Button></TableHead>
                             <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('firstCallTime')}>Primera Llamada {renderSortArrow('firstCallTime')}</Button></TableHead>
                             <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('lastCallTime')}>Última Llamada {renderSortArrow('lastCallTime')}</Button></TableHead>
                         </TableRow></TableHeader>
@@ -290,15 +312,16 @@ export default function AdvisorPerformancePage() {
                                     <TableCell className="text-center"><Badge variant="outline" className={cn("text-base font-bold", getComplianceColor(agent.compliance))}>{agent.compliance?.toFixed(0) ?? 'N/A'}%</Badge></TableCell>
                                     <TableCell className="text-center font-semibold text-green-600">{agent.effectiveCalls}</TableCell>
                                     <TableCell className="text-center font-mono">{agent.effectivenessRate.toFixed(1)}%</TableCell>
+                                    <TableCell className="text-center"><div className="flex items-center justify-center gap-2"><Clock className="h-4 w-4 text-muted-foreground" />{Math.ceil(agent.totalSeconds / 60)} min</div></TableCell>
                                     <TableCell className="text-center font-mono text-green-600">{agent.firstCallTime || "N/A"}</TableCell>
                                     <TableCell className="text-right font-mono text-red-500">{agent.lastCallTime || "N/A"}</TableCell>
                                 </TableRow></CollapsibleTrigger>
-                                {showDailyBreakdown && <CollapsibleContent asChild><TableRow><TableCell colSpan={8} className="p-0"><div className="p-4 bg-muted/50">
+                                {showDailyBreakdown && <CollapsibleContent asChild><TableRow><TableCell colSpan={9} className="p-0"><div className="p-4 bg-muted/50">
                                     <h4 className="font-bold mb-2">Desglose Diario para {agent.name}</h4>
                                     <div className="overflow-x-auto">
-                                        <Table className="min-w-[400px]"><TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead className="text-center">Intentos</TableHead><TableHead className="text-center">Objetivo</TableHead><TableHead className="text-center">Cumplimiento</TableHead></TableRow></TableHeader><TableBody>
+                                        <Table className="min-w-[500px]"><TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead className="text-center">Intentos</TableHead><TableHead className="text-center">Minutos</TableHead><TableHead className="text-center">Objetivo</TableHead><TableHead className="text-center">Cumplimiento</TableHead></TableRow></TableHeader><TableBody>
                                             {Object.entries(dailyPerformanceData[agent.id] || {}).sort(([a], [b]) => b.localeCompare(a)).map(([d, stats]) => (
-                                            <TableRow key={d}><TableCell>{format(new Date(d), "dd LLL, y", { locale: es })}</TableCell><TableCell className="text-center">{stats.totalCalls}</TableCell><TableCell className="text-center">{stats.callTarget?.toFixed(0) ?? 'N/A'}</TableCell><TableCell className="text-center"><Badge variant="outline" className={cn(getComplianceColor(stats.compliance))}>{stats.compliance?.toFixed(0) ?? 'N/A'}%</Badge></TableCell></TableRow>
+                                            <TableRow key={d}><TableCell>{format(parseISO(d+'T00:00:00.000Z'), "dd LLL, y", { locale: es })}</TableCell><TableCell className="text-center">{stats.totalCalls}</TableCell><TableCell className="text-center">{Math.ceil(stats.totalSeconds / 60)}</TableCell><TableCell className="text-center">{stats.callTarget?.toFixed(0) ?? 'N/A'}</TableCell><TableCell className="text-center"><Badge variant="outline" className={cn(getComplianceColor(stats.compliance))}>{stats.compliance?.toFixed(0) ?? 'N/A'}%</Badge></TableCell></TableRow>
                                             ))}
                                         </TableBody></Table>
                                     </div>
@@ -313,3 +336,5 @@ export default function AdvisorPerformancePage() {
     </div>
   );
 }
+
+    

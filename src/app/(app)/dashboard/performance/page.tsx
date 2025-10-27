@@ -256,6 +256,7 @@ export default function AdvisorPerformancePage() {
                       <SelectItem value="30days">Últimos 30 días</SelectItem>
                   </SelectContent>
               </Select>
+
               <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
                 <PopoverTrigger asChild>
                   <Button id="date" variant={"outline"} className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>

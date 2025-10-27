@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 
 type AnyObj = { [k: string]: any };
 
@@ -7,39 +7,144 @@ export default function ZadarmaTestPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<AnyObj[]>([]);
+  const [raw, setRaw] = useState<boolean>(true);
+  const [skipSave, setSkipSave] = useState<boolean>(true);
+  const [reloadKey, setReloadKey] = useState<number>(0);
+  const [lastRequestAt, setLastRequestAt] = useState<number>(0);
+  const [queued, setQueued] = useState<boolean>(false);
+  const [nextAllowedSeconds, setNextAllowedSeconds] = useState<number>(0);
+  const cooldownSeconds = 6; // 10 requests per minute => 1 request cada 6s
+  const cacheTtlSeconds = 60; // cache en sessionStorage por 60s
+  const isMounted = useRef(true);
 
   useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        // Construir fecha de hoy en formato YYYY-MM-DD (Lima local date)
-        const today = new Date();
-        // Obtener la fecha local de Lima: como simplificación usamos la fecha local del sistema
-        const yyyy = today.getFullYear();
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        const isoDay = `${yyyy}-${mm}-${dd}`;
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
 
-        const url = `/api/zadarma/stats?startDate=${isoDay}&endDate=${isoDay}`;
+  // Helper: sleep
+  const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+  // Attempt fetch with retries and backoff; respects 429 Retry-After when present
+  async function attemptFetch(url: string, maxRetries = 3) {
+    let attempt = 0;
+    let lastErr: any = null;
+    while (attempt <= maxRetries) {
+      try {
         const res = await fetch(url);
+        if (res.status === 429) {
+          // Respect Retry-After if provided
+          const ra = res.headers.get('Retry-After');
+          const waitMs = ra ? Number(ra) * 1000 : Math.pow(2, attempt) * 1000;
+          await sleep(waitMs);
+          attempt++;
+          continue;
+        }
         if (!res.ok) throw new Error(`Error HTTP: ${res.status} ${res.statusText}`);
         const data = await res.json();
-        if (data.status === 'error') throw new Error(data.message || 'Error desde la API');
-        setRows(data.stats || []);
+        return data;
       } catch (err: any) {
-        setError(err.message || String(err));
-      } finally {
-        setLoading(false);
+        lastErr = err;
+        // Exponential backoff before retry
+        const backoff = Math.pow(2, attempt) * 1000;
+        await sleep(backoff);
+        attempt++;
       }
     }
-    load();
-  }, []);
+    throw lastErr;
+  }
+
+  async function load() {
+    if (!isMounted.current) return;
+    // cooldown / rate-limit guard
+    const now = Date.now();
+    const earliest = lastRequestAt + cooldownSeconds * 1000;
+    if (now < earliest) {
+      setQueued(true);
+      setNextAllowedSeconds(Math.ceil((earliest - now) / 1000));
+      // schedule actual run when allowed
+      const delay = earliest - now + 50;
+      setTimeout(() => {
+        setQueued(false);
+        setNextAllowedSeconds(0);
+        // increment reloadKey to trigger effect or call load directly
+        setReloadKey(k => k + 1);
+      }, delay);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Construir fecha de hoy en formato YYYY-MM-DD (Lima local date)
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const isoDay = `${yyyy}-${mm}-${dd}`;
+
+      // Caching key
+      const cacheKey = `zadarma_${isoDay}_${raw ? 'raw' : 'utc'}_${skipSave ? 'nosave' : 'save'}`;
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.ts && (Date.now() - parsed.ts) / 1000 < cacheTtlSeconds) {
+            setRows(parsed.data || []);
+            setLastRequestAt(Date.now());
+            return;
+          }
+        } catch (e) { /* ignore cache parse errors */ }
+      }
+
+      // Construir URL según toggles
+      const params = new URLSearchParams({ startDate: isoDay, endDate: isoDay });
+      if (raw) params.set('raw', 'true');
+      if (skipSave) params.set('skipSave', 'true');
+      const url = `/api/zadarma/stats?${params.toString()}`;
+
+      const data = await attemptFetch(url, 3);
+      if (data.status === 'error') throw new Error(data.message || 'Error desde la API');
+
+      setRows(data.stats || []);
+      // cachear
+      try { sessionStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: data.stats || [] })); } catch(e) {}
+      setLastRequestAt(Date.now());
+    } catch (err: any) {
+      setError(err.message || String(err));
+    } finally {
+      if (isMounted.current) setLoading(false);
+    }
+  }
+
+  // run load on mount and when reloadKey changes
+  useEffect(() => { load(); }, [reloadKey]);
+  // run when toggles change, but guard by triggering reloadKey (so cooldown logic centralizes)
+  useEffect(() => { setReloadKey(k => k + 1); }, [raw, skipSave]);
 
   return (
     <div style={{ padding: 24 }}>
       <h1>Cuadro Test Zadarma — Hoy</h1>
       <p>Esto consulta <code>/api/zadarma/stats?startDate=YYYY-MM-DD&amp;endDate=YYYY-MM-DD</code> y muestra todos los campos recibidos.</p>
+
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ marginRight: 12 }}>
+          <input type="checkbox" checked={raw} onChange={e => setRaw(e.target.checked)} />{' '}
+          Mostrar tiempos en crudo (raw)
+        </label>
+        <label style={{ marginRight: 12 }}>
+          <input type="checkbox" checked={skipSave} onChange={e => setSkipSave(e.target.checked)} />{' '}
+          Evitar guardar en BD (skipSave)
+        </label>
+        <button onClick={() => setReloadKey(k => k + 1)} style={{ marginLeft: 8 }}>Recargar</button>
+
+        <div style={{ display: 'inline-block', marginLeft: 16, verticalAlign: 'middle', color: '#444' }}>
+          <div style={{ fontSize: 12 }}>Cooldown: {cooldownSeconds}s entre peticiones (máx 10/min)</div>
+          {lastRequestAt ? <div style={{ fontSize: 12 }}>Última petición: {new Date(lastRequestAt).toLocaleTimeString()}</div> : null}
+          {queued ? <div style={{ fontSize: 12, color: '#b35' }}>En cola. Próxima en {nextAllowedSeconds}s</div> : null}
+        </div>
+      </div>
 
       {loading && <p>Cargando...</p>}
       {error && <pre style={{ color: 'crimson' }}>{error}</pre>}
@@ -68,7 +173,7 @@ export default function ZadarmaTestPage() {
               <thead>
                 <tr>
                   <th style={thStyle}>#</th>
-                  <th style={thStyle}>callstart (UTC)</th>
+              <th style={thStyle}>callstart {raw ? '(raw)' : '(UTC)'}</th>
                   <th style={thStyle}>all fields (JSON)</th>
                 </tr>
               </thead>

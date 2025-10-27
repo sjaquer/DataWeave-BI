@@ -1,8 +1,6 @@
 
 import { NextResponse, NextRequest } from 'next/server';
 import { format, startOfDay, endOfDay, parseISO } from 'date-fns';
-// CORRECCIÓN: Se importan los nombres de función correctos para la versión actual de date-fns-tz
-import { toZonedTime, fromZonedTime, formatInTimeZone } from 'date-fns-tz';
 import * as dotenv from 'dotenv';
 import CryptoJS from 'crypto-js';
 import {
@@ -20,7 +18,9 @@ async function fetchZadarmaAPI(
   start: Date, // Se espera una fecha que representa la hora de Madrid
   end: Date,   // Se espera una fecha que representa la hora de Madrid
   apiKey: string,
-  apiSecret: string
+  apiSecret: string,
+  // skipConversion: si true, devuelve los tiempos tal cual llegan desde la API (sin convertir a UTC)
+  skipConversion = false
 ): Promise<any[]> {
   // La función format usará la representación local de la fecha, que ya está ajustada a Madrid
   const formattedStartDate = format(start, 'yyyy-MM-dd HH:mm:ss');
@@ -50,10 +50,10 @@ async function fetchZadarmaAPI(
   if (data.status === 'error') throw new Error(`Error de API de Zadarma: ${data.message}`);
   
   // --- CONVERSIÓN DE MADRID A UTC ---
+  // Devolver callstart tal cual viene de la API — sin ninguna conversión de zona horaria.
   return (data.stats || []).map((call: any) => ({
     ...call,
-    // CORRECCIÓN: Se usa fromZonedTime para interpretar la fecha de Zadarma como hora de Madrid y convertirla a un objeto Date (UTC)
-    callstart: fromZonedTime(call.callstart, MADRID_TIME_ZONE).toISOString(),
+    callstart: call.callstart,
   }));
 }
 
@@ -74,22 +74,21 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ status: 'error', message: 'Los parámetros startDate y endDate son requeridos.' }, { status: 400 });
     }
 
-    // 1. Entender la petición del usuario como un día en Lima.
-    const startLima = startOfDay(parseISO(startDateQuery));
-    const endLima = endOfDay(parseISO(endDateQuery));
+  // 1. Entender la petición del usuario como un día en Lima.
+  // NOTE: ya no se realiza ninguna traducción horaria; enviamos las fechas tal cual para obtener los datos en crudo.
+  const startLima = startOfDay(parseISO(startDateQuery));
+  const endLima = endOfDay(parseISO(endDateQuery));
 
-    // 2. Traducir el rango de Lima a los equivalentes en hora de Madrid para la API.
-    // CORRECCIÓN: Se usa toZonedTime para obtener el objeto Date cuya representación local sea la hora de Madrid
-    const startMadrid = toZonedTime(startLima, MADRID_TIME_ZONE);
-    const endMadrid = toZonedTime(endLima, MADRID_TIME_ZONE);
-    
-    // 3. Pedir los datos correctos a Zadarma.
-    const callsInUTC = await fetchZadarmaAPI(startMadrid, endMadrid, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
+  // 2. Pedir los datos directamente (sin zonificar) — la API devolverá callstart tal cual.
+  const rawFlag = true; // por defecto ahora trabajamos en modo crudo
+  const skipSave = searchParams.get('skipSave') === 'true' || searchParams.get('skip_save') === 'true' || searchParams.get('noSave') === 'true';
+  const callsInUTC = await fetchZadarmaAPI(startLima, endLima, ZADARMA_API_KEY!, ZADARMA_API_SECRET!, true);
 
     // 4. Procesar y guardar los datos (que ya están en UTC).
     const finalStats = consolidateCalls(callsInUTC);
     
-    if (finalStats.length > 0) {
+    if (finalStats.length > 0 && !skipSave) {
+      // Guardado condicional: si la petición indicó skipSave, omitimos la persistencia.
       saveZadarmaCalls(finalStats).catch(err => console.error('[AUTO-SYNC BKG] Error:', err));
     }
 

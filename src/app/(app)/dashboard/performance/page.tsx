@@ -73,23 +73,78 @@ export default function AdvisorPerformancePage() {
     setIsLoading(true);
     setOpenAdvisorId(null);
     try {
-      const params = new URLSearchParams({
-        startDate: format(date.from, 'yyyy-MM-dd'),
-        endDate: format(date.to || date.from, 'yyyy-MM-dd'),
-      });
-      const [statsRes, ...schedulesRes] = await Promise.all([
-        fetch(`/api/zadarma/stats?${params.toString()}`),
-        ...Object.keys(agentMap).map(id => fetch(`/api/schedules/${id}`))
-      ]);
+      // rate-limit guard: evitar llamadas repetidas seguidas
+      const lastKey = `zadarma_stats_last_${format(date.from, 'yyyy-MM-dd')}_${format(date.to || date.from, 'yyyy-MM-dd')}`;
+      const lastTs = sessionStorage.getItem(lastKey);
+      if (lastTs && Date.now() - Number(lastTs) < 6000) {
+        // si la última petición fue hace menos de 6s, esperar un poco para no golpear la API
+        await new Promise(r => setTimeout(r, 6000));
+      }
+      const params = new URLSearchParams({ startDate: format(date.from, 'yyyy-MM-dd'), endDate: format(date.to || date.from, 'yyyy-MM-dd') });
 
-      if (!statsRes.ok) throw new Error((await statsRes.json()).message || 'Error al cargar estadísticas');
-      const statsData = await statsRes.json();
+      // Helper: retries with backoff and respect Retry-After
+      const attemptFetch = async (url: string, retries = 3) => {
+        let attempt = 0;
+        while (true) {
+          try {
+            const res = await fetch(url);
+            if (res.status === 429) {
+              const ra = res.headers.get('Retry-After');
+              const wait = ra ? Number(ra) * 1000 : Math.min(60000, Math.pow(2, attempt) * 1000);
+              await new Promise(r => setTimeout(r, wait));
+              attempt++;
+              if (attempt > retries) throw new Error('Rate limit excedido');
+              continue;
+            }
+            if (!res.ok) throw new Error((await res.json()).message || `HTTP ${res.status}`);
+            return await res.json();
+          } catch (err) {
+            attempt++;
+            if (attempt > retries) throw err;
+            await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 500));
+          }
+        }
+      };
+
+      // Stats: usar cache por sesión para reducir llamadas repetidas
+      const statsCacheKey = `zadarma_stats_${format(date.from, 'yyyy-MM-dd')}_${format(date.to || date.from, 'yyyy-MM-dd')}`;
+      const statsCachedRaw = sessionStorage.getItem(statsCacheKey);
+      let statsData: any = null;
+      if (statsCachedRaw) {
+        try { statsData = JSON.parse(statsCachedRaw); } catch(e) { statsData = null; }
+      }
+      if (!statsData) {
+        statsData = await attemptFetch(`/api/zadarma/stats?${params.toString()}`);
+        try { sessionStorage.setItem(statsCacheKey, JSON.stringify(statsData)); } catch(e){}
+      }
       setDataSource(statsData.fromCache);
+      try { sessionStorage.setItem(lastKey, String(Date.now())); } catch(e) {}
 
+      // Schedules: fetch con concurrencia limitada y cache por agente
+      const agentIds = Object.keys(agentMap);
       const schedules: { [id: string]: Schedule } = {};
-      for (let i = 0; i < schedulesRes.length; i++) {
-        const agentId = Object.keys(agentMap)[i];
-        if (schedulesRes[i].ok) schedules[agentId] = await schedulesRes[i].json(); else schedules[agentId] = {};
+      const concurrency = 4;
+      let idx = 0;
+      const fetchScheduleFor = async (agentId: string) => {
+        const sk = `schedule_${agentId}`;
+        const cached = sessionStorage.getItem(sk);
+        if (cached) {
+          try { schedules[agentId] = JSON.parse(cached); return; } catch(e) {}
+        }
+        try {
+          const json = await attemptFetch(`/api/schedules/${agentId}`);
+          schedules[agentId] = json;
+          try { sessionStorage.setItem(sk, JSON.stringify(json)); } catch(e) {}
+        } catch (e) {
+          schedules[agentId] = {};
+        }
+      };
+      const workers: Promise<void>[] = [];
+      while (idx < agentIds.length) {
+        const batch = agentIds.slice(idx, idx + concurrency).map(id => fetchScheduleFor(id));
+        workers.push(...batch);
+        await Promise.all(batch);
+        idx += concurrency;
       }
 
       const performanceByAgent: { [k: string]: AdvisorPerformance } = {};
@@ -160,7 +215,8 @@ export default function AdvisorPerformancePage() {
       Object.values(dailyPerformance).forEach(agentDays => Object.values(agentDays).forEach(formatMetrics));
       setDailyPerformanceData(dailyPerformance);
       
-      toast({ title: "Datos Cargados", description: statsData.message });
+  // Mostrar solo mensaje genérico para evitar avisos de corrección horaria en la UI
+  toast({ title: "Datos Cargados" });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error de Conexión", description: error.message });
     } finally {

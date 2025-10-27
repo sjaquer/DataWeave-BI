@@ -7,22 +7,19 @@ import {
   consolidateCalls,
   validateZadarmaCredentials,
   saveZadarmaCalls,
+  hasDataForDateRange,
+  getZadarmaCallsFromFirestore,
 } from '@/lib/zadarma-helpers';
 
 dotenv.config();
 
-const LIMA_TIME_ZONE = 'America/Lima';
-const MADRID_TIME_ZONE = 'Europe/Madrid';
-
 async function fetchZadarmaAPI(
-  start: Date, // Se espera una fecha que representa la hora de Madrid
-  end: Date,   // Se espera una fecha que representa la hora de Madrid
+  start: Date,
+  end: Date,
   apiKey: string,
   apiSecret: string,
-  // skipConversion: si true, devuelve los tiempos tal cual llegan desde la API (sin convertir a UTC)
-  skipConversion = false
+  skipConversion = true // Por defecto devolvemos datos raw sin conversión
 ): Promise<any[]> {
-  // La función format usará la representación local de la fecha, que ya está ajustada a Madrid
   const formattedStartDate = format(start, 'yyyy-MM-dd HH:mm:ss');
   const formattedEndDate = format(end, 'yyyy-MM-dd HH:mm:ss');
   
@@ -49,8 +46,7 @@ async function fetchZadarmaAPI(
   const data = await response.json();
   if (data.status === 'error') throw new Error(`Error de API de Zadarma: ${data.message}`);
   
-  // --- CONVERSIÓN DE MADRID A UTC ---
-  // Devolver callstart tal cual viene de la API — sin ninguna conversión de zona horaria.
+  // Devolver datos raw tal como vienen de la API, sin ninguna conversión de zona horaria
   return (data.stats || []).map((call: any) => ({
     ...call,
     callstart: call.callstart,
@@ -74,29 +70,59 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ status: 'error', message: 'Los parámetros startDate y endDate son requeridos.' }, { status: 400 });
     }
 
-  // 1. Entender la petición del usuario como un día en Lima.
-  // NOTE: ya no se realiza ninguna traducción horaria; enviamos las fechas tal cual para obtener los datos en crudo.
-  const startLima = startOfDay(parseISO(startDateQuery));
-  const endLima = endOfDay(parseISO(endDateQuery));
+    const startDate = startOfDay(parseISO(startDateQuery));
+    const endDate = endOfDay(parseISO(endDateQuery));
+    const skipSave = searchParams.get('skipSave') === 'true' || searchParams.get('skip_save') === 'true' || searchParams.get('noSave') === 'true';
+    const today = startOfDay(new Date());
 
-  // 2. Pedir los datos directamente (sin zonificar) — la API devolverá callstart tal cual.
-  const rawFlag = true; // por defecto ahora trabajamos en modo crudo
-  const skipSave = searchParams.get('skipSave') === 'true' || searchParams.get('skip_save') === 'true' || searchParams.get('noSave') === 'true';
-  const callsInUTC = await fetchZadarmaAPI(startLima, endLima, ZADARMA_API_KEY!, ZADARMA_API_SECRET!, true);
-
-    // 4. Procesar y guardar los datos (que ya están en UTC).
-    const finalStats = consolidateCalls(callsInUTC);
+    // Verificar si tenemos datos en caché (Firestore) para el rango solicitado
+    const hasHistoricalData = await hasDataForDateRange(startDate, endDate);
+    const isRequestingToday = startOfDay(endDate).getTime() === today.getTime();
     
-    if (finalStats.length > 0 && !skipSave) {
-      // Guardado condicional: si la petición indicó skipSave, omitimos la persistencia.
-      saveZadarmaCalls(finalStats).catch(err => console.error('[AUTO-SYNC BKG] Error:', err));
+    let finalStats: any[] = [];
+    let dataSource: boolean | 'mixed' = false;
+
+    if (hasHistoricalData && !isRequestingToday) {
+      // Datos históricos completos disponibles en caché
+      finalStats = await getZadarmaCallsFromFirestore(startDate, endDate);
+      dataSource = true;
+    } else if (hasHistoricalData && isRequestingToday) {
+      // Modo mixto: datos históricos del caché + datos de hoy de la API
+      const historicalEnd = startOfDay(today);
+      const historicalData = startDate < historicalEnd ? 
+        await getZadarmaCallsFromFirestore(startDate, new Date(historicalEnd.getTime() - 1)) : [];
+      
+      // Obtener datos de hoy desde la API
+      const todayData = await fetchZadarmaAPI(today, endDate, ZADARMA_API_KEY!, ZADARMA_API_SECRET!, true);
+      
+      finalStats = [...historicalData, ...consolidateCalls(todayData)];
+      dataSource = 'mixed';
+      
+      // Guardar datos de hoy si no se especifica skipSave
+      if (todayData.length > 0 && !skipSave) {
+        saveZadarmaCalls(consolidateCalls(todayData)).catch(err => console.error('[AUTO-SYNC BKG] Error:', err));
+      }
+    } else {
+      // No hay datos en caché, obtener todo desde la API
+      const apiData = await fetchZadarmaAPI(startDate, endDate, ZADARMA_API_KEY!, ZADARMA_API_SECRET!, true);
+      finalStats = consolidateCalls(apiData);
+      dataSource = false;
+      
+      // Guardar datos obtenidos si no se especifica skipSave
+      if (finalStats.length > 0 && !skipSave) {
+        saveZadarmaCalls(finalStats).catch(err => console.error('[AUTO-SYNC BKG] Error:', err));
+      }
     }
 
     return NextResponse.json({
       status: 'success',
       stats: finalStats,
-      fromCache: false, // En esta arquitectura siempre se obtienen datos frescos.
-      message: 'Datos obtenidos y estandarizados a UTC.',
+      fromCache: dataSource,
+      message: dataSource === 'mixed' ? 
+        'Datos combinados: históricos desde caché + hoy desde API.' :
+        dataSource ? 
+        'Datos obtenidos desde caché histórico.' : 
+        'Datos obtenidos desde API y guardados en caché.',
     });
 
   } catch (error: any) {

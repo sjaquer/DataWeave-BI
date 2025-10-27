@@ -16,19 +16,25 @@ export async function saveZadarmaCalls(calls: ZadarmaCall[]): Promise<number> {
   const now = Timestamp.now();
   
   calls.forEach(call => {
+    // Extraer fecha del callstart raw (formato: 2025-10-27 14:30:00)
     const callDate = call.callstart.substring(0, 10);
-    const docId = `${call.pbx_call_id}_${call.callstart}`;
+    const docId = `${call.pbx_call_id}_${call.callstart.replace(/[: -]/g, '')}`;
     const docRef = db.collection('zadarma_calls').doc(docId);
     
     const callDoc: Partial<ZadarmaCallDocument> = {
-      ...call, id: docId, callDate, agentId: call.sip,
+      ...call, 
+      id: docId, 
+      callDate, 
+      agentId: call.sip,
       agentName: AGENT_MAP[call.sip] || 'Desconocido',
-      syncedAt: now.toDate().toISOString(), createdAt: now,
+      syncedAt: now.toDate().toISOString(), 
+      createdAt: now,
     };
     batch.set(docRef, callDoc, { merge: true });
   });
 
   await batch.commit();
+  console.log(`[ZADARMA CACHE] Guardadas ${calls.length} llamadas en caché`);
   return calls.length;
 }
 
@@ -122,9 +128,21 @@ export async function isSyncLocked(date: Date, ttlMinutes: number): Promise<bool
 }
 
 export function consolidateCalls(calls: ZadarmaCall[]): ZadarmaCall[] {
-  // Se elimina la lógica de consolidación.
-  // Ahora, esta función devuelve todas las llamadas sin filtrar.
-  return calls;
+  if (!calls || calls.length === 0) return [];
+  
+  // Filtrar y limpiar datos básicos
+  return calls.filter(call => 
+    call && 
+    call.pbx_call_id && 
+    call.callstart && 
+    call.sip
+  ).map(call => ({
+    ...call,
+    // Asegurar que los números sean números
+    seconds: Number(call.seconds) || 0,
+    // Normalizar el estado de disposición
+    disposition: call.disposition || 'unknown'
+  }));
 }
 
 export function validateZadarmaCredentials(): { valid: boolean; message?: string } {

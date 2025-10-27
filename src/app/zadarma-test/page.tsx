@@ -7,7 +7,6 @@ export default function ZadarmaTestPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<AnyObj[]>([]);
-  const [raw, setRaw] = useState<boolean>(true);
   const [skipSave, setSkipSave] = useState<boolean>(true);
   const [reloadKey, setReloadKey] = useState<number>(0);
   const [lastRequestAt, setLastRequestAt] = useState<number>(0);
@@ -84,8 +83,8 @@ export default function ZadarmaTestPage() {
       const dd = String(today.getDate()).padStart(2, '0');
       const isoDay = `${yyyy}-${mm}-${dd}`;
 
-      // Caching key
-      const cacheKey = `zadarma_${isoDay}_${raw ? 'raw' : 'utc'}_${skipSave ? 'nosave' : 'save'}`;
+      // Caching key simplificado
+      const cacheKey = `zadarma_${isoDay}_${skipSave ? 'nosave' : 'save'}`;
       const cached = sessionStorage.getItem(cacheKey);
       if (cached) {
         try {
@@ -93,14 +92,14 @@ export default function ZadarmaTestPage() {
           if (parsed && parsed.ts && (Date.now() - parsed.ts) / 1000 < cacheTtlSeconds) {
             setRows(parsed.data || []);
             setLastRequestAt(Date.now());
+            console.log(`[CACHE] Datos cargados desde caché de sesión: ${parsed.data?.length || 0} registros`);
             return;
           }
         } catch (e) { /* ignore cache parse errors */ }
       }
 
-      // Construir URL según toggles
+      // Construir URL (raw mode ahora es por defecto en el backend)
       const params = new URLSearchParams({ startDate: isoDay, endDate: isoDay });
-      if (raw) params.set('raw', 'true');
       if (skipSave) params.set('skipSave', 'true');
       const url = `/api/zadarma/stats?${params.toString()}`;
 
@@ -108,8 +107,16 @@ export default function ZadarmaTestPage() {
       if (data.status === 'error') throw new Error(data.message || 'Error desde la API');
 
       setRows(data.stats || []);
-      // cachear
-      try { sessionStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: data.stats || [] })); } catch(e) {}
+      // Guardar en caché con información del origen
+      try { 
+        sessionStorage.setItem(cacheKey, JSON.stringify({ 
+          ts: Date.now(), 
+          data: data.stats || [],
+          fromCache: data.fromCache,
+          message: data.message
+        })); 
+        console.log(`[CACHE] ${data.message || 'Datos obtenidos'} - ${data.stats?.length || 0} registros`);
+      } catch(e) {}
       setLastRequestAt(Date.now());
     } catch (err: any) {
       setError(err.message || String(err));
@@ -121,7 +128,7 @@ export default function ZadarmaTestPage() {
   // run load on mount and when reloadKey changes
   useEffect(() => { load(); }, [reloadKey]);
   // run when toggles change, but guard by triggering reloadKey (so cooldown logic centralizes)
-  useEffect(() => { setReloadKey(k => k + 1); }, [raw, skipSave]);
+  useEffect(() => { setReloadKey(k => k + 1); }, [skipSave]);
 
   return (
     <div style={{ padding: 24 }}>
@@ -129,10 +136,6 @@ export default function ZadarmaTestPage() {
       <p>Esto consulta <code>/api/zadarma/stats?startDate=YYYY-MM-DD&amp;endDate=YYYY-MM-DD</code> y muestra todos los campos recibidos.</p>
 
       <div style={{ marginBottom: 12 }}>
-        <label style={{ marginRight: 12 }}>
-          <input type="checkbox" checked={raw} onChange={e => setRaw(e.target.checked)} />{' '}
-          Mostrar tiempos en crudo (raw)
-        </label>
         <label style={{ marginRight: 12 }}>
           <input type="checkbox" checked={skipSave} onChange={e => setSkipSave(e.target.checked)} />{' '}
           Evitar guardar en BD (skipSave)
@@ -173,7 +176,7 @@ export default function ZadarmaTestPage() {
               <thead>
                 <tr>
                   <th style={thStyle}>#</th>
-              <th style={thStyle}>callstart {raw ? '(raw)' : '(UTC)'}</th>
+                  <th style={thStyle}>callstart (raw)</th>
                   <th style={thStyle}>all fields (JSON)</th>
                 </tr>
               </thead>

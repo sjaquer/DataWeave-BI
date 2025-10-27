@@ -12,7 +12,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
 import { format, subDays, startOfDay, differenceInCalendarDays, eachDayOfInterval, getDay, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { formatInTimeZone } from 'date-fns-tz';
+
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine } from "recharts";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toPng } from 'html-to-image';
@@ -28,8 +28,7 @@ import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
 
-const LIMA_TIME_ZONE = 'America/Lima';
-const CALLS_PER_HOUR_TARGET = 15;
+const CALLS_PER_HOUR_TARGET = 12;
 
 // --- Types ---
 interface DaySchedule { active: boolean; start: string; end: string; }
@@ -66,7 +65,7 @@ export default function AdvisorPerformancePage() {
   const { toast } = useToast();
   const tableRef = useRef<HTMLDivElement>(null);
 
-  const showDailyBreakdown = useMemo(() => (date?.from && date.to) ? differenceInCalendarDays(date.to, date.from) > 0 : false, [date]);
+  const showDailyBreakdown = useMemo(() => (date?.from && date.to) ? differenceInCalendarDays(date.to, date.from) >= 0 : false, [date]);
 
   const fetchAndProcessData = useCallback(async () => {
     if (!date?.from) return;
@@ -156,8 +155,9 @@ export default function AdvisorPerformancePage() {
       
       (statsData.stats || []).forEach((call: ZadarmaCall) => {
         if (!performanceByAgent[call.sip]) return;
-        const callTimeUTC = parseISO(call.callstart);
-        const dayKey = formatInTimeZone(callTimeUTC, LIMA_TIME_ZONE, 'yyyy-MM-dd');
+        // Los datos ahora vienen raw, sin conversión de zona horaria
+        const callTime = parseISO(call.callstart);
+        const dayKey = format(callTime, 'yyyy-MM-dd');
         
         if (!dailyPerformance[call.sip][dayKey]) {
           dailyPerformance[call.sip][dayKey] = { totalCalls: 0, effectiveCalls: 0, effectivenessRate: 0, totalSeconds: 0, averageCallDuration: 0, firstCallTime: null, lastCallTime: null };
@@ -185,8 +185,9 @@ export default function AdvisorPerformancePage() {
       const formatMetrics = (p: PerformanceMetrics & ActivityMetrics) => {
         p.effectivenessRate = p.totalCalls > 0 ? (p.effectiveCalls / p.totalCalls) * 100 : 0;
         p.averageCallDuration = p.effectiveCalls > 0 ? p.totalSeconds / p.effectiveCalls : 0;
-        if (p.firstCallTime) p.firstCallTime = formatInTimeZone(parseISO(p.firstCallTime), LIMA_TIME_ZONE, 'HH:mm:ss');
-        if (p.lastCallTime) p.lastCallTime = formatInTimeZone(parseISO(p.lastCallTime), LIMA_TIME_ZONE, 'HH:mm:ss');
+        // Los datos ahora vienen raw, solo formatear la hora sin conversión
+        if (p.firstCallTime) p.firstCallTime = format(parseISO(p.firstCallTime), 'HH:mm:ss');
+        if (p.lastCallTime) p.lastCallTime = format(parseISO(p.lastCallTime), 'HH:mm:ss');
         return p;
       };
 
@@ -282,7 +283,10 @@ export default function AdvisorPerformancePage() {
     let from: Date | undefined;
     switch (preset) {
       case 'today': from = new Date(); break;
-      case 'yesterday': from = subDays(to, 1); setDate({ from, to: from }); return;
+      case 'yesterday': 
+        from = subDays(to, 1); 
+        setDate({ from, to: from }); 
+        return;
       case '7days': from = subDays(to, 6); break;
       case '30days': from = subDays(to, 29); break;
       default: from = undefined;
@@ -332,7 +336,7 @@ export default function AdvisorPerformancePage() {
               <Button variant="outline" size="sm" onClick={() => fetchAndProcessData()} disabled={isLoading}><RefreshCw className="h-4 w-4 mr-2"/>Actualizar</Button>
           </div>
         </div>
-        {!isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground">{dataSource === 'mixed' ? <><Database className="h-4 w-4 text-green-500" /><Cloud className="h-4 w-4 text-blue-500" /></> : dataSource ? <Database className="h-4 w-4 text-green-500" /> : <Cloud className="h-4 w-4 text-blue-500" />}<p>{dataSource === 'mixed' ? "Datos combinados (histórico + hoy)" : dataSource ? "Datos desde Firestore (caché histórico)" : "Datos desde API de Zadarma (hoy)"}</p></div>}
+        {!isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground">{dataSource === 'mixed' ? <><Database className="h-4 w-4 text-green-500" /><Cloud className="h-4 w-4 text-blue-500" /></> : dataSource ? <Database className="h-4 w-4 text-green-500" /> : <Cloud className="h-4 w-4 text-blue-500" />}<p>{dataSource === 'mixed' ? "Datos combinados (caché histórico + API hoy)" : dataSource ? "Datos desde Firestore (caché histórico)" : "Datos desde API de Zadarma (usando caché de sesión)"}</p></div>}
       
         {isLoading ? ( <div className="flex items-center justify-center min-h-[400px]"><Loader className="h-8 w-8 animate-spin text-primary" /><p className="ml-4 text-muted-foreground">Calculando rendimiento...</p></div> ) :
         (<div className="space-y-6">
@@ -373,14 +377,48 @@ export default function AdvisorPerformancePage() {
                                     <TableCell className="text-center font-mono text-green-600">{agent.firstCallTime || "N/A"}</TableCell>
                                     <TableCell className="text-right font-mono text-red-500">{agent.lastCallTime || "N/A"}</TableCell>
                                 </TableRow></CollapsibleTrigger>
-                                {showDailyBreakdown && <CollapsibleContent asChild><TableRow><TableCell colSpan={9} className="p-0"><div className="p-4 bg-muted/50">
+                                {showDailyBreakdown && <CollapsibleContent asChild><TableRow><TableCell colSpan={showDailyBreakdown ? 9 : 8} className="p-0"><div className="p-4 bg-muted/50">
                                     <h4 className="font-bold mb-2">Desglose Diario para {agent.name}</h4>
                                     <div className="overflow-x-auto">
-                                        <Table className="min-w-[500px]"><TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead className="text-center">Intentos</TableHead><TableHead className="text-center">Minutos</TableHead><TableHead className="text-center">Objetivo</TableHead><TableHead className="text-center">Cumplimiento</TableHead></TableRow></TableHeader><TableBody>
-                                            {Object.entries(dailyPerformanceData[agent.id] || {}).sort(([a], [b]) => b.localeCompare(a)).map(([d, stats]) => (
-                                            <TableRow key={d}><TableCell>{format(parseISO(d+'T00:00:00.000Z'), "dd LLL, y", { locale: es })}</TableCell><TableCell className="text-center">{stats.totalCalls}</TableCell><TableCell className="text-center">{Math.ceil(stats.totalSeconds / 60)}</TableCell><TableCell className="text-center">{stats.callTarget?.toFixed(0) ?? 'N/A'}</TableCell><TableCell className="text-center"><Badge variant="outline" className={cn(getComplianceColor(stats.compliance))}>{stats.compliance?.toFixed(0) ?? 'N/A'}%</Badge></TableCell></TableRow>
-                                            ))}
-                                        </TableBody></Table>
+                                        <Table className="min-w-[900px]">
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Fecha</TableHead>
+                                                    <TableHead className="text-center">Intentos</TableHead>
+                                                    <TableHead className="text-center">Objetivo</TableHead>
+                                                    <TableHead className="text-center">Cumplimiento</TableHead>
+                                                    <TableHead className="text-center">Efectivas</TableHead>
+                                                    <TableHead className="text-center">Efectividad</TableHead>
+                                                    <TableHead className="text-center">Minutos Totales</TableHead>
+                                                    <TableHead className="text-center">Primera Llamada</TableHead>
+                                                    <TableHead className="text-right">Última Llamada</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {Object.entries(dailyPerformanceData[agent.id] || {}).sort(([a], [b]) => b.localeCompare(a)).map(([d, stats]) => (
+                                                <TableRow key={d}>
+                                                    <TableCell className="font-medium">{format(parseISO(d+'T00:00:00.000Z'), "dd LLL, y", { locale: es })}</TableCell>
+                                                    <TableCell className="text-center font-semibold">{stats.totalCalls}</TableCell>
+                                                    <TableCell className="text-center">{stats.callTarget?.toFixed(0) ?? 'N/A'}</TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Badge variant="outline" className={cn("text-sm font-bold", getComplianceColor(stats.compliance))}>
+                                                            {stats.compliance?.toFixed(0) ?? 'N/A'}%
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-semibold text-green-600">{stats.effectiveCalls || 0}</TableCell>
+                                                    <TableCell className="text-center font-mono">{stats.effectivenessRate?.toFixed(1) || '0.0'}%</TableCell>
+                                                    <TableCell className="text-center">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <Clock className="h-4 w-4 text-muted-foreground" />
+                                                            {Math.ceil((stats.totalSeconds || 0) / 60)} min
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-mono text-green-600">{stats.firstCallTime || "N/A"}</TableCell>
+                                                    <TableCell className="text-right font-mono text-red-500">{stats.lastCallTime || "N/A"}</TableCell>
+                                                </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
                                     </div>
                                 </div></TableCell></TableRow></CollapsibleContent>}
                             </TableBody>

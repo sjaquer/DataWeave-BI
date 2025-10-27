@@ -7,7 +7,7 @@ import type { ZadarmaCall, ZadarmaCallDocument } from '@/types/zadarma';
 const AGENT_MAP: { [key: string]: string } = {
   "101": "Aylen", "104": "Alanis", "105": "Marisol", "107": "Lisset",
   "108": "Wendy", "110": "Avril", "111": "Luz", "113": "Fiorela",
-  "114": "Eduardo", "115": "Daiana",
+  "114": "Eduardo", "115": "Daiana", "116": "Noemi",
 };
 
 export async function saveZadarmaCalls(calls: ZadarmaCall[]): Promise<number> {

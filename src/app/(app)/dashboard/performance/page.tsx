@@ -156,8 +156,8 @@ export default function AdvisorPerformancePage() {
       (statsData.stats || []).forEach((call: ZadarmaCall) => {
         if (!performanceByAgent[call.sip]) return;
         // Los datos ahora vienen raw, sin conversión de zona horaria
-        const callTime = parseISO(call.callstart);
-        const dayKey = format(callTime, 'yyyy-MM-dd');
+  // Evitar parseos con zonas: usar la porción de fecha tal como viene (YYYY-MM-DD)
+  const dayKey = (call.callstart || '').substring(0, 10);
         
         if (!dailyPerformance[call.sip][dayKey]) {
           dailyPerformance[call.sip][dayKey] = { totalCalls: 0, effectiveCalls: 0, effectivenessRate: 0, totalSeconds: 0, averageCallDuration: 0, firstCallTime: null, lastCallTime: null };
@@ -186,8 +186,10 @@ export default function AdvisorPerformancePage() {
         p.effectivenessRate = p.totalCalls > 0 ? (p.effectiveCalls / p.totalCalls) * 100 : 0;
         p.averageCallDuration = p.effectiveCalls > 0 ? p.totalSeconds / p.effectiveCalls : 0;
         // Los datos ahora vienen raw, solo formatear la hora sin conversión
-        if (p.firstCallTime) p.firstCallTime = format(parseISO(p.firstCallTime), 'HH:mm:ss');
-        if (p.lastCallTime) p.lastCallTime = format(parseISO(p.lastCallTime), 'HH:mm:ss');
+  // Los valores de first/last vienen como 'YYYY-MM-DD HH:mm:ss' en raw.
+  // Para evitar problemas de zona horaria, extraemos la parte de hora directamente.
+  if (p.firstCallTime && String(p.firstCallTime).length >= 19) p.firstCallTime = String(p.firstCallTime).substring(11, 19);
+  if (p.lastCallTime && String(p.lastCallTime).length >= 19) p.lastCallTime = String(p.lastCallTime).substring(11, 19);
         return p;
       };
 
@@ -379,47 +381,45 @@ export default function AdvisorPerformancePage() {
                                 </TableRow></CollapsibleTrigger>
                                 {showDailyBreakdown && <CollapsibleContent asChild><TableRow><TableCell colSpan={showDailyBreakdown ? 9 : 8} className="p-0"><div className="p-4 bg-muted/50">
                                     <h4 className="font-bold mb-2">Desglose Diario para {agent.name}</h4>
-                                    <div className="overflow-x-auto">
-                                        <Table className="min-w-[900px]">
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Fecha</TableHead>
-                                                    <TableHead className="text-center">Intentos</TableHead>
-                                                    <TableHead className="text-center">Objetivo</TableHead>
-                                                    <TableHead className="text-center">Cumplimiento</TableHead>
-                                                    <TableHead className="text-center">Efectivas</TableHead>
-                                                    <TableHead className="text-center">Efectividad</TableHead>
-                                                    <TableHead className="text-center">Minutos Totales</TableHead>
-                                                    <TableHead className="text-center">Primera Llamada</TableHead>
-                                                    <TableHead className="text-right">Última Llamada</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {Object.entries(dailyPerformanceData[agent.id] || {}).sort(([a], [b]) => b.localeCompare(a)).map(([d, stats]) => (
-                                                <TableRow key={d}>
-                                                    <TableCell className="font-medium">{format(parseISO(d+'T00:00:00.000Z'), "dd LLL, y", { locale: es })}</TableCell>
-                                                    <TableCell className="text-center font-semibold">{stats.totalCalls}</TableCell>
-                                                    <TableCell className="text-center">{stats.callTarget?.toFixed(0) ?? 'N/A'}</TableCell>
-                                                    <TableCell className="text-center">
-                                                        <Badge variant="outline" className={cn("text-sm font-bold", getComplianceColor(stats.compliance))}>
-                                                            {stats.compliance?.toFixed(0) ?? 'N/A'}%
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-center font-semibold text-green-600">{stats.effectiveCalls || 0}</TableCell>
-                                                    <TableCell className="text-center font-mono">{stats.effectivenessRate?.toFixed(1) || '0.0'}%</TableCell>
-                                                    <TableCell className="text-center">
-                                                        <div className="flex items-center justify-center gap-2">
-                                                            <Clock className="h-4 w-4 text-muted-foreground" />
-                                                            {Math.ceil((stats.totalSeconds || 0) / 60)} min
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell className="text-center font-mono text-green-600">{stats.firstCallTime || "N/A"}</TableCell>
-                                                    <TableCell className="text-right font-mono text-red-500">{stats.lastCallTime || "N/A"}</TableCell>
-                                                </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
+                  <div className="overflow-x-auto">
+                    <Table className="min-w-[800px]">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead className="text-center">Intentos</TableHead>
+                          <TableHead className="text-center">Cumplimiento</TableHead>
+                          <TableHead className="text-center">Efectivas</TableHead>
+                          <TableHead className="text-center">Efectividad</TableHead>
+                          <TableHead className="text-center">Minutos Totales</TableHead>
+                          <TableHead className="text-center">Primera Llamada</TableHead>
+                          <TableHead className="text-right">Última Llamada</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {Object.entries(dailyPerformanceData[agent.id] || {}).sort(([a], [b]) => b.localeCompare(a)).map(([d, stats]) => (
+                        <TableRow key={d}>
+                          <TableCell className="font-medium">{format(new Date(d + 'T00:00:00'), "dd LLL, y", { locale: es })}</TableCell>
+                          <TableCell className="text-center font-semibold">{stats.totalCalls}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline" className={cn("text-sm font-bold", getComplianceColor(stats.compliance))}>
+                              {stats.compliance?.toFixed(0) ?? 'N/A'}%
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center font-semibold text-green-600">{stats.effectiveCalls || 0}</TableCell>
+                          <TableCell className="text-center font-mono">{stats.effectivenessRate?.toFixed(1) || '0.0'}%</TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <Clock className="h-4 w-4 text-muted-foreground" />
+                              {Math.ceil((stats.totalSeconds || 0) / 60)} min
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center font-mono text-green-600">{stats.firstCallTime || "N/A"}</TableCell>
+                          <TableCell className="text-right font-mono text-red-500">{stats.lastCallTime || "N/A"}</TableCell>
+                        </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                                 </div></TableCell></TableRow></CollapsibleContent>}
                             </TableBody>
                         </Collapsible>

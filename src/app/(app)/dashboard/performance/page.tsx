@@ -121,19 +121,64 @@ export default function AdvisorPerformancePage() {
         }
       };
 
-      // Stats: usar cache por sesión para reducir llamadas repetidas
+      // Stats: cache inteligente por sesión con invalidación para día actual
       const statsCacheKey = `zadarma_stats_${format(date.from, 'yyyy-MM-dd')}_${format(date.to || date.from, 'yyyy-MM-dd')}`;
-      const statsCachedRaw = sessionStorage.getItem(statsCacheKey);
+      const isRequestingToday = format(date.to || date.from, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+      
       let statsData: any = null;
-      if (statsCachedRaw) {
-        try { statsData = JSON.parse(statsCachedRaw); } catch(e) { statsData = null; }
+      
+      // Para el día actual, invalidar caché cada 10 minutos para obtener datos frescos
+      if (!isRequestingToday) {
+        const statsCachedRaw = sessionStorage.getItem(statsCacheKey);
+        if (statsCachedRaw) {
+          try { statsData = JSON.parse(statsCachedRaw); } catch(e) { statsData = null; }
+        }
+      } else {
+        const cacheWithTimestamp = sessionStorage.getItem(statsCacheKey + '_ts');
+        if (cacheWithTimestamp) {
+          try { 
+            const { data, timestamp } = JSON.parse(cacheWithTimestamp);
+            // Invalidar caché del día actual después de 10 minutos
+            if (Date.now() - timestamp < 10 * 60 * 1000) {
+              statsData = data;
+            }
+          } catch(e) { statsData = null; }
+        }
       }
+      
       if (!statsData) {
+        console.log('[ZADARMA FETCH] Requesting fresh data from API...');
         statsData = await attemptFetch(`/api/zadarma/stats?${params.toString()}`);
-        try { sessionStorage.setItem(statsCacheKey, JSON.stringify(statsData)); } catch(e){}
+        
+        // Guardar con timestamp para días actuales, sin timestamp para históricos
+        if (isRequestingToday) {
+          try { 
+            sessionStorage.setItem(statsCacheKey + '_ts', JSON.stringify({ data: statsData, timestamp: Date.now() })); 
+          } catch(e){}
+        } else {
+          try { 
+            sessionStorage.setItem(statsCacheKey, JSON.stringify(statsData)); 
+          } catch(e){}
+        }
       }
       setDataSource(statsData.fromCache);
       try { sessionStorage.setItem(lastKey, String(Date.now())); } catch(e) {}
+
+      // Logs de debug para monitorear nueva API adaptativa
+      const sipsInStats = [...new Set((statsData.stats || []).map((call: ZadarmaCall) => call.sip))].filter(Boolean) as string[];
+      const agentMapKeys = Object.keys(agentMap);
+      const missingAgentsInMap = sipsInStats.filter((sip: string) => !agentMapKeys.includes(sip));
+      const agentsWithNoCalls = agentMapKeys.filter(agentId => !sipsInStats.includes(agentId));
+      
+      console.log('[ZADARMA DEBUG] Stats loaded:', {
+        totalCalls: (statsData.stats || []).length,
+        dataSource: statsData.fromCache,
+        message: statsData.message || 'Sin mensaje',
+        sipsInStats: sipsInStats.slice(0, 12),
+        missingAgentsInMap: missingAgentsInMap.slice(0, 10),
+        agentsWithNoCalls: agentsWithNoCalls.slice(0, 10),
+        metadata: statsData.metadata || 'Sin metadata'
+      });
 
       // Schedules: fetch con concurrencia limitada y cache por agente
       const agentIds = Object.keys(agentMap);
@@ -327,7 +372,27 @@ export default function AdvisorPerformancePage() {
           <div className="flex items-center gap-4">
               <SidebarTrigger className="md:hidden"/>
               <div>
-                  <h2 className="text-3xl font-bold tracking-tight">Rendimiento de Asesores</h2>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-3xl font-bold tracking-tight">Rendimiento de Asesores</h2>
+                    {!isLoading && (
+                      dataSource === 'mixed' ? (
+                        <Badge variant="outline" className="flex items-center gap-1 bg-blue-500/20 text-blue-500 border-blue-500/40">
+                          <Database className="h-3 w-3" />
+                          Datos combinados (caché histórico + API hoy)
+                        </Badge>
+                      ) : dataSource ? (
+                        <Badge variant="outline" className="flex items-center gap-1 bg-green-500/20 text-green-500 border-green-500/40">
+                          <Database className="h-3 w-3" />
+                          Datos desde caché
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="flex items-center gap-1 bg-orange-500/20 text-orange-500 border-orange-500/40">
+                          <Cloud className="h-3 w-3" />
+                          Datos desde API (fetch adaptativo)
+                        </Badge>
+                      )
+                    )}
+                  </div>
                   <p className="text-muted-foreground">Métricas de llamadas y cumplimiento de objetivos.</p>
               </div>
           </div>
@@ -358,7 +423,24 @@ export default function AdvisorPerformancePage() {
                 </PopoverContent>
               </Popover>
               <Button variant="outline" size="sm" onClick={() => setIsScheduleManagerOpen(true)}><Cog className="h-4 w-4 mr-2"/>Gestionar Horarios</Button>
-              <Button variant="outline" size="sm" onClick={() => fetchAndProcessData()} disabled={isLoading}><RefreshCw className="h-4 w-4 mr-2"/>Actualizar</Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  // Limpiar caches para forzar datos frescos
+                  const keys = Object.keys(sessionStorage);
+                  keys.forEach(key => {
+                    if (key.startsWith('zadarma_stats_') || key.startsWith('schedule_')) {
+                      sessionStorage.removeItem(key);
+                    }
+                  });
+                  fetchAndProcessData();
+                }} 
+                disabled={isLoading}
+              >
+                <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")}/>
+                Refrescar Datos
+              </Button>
           </div>
         </div>
         {!isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground">{dataSource === 'mixed' ? <><Database className="h-4 w-4 text-green-500" /><Cloud className="h-4 w-4 text-blue-500" /></> : dataSource ? <Database className="h-4 w-4 text-green-500" /> : <Cloud className="h-4 w-4 text-blue-500" />}<p>{dataSource === 'mixed' ? "Datos combinados (caché histórico + API hoy)" : dataSource ? "Datos desde Firestore (caché histórico)" : "Datos desde API de Zadarma (usando caché de sesión)"}</p></div>}

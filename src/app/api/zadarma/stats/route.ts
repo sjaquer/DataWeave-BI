@@ -9,6 +9,8 @@ import {
   saveZadarmaCalls,
   hasDataForDateRange,
   getZadarmaCallsFromFirestore,
+  getLastSyncedHour,
+  fetchZadarmaAdaptive,
 } from '@/lib/zadarma-helpers';
 
 dotenv.config();
@@ -62,6 +64,7 @@ export async function GET(req: NextRequest) {
   const { ZADARMA_API_KEY, ZADARMA_API_SECRET } = process.env;
 
   try {
+    console.log('[ZADARMA STATS] Request received');
     const { searchParams } = new URL(req.url);
     const startDateQuery = searchParams.get('startDate');
     const endDateQuery = searchParams.get('endDate');
@@ -70,14 +73,17 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ status: 'error', message: 'Los parámetros startDate y endDate son requeridos.' }, { status: 400 });
     }
 
+    console.log('[ZADARMA STATS] Parsing dates:', { startDateQuery, endDateQuery });
     const startDate = startOfDay(parseISO(startDateQuery));
     const endDate = endOfDay(parseISO(endDateQuery));
     const skipSave = searchParams.get('skipSave') === 'true' || searchParams.get('skip_save') === 'true' || searchParams.get('noSave') === 'true';
     const today = startOfDay(new Date());
 
     // Verificar si tenemos datos en caché (Firestore) para el rango solicitado
+    console.log('[ZADARMA STATS] Checking cache for date range');
     const hasHistoricalData = await hasDataForDateRange(startDate, endDate);
     const isRequestingToday = startOfDay(endDate).getTime() === today.getTime();
+    console.log('[ZADARMA STATS] Cache check result:', { hasHistoricalData, isRequestingToday });
     
     let finalStats: any[] = [];
     let dataSource: boolean | 'mixed' = false;
@@ -87,26 +93,54 @@ export async function GET(req: NextRequest) {
       finalStats = await getZadarmaCallsFromFirestore(startDate, endDate);
       dataSource = true;
     } else if (hasHistoricalData && isRequestingToday) {
-      // Modo mixto: datos históricos del caché + datos de hoy de la API
+      // Modo mixto inteligente: datos históricos del caché + sincronización desde última hora
       const historicalEnd = startOfDay(today);
       const historicalData = startDate < historicalEnd ? 
         await getZadarmaCallsFromFirestore(startDate, new Date(historicalEnd.getTime() - 1)) : [];
       
-      // Obtener datos de hoy desde la API
-      const todayData = await fetchZadarmaAPI(today, endDate, ZADARMA_API_KEY!, ZADARMA_API_SECRET!, true);
+      // Determinar desde qué hora sincronizar para evitar redundancia
+      console.log('[ZADARMA STATS] Getting last synced hour');
+      const lastSyncedHour = await getLastSyncedHour(today);
+      let syncStartTime = today;
+      console.log('[ZADARMA STATS] Last synced hour:', lastSyncedHour);
       
-      // Combinar y ORDENAR por timestamp
-      const combinedData = [...historicalData, ...consolidateCalls(todayData)];
-      finalStats = combinedData.sort((a, b) => (a.callstart || '').localeCompare(b.callstart || ''));
+      if (lastSyncedHour) {
+        // Sincronizar desde la hora siguiente a la última guardada (con 1h de overlap por seguridad)
+        syncStartTime = new Date(lastSyncedHour.getTime() + 60 * 60 * 1000); // +1 hora
+        // Pero asegurar que no retrocedamos antes del inicio del día
+        if (syncStartTime < today) syncStartTime = today;
+      }
+      
+      // Obtener datos nuevos desde la API usando fetch adaptativo
+      console.log('[ZADARMA STATS] Fetching new data from API:', { syncStartTime, endDate });
+      const todayData = syncStartTime <= endDate ? 
+        await fetchZadarmaAdaptive(syncStartTime, endDate, ZADARMA_API_KEY!, ZADARMA_API_SECRET!) : [];
+      console.log('[ZADARMA STATS] API fetch result:', todayData.length, 'calls');
+      
+      // Obtener también datos ya guardados de hoy para evitar huecos
+      const todayCachedData = await getZadarmaCallsFromFirestore(today, endDate);
+      
+      // Combinar todos los datos y deduplicar por pbx_call_id + callstart
+      const allData = [...historicalData, ...todayCachedData, ...consolidateCalls(todayData)];
+      const deduplicatedMap = new Map<string, any>();
+      
+      for (const call of allData) {
+        const key = `${call.pbx_call_id}__${call.callstart}`;
+        if (!deduplicatedMap.has(key)) {
+          deduplicatedMap.set(key, call);
+        }
+      }
+      
+      finalStats = Array.from(deduplicatedMap.values()).sort((a, b) => (a.callstart || '').localeCompare(b.callstart || ''));
       dataSource = 'mixed';
       
-      // Guardar datos de hoy si no se especifica skipSave
+      // Guardar datos nuevos si los hay y no se especifica skipSave
       if (todayData.length > 0 && !skipSave) {
         saveZadarmaCalls(consolidateCalls(todayData)).catch(err => console.error('[AUTO-SYNC BKG] Error:', err));
       }
     } else {
-      // No hay datos en caché, obtener todo desde la API
-      const apiData = await fetchZadarmaAPI(startDate, endDate, ZADARMA_API_KEY!, ZADARMA_API_SECRET!, true);
+      // No hay datos en caché, obtener todo desde la API usando fetch adaptativo
+      const apiData = await fetchZadarmaAdaptive(startDate, endDate, ZADARMA_API_KEY!, ZADARMA_API_SECRET!);
       finalStats = consolidateCalls(apiData); // consolidateCalls ya ordena internamente
       dataSource = false;
       
@@ -151,6 +185,11 @@ export async function GET(req: NextRequest) {
 
   } catch (error: any) {
     console.error('[ZADARMA STATS FATAL ERROR]:', error);
-    return NextResponse.json({ status: 'error', message: `Error fatal del servidor: ${error.message}` }, { status: 500 });
+    console.error('[ZADARMA STATS STACK]:', error.stack);
+    return NextResponse.json({ 
+      status: 'error', 
+      message: `Error fatal del servidor: ${error.message}`,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    }, { status: 500 });
   }
 }

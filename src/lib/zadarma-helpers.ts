@@ -3,6 +3,7 @@ import { db } from '@/lib/firebase-admin';
 import { Timestamp, DocumentData } from 'firebase-admin/firestore';
 import { format, startOfDay, addDays } from 'date-fns';
 import type { ZadarmaCall, ZadarmaCallDocument } from '@/types/zadarma';
+import CryptoJS from 'crypto-js';
 
 const AGENT_MAP: { [key: string]: string } = {
   "101": "Aylen", "104": "Alanis", "105": "Marisol", "107": "Lisset",
@@ -108,6 +109,132 @@ export async function getMissingDaysFromFirestore(startDate: Date, endDate: Date
     }
     
     return daysInRange.filter(d => !foundDates.has(format(d, 'yyyy-MM-dd')));
+}
+
+export async function getLastSyncedHour(date: Date): Promise<Date | null> {
+  // Buscar la última llamada guardada para este día para determinar hasta qué hora tenemos datos
+  const dayStr = format(date, 'yyyy-MM-dd');
+  const snapshot = await db.collection('zadarma_calls')
+    .where('callDate', '==', dayStr)
+    .get();
+  
+  if (snapshot.empty) return null;
+  
+  // Ordenar en memoria y tomar el último
+  const calls = snapshot.docs.map((doc: DocumentData) => doc.data()).filter((call: any) => call.callstart);
+  if (calls.length === 0) return null;
+  
+  calls.sort((a: any, b: any) => String(b.callstart || '').localeCompare(String(a.callstart || '')));
+  const lastCall = calls[0];
+  if (!lastCall.callstart) return null;
+  
+  // Parsear el timestamp y devolver la fecha/hora
+  try {
+    // callstart formato: "yyyy-MM-dd HH:mm:ss"
+    const [datePart, timePart] = lastCall.callstart.split(' ');
+    if (!timePart) return null;
+    
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hour] = timePart.split(':').map(Number);
+    
+    return new Date(year, month - 1, day, hour, 0, 0, 0);
+  } catch (error) {
+    console.error('[PARSE LAST SYNC ERROR]:', error);
+    return null;
+  }
+}
+
+async function fetchZadarmaDirectAdaptive(startStr: string, endStr: string, apiKey: string, apiSecret: string) {
+  // Función interna para hacer petición directa con retry y 429 handling
+  const method = '/v1/statistics/pbx/';
+  const params: any = { start: startStr, end: endStr, format: 'json', version: '2' };
+  const sortedKeys = Object.keys(params).sort();
+  const sortedParams = new URLSearchParams();
+  sortedKeys.forEach(key => sortedParams.append(key, params[key]));
+  const queryString = sortedParams.toString();
+
+  const md5Hash = CryptoJS.MD5(queryString).toString(CryptoJS.enc.Hex);
+  const dataToSign = method + queryString + md5Hash;
+  const hmac = CryptoJS.HmacSHA1(dataToSign, apiSecret);
+  const signature = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(hmac.toString(CryptoJS.enc.Hex)));
+  const authHeader = `${apiKey}:${signature}`;
+  const apiUrl = `https://api.zadarma.com${method}?${queryString}`;
+
+  let attempt = 0;
+  const maxAttempts = 4;
+  while (true) {
+    attempt++;
+    const response = await fetch(apiUrl, { method: 'GET', headers: { 'Authorization': authHeader } });
+    if (response.status === 429) {
+      const ra = response.headers.get('Retry-After');
+      const waitMs = ra ? Number(ra) * 1000 : Math.min(60000, Math.pow(2, attempt) * 1000);
+      if (attempt >= maxAttempts) throw new Error(`Rate limited by Zadarma after ${attempt} attempts`);
+      await new Promise(r => setTimeout(r, waitMs));
+      continue;
+    }
+    if (!response.ok) throw new Error(`Error de red de Zadarma: ${response.status} ${response.statusText}`);
+    const data = await response.json();
+    if (data.status === 'error') throw new Error(`Error de API de Zadarma: ${data.message}`);
+    return data.stats || [];
+  }
+}
+
+export async function fetchZadarmaAdaptive(startDate: Date, endDate: Date, apiKey: string, apiSecret: string): Promise<any[]> {
+  // Fetch adaptativo con división recursiva para evitar truncamiento por límite por petición
+  console.log('[FETCH ADAPTIVE] Starting adaptive fetch:', { startDate, endDate });
+  
+  try {
+    const LIMIT = 1000;
+    const minWindowMinutes = 5;
+
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+
+    const allStatsMap = new Map<string, any>();
+
+  async function fetchRangeRecursive(a: Date, b: Date) {
+    const s = fmt(a);
+    const e = fmt(b);
+    try {
+      const chunk = await fetchZadarmaDirectAdaptive(s, e, apiKey, apiSecret);
+      
+      // Si chunk está por debajo del límite, aceptarlo
+      if (chunk.length < LIMIT) {
+        for (const c of chunk) {
+          const key = `${c.pbx_call_id}__${c.callstart}`;
+          if (!allStatsMap.has(key)) allStatsMap.set(key, c);
+        }
+        return;
+      }
+      
+      // Si chunk alcanza/supera límite, intentar dividir a menos que la ventana sea muy pequeña
+      const spanMs = b.getTime() - a.getTime();
+      const spanMinutes = spanMs / 60000;
+      if (spanMinutes <= minWindowMinutes) {
+        // Ventana muy pequeña, incluir lo que tenemos
+        for (const c of chunk) {
+          const key = `${c.pbx_call_id}__${c.callstart}`;
+          if (!allStatsMap.has(key)) allStatsMap.set(key, c);
+        }
+        return;
+      }
+      
+      const mid = new Date(a.getTime() + Math.floor(spanMs / 2));
+      await fetchRangeRecursive(a, mid);
+      await fetchRangeRecursive(new Date(mid.getTime() + 1000), b);
+    } catch (err) {
+      console.error(`[ADAPTIVE FETCH ERROR] ${s} to ${e}:`, err);
+      // En caso de error, no hacer nada más para este rango
+    }
+  }
+
+    await fetchRangeRecursive(startDate, endDate);
+    console.log('[FETCH ADAPTIVE] Completed adaptive fetch:', allStatsMap.size, 'unique calls');
+    return Array.from(allStatsMap.values()).sort((a: any, b: any) => String(a.callstart || '').localeCompare(String(b.callstart || '')));
+  } catch (error: any) {
+    console.error('[FETCH ADAPTIVE FATAL ERROR]:', error);
+    // En caso de error crítico, devolver array vacío para no romper la cadena
+    return [];
+  }
 }
 
 const getLockRef = (date: Date) => db.collection('zadarma_sync_locks').doc(format(date, 'yyyy-MM-dd'));

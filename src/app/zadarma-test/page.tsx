@@ -8,6 +8,10 @@ export default function ZadarmaTestPage() {
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<AnyObj[]>([]);
   const [skipSave, setSkipSave] = useState<boolean>(true);
+  // For test-only behaviour: always request using the Spain-time debug endpoint
+  // to compare results with/without timezone conversion. This is intentionally
+  // enabled here only for the test page.
+  const [useSpainTz, setUseSpainTz] = useState<boolean>(true);
   const [reloadKey, setReloadKey] = useState<number>(0);
   const [lastRequestAt, setLastRequestAt] = useState<number>(0);
   const [queued, setQueued] = useState<boolean>(false);
@@ -76,7 +80,7 @@ export default function ZadarmaTestPage() {
     setError(null);
 
     try {
-      // Construir fecha de hoy en formato YYYY-MM-DD (Lima local date)
+  // Construir fecha de hoy en formato YYYY-MM-DD (Lima local date)
       const today = new Date();
       const yyyy = today.getFullYear();
       const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -84,7 +88,7 @@ export default function ZadarmaTestPage() {
       const isoDay = `${yyyy}-${mm}-${dd}`;
 
       // Caching key simplificado
-      const cacheKey = `zadarma_${isoDay}_${skipSave ? 'nosave' : 'save'}`;
+  const cacheKey = `zadarma_${isoDay}_${skipSave ? 'nosave' : 'save'}_${useSpainTz ? 'spain' : 'local'}`;
       const cached = sessionStorage.getItem(cacheKey);
       if (cached) {
         try {
@@ -98,10 +102,11 @@ export default function ZadarmaTestPage() {
         } catch (e) { /* ignore cache parse errors */ }
       }
 
-      // Construir URL (raw mode ahora es por defecto en el backend)
+      // Test page: always use the debug-spain endpoint so we can compare behavior
+      // with Spain timezone logic even if the checkbox is unchecked.
       const params = new URLSearchParams({ startDate: isoDay, endDate: isoDay });
       if (skipSave) params.set('skipSave', 'true');
-      const url = `/api/zadarma/stats?${params.toString()}`;
+      const url = `/api/zadarma/debug-spain?${params.toString()}`;
 
       const data = await attemptFetch(url, 3);
       if (data.status === 'error') throw new Error(data.message || 'Error desde la API');
@@ -129,6 +134,8 @@ export default function ZadarmaTestPage() {
   useEffect(() => { load(); }, [reloadKey]);
   // run when toggles change, but guard by triggering reloadKey (so cooldown logic centralizes)
   useEffect(() => { setReloadKey(k => k + 1); }, [skipSave]);
+  // When user switches the Spain timezone toggle, force a reload so cacheKey changes and new endpoint is called
+  useEffect(() => { setReloadKey(k => k + 1); }, [useSpainTz]);
 
   return (
     <div style={{ padding: 24 }}>
@@ -140,6 +147,10 @@ export default function ZadarmaTestPage() {
           <input type="checkbox" checked={skipSave} onChange={e => setSkipSave(e.target.checked)} />{' '}
           Evitar guardar en BD (skipSave)
         </label>
+          <label style={{ marginRight: 12 }}>
+            <input type="checkbox" checked={useSpainTz} onChange={e => setUseSpainTz(e.target.checked)} />{' '}
+            Pedir datos según zona España (solo para test)
+          </label>
         <button onClick={() => setReloadKey(k => k + 1)} style={{ marginLeft: 8 }}>Recargar</button>
 
         <div style={{ display: 'inline-block', marginLeft: 16, verticalAlign: 'middle', color: '#444' }}>

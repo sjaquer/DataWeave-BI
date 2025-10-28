@@ -95,7 +95,9 @@ export async function GET(req: NextRequest) {
       // Obtener datos de hoy desde la API
       const todayData = await fetchZadarmaAPI(today, endDate, ZADARMA_API_KEY!, ZADARMA_API_SECRET!, true);
       
-      finalStats = [...historicalData, ...consolidateCalls(todayData)];
+      // Combinar y ORDENAR por timestamp
+      const combinedData = [...historicalData, ...consolidateCalls(todayData)];
+      finalStats = combinedData.sort((a, b) => (a.callstart || '').localeCompare(b.callstart || ''));
       dataSource = 'mixed';
       
       // Guardar datos de hoy si no se especifica skipSave
@@ -105,7 +107,7 @@ export async function GET(req: NextRequest) {
     } else {
       // No hay datos en caché, obtener todo desde la API
       const apiData = await fetchZadarmaAPI(startDate, endDate, ZADARMA_API_KEY!, ZADARMA_API_SECRET!, true);
-      finalStats = consolidateCalls(apiData);
+      finalStats = consolidateCalls(apiData); // consolidateCalls ya ordena internamente
       dataSource = false;
       
       // Guardar datos obtenidos si no se especifica skipSave
@@ -114,15 +116,37 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // METADATOS ADICIONALES para mejorar la información
+    const metadata = {
+      totalCalls: finalStats.length,
+      dateRange: {
+        start: format(startDate, 'yyyy-MM-dd'),
+        end: format(endDate, 'yyyy-MM-dd')
+      },
+      agents: [...new Set(finalStats.map(call => call.sip))].length,
+      callTypes: {
+        outbound: finalStats.filter(call => String(call.destination || '').length >= 5).length,
+        answered: finalStats.filter(call => call.disposition === 'answered').length,
+        effectiveness: finalStats.length > 0 ? 
+          (finalStats.filter(call => call.disposition === 'answered').length / finalStats.filter(call => String(call.destination || '').length >= 5).length * 100).toFixed(1) + '%' : '0%'
+      },
+      timeRange: finalStats.length > 0 ? {
+        first: finalStats[0]?.callstart || null,
+        last: finalStats[finalStats.length - 1]?.callstart || null
+      } : null,
+      processed: new Date().toISOString()
+    };
+
     return NextResponse.json({
       status: 'success',
       stats: finalStats,
       fromCache: dataSource,
+      metadata,
       message: dataSource === 'mixed' ? 
-        'Datos combinados: históricos desde caché + hoy desde API.' :
+        `Datos combinados: históricos desde caché + hoy desde API. ${metadata.totalCalls} llamadas procesadas.` :
         dataSource ? 
-        'Datos obtenidos desde caché histórico.' : 
-        'Datos obtenidos desde API y guardados en caché.',
+        `Datos obtenidos desde caché histórico. ${metadata.totalCalls} llamadas recuperadas.` : 
+        `Datos obtenidos desde API y guardados en caché. ${metadata.totalCalls} llamadas procesadas.`,
     });
 
   } catch (error: any) {

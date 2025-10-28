@@ -53,6 +53,7 @@ export async function getZadarmaCallsFromFirestore(startDate: Date, endDate: Dat
   const snapshot = await db.collection('zadarma_calls')
     .where('callDate', '>=', format(startDate, 'yyyy-MM-dd'))
     .where('callDate', '<=', format(endDate, 'yyyy-MM-dd'))
+    .orderBy('callstart', 'asc') // ORDENAR POR TIMESTAMP
     .get();
 
   return snapshot.docs.map((doc: DocumentData) => doc.data() as ZadarmaCall);
@@ -131,18 +132,45 @@ export function consolidateCalls(calls: ZadarmaCall[]): ZadarmaCall[] {
   if (!calls || calls.length === 0) return [];
   
   // Filtrar y limpiar datos básicos
-  return calls.filter(call => 
+  const cleanedCalls = calls.filter(call => 
     call && 
     call.pbx_call_id && 
     call.callstart && 
     call.sip
-  ).map(call => ({
+  ).map((call, index) => ({
     ...call,
     // Asegurar que los números sean números
     seconds: Number(call.seconds) || 0,
     // Normalizar el estado de disposición
-    disposition: call.disposition || 'unknown'
+    disposition: call.disposition || 'unknown',
+    // METADATOS ADICIONALES:
+    // Extraer componentes de tiempo para facilitar análisis
+    callDate: call.callstart ? call.callstart.substring(0, 10) : '',
+    callTime: call.callstart ? call.callstart.substring(11, 19) : '',
+    callHour: call.callstart ? parseInt(call.callstart.substring(11, 13)) : 0,
+    // Clasificar tipo de llamada
+    isOutbound: String(call.destination || '').length >= 5,
+    isAnswered: call.disposition === 'answered',
+    // Duración categorizada
+    durationCategory: (() => {
+      const secs = Number(call.seconds) || 0;
+      if (secs === 0) return 'no-answer';
+      if (secs < 30) return 'short';
+      if (secs < 180) return 'medium';
+      return 'long';
+    })(),
+    // Nombre del agente desde el mapa
+    agentName: AGENT_MAP[call.sip] || 'Desconocido',
+    // Índice de orden original (para debugging)
+    originalIndex: index
   }));
+
+  // ORDENAR POR TIMESTAMP CRONOLÓGICAMENTE (más antigua primero)
+  return cleanedCalls.sort((a, b) => {
+    const timeA = a.callstart || '';
+    const timeB = b.callstart || '';
+    return timeA.localeCompare(timeB);
+  });
 }
 
 export function validateZadarmaCredentials(): { valid: boolean; message?: string } {

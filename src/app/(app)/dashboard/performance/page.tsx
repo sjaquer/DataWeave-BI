@@ -33,7 +33,23 @@ const CALLS_PER_HOUR_TARGET = 12;
 // --- Types ---
 interface DaySchedule { active: boolean; start: string; end: string; }
 interface Schedule { [day: string]: DaySchedule; }
-interface ZadarmaCall { pbx_call_id: string; callstart: string; sip: string; destination: string | number; disposition: string; seconds: number; }
+interface ZadarmaCall { 
+  pbx_call_id: string; 
+  callstart: string; 
+  sip: string; 
+  destination: string | number; 
+  disposition: string; 
+  seconds: number; 
+  // Nuevos metadatos opcionales (añadidos por consolidateCalls)
+  callDate?: string;
+  callTime?: string; 
+  callHour?: number;
+  isOutbound?: boolean;
+  isAnswered?: boolean;
+  durationCategory?: 'no-answer' | 'short' | 'medium' | 'long';
+  agentName?: string;
+  originalIndex?: number;
+}
 interface PerformanceMetrics { totalCalls: number; effectiveCalls: number; effectivenessRate: number; totalSeconds: number; averageCallDuration: number; }
 interface ActivityMetrics { firstCallTime: string | null; lastCallTime: string | null; }
 interface AdvisorPerformance extends PerformanceMetrics, ActivityMetrics { id: string; name: string; callTarget?: number; compliance?: number; }
@@ -155,9 +171,9 @@ export default function AdvisorPerformancePage() {
       
       (statsData.stats || []).forEach((call: ZadarmaCall) => {
         if (!performanceByAgent[call.sip]) return;
-        // Los datos ahora vienen raw, sin conversión de zona horaria
-  // Evitar parseos con zonas: usar la porción de fecha tal como viene (YYYY-MM-DD)
-  const dayKey = (call.callstart || '').substring(0, 10);
+        
+        // Usar metadatos pre-calculados cuando estén disponibles, sino calcular como antes
+        const dayKey = (call as any).callDate || (call.callstart || '').substring(0, 10);
         
         if (!dailyPerformance[call.sip][dayKey]) {
           dailyPerformance[call.sip][dayKey] = { totalCalls: 0, effectiveCalls: 0, effectivenessRate: 0, totalSeconds: 0, averageCallDuration: 0, firstCallTime: null, lastCallTime: null };
@@ -172,11 +188,14 @@ export default function AdvisorPerformancePage() {
         if (!agentDaily.firstCallTime || call.callstart < agentDaily.firstCallTime) agentDaily.firstCallTime = call.callstart;
         if (!agentDaily.lastCallTime || call.callstart > agentDaily.lastCallTime) agentDaily.lastCallTime = call.callstart;
         
-        // 2. Cálculo de Rendimiento: solo usa llamadas salientes.
-        if (String(call.destination).length >= 5) {
+        // 2. Cálculo de Rendimiento: usar metadatos pre-calculados cuando estén disponibles
+        const isOutboundCall = (call as any).isOutbound !== undefined ? (call as any).isOutbound : String(call.destination || '').length >= 5;
+        const isAnsweredCall = (call as any).isAnswered !== undefined ? (call as any).isAnswered : call.disposition === 'answered';
+        
+        if (isOutboundCall) {
             agentTotal.totalCalls++; agentDaily.totalCalls++;
             agentTotal.totalSeconds += call.seconds; agentDaily.totalSeconds += call.seconds;
-            if (call.disposition === 'answered') {
+            if (isAnsweredCall) {
                 agentTotal.effectiveCalls++; agentDaily.effectiveCalls++;
             }
         }
@@ -185,11 +204,15 @@ export default function AdvisorPerformancePage() {
       const formatMetrics = (p: PerformanceMetrics & ActivityMetrics) => {
         p.effectivenessRate = p.totalCalls > 0 ? (p.effectiveCalls / p.totalCalls) * 100 : 0;
         p.averageCallDuration = p.effectiveCalls > 0 ? p.totalSeconds / p.effectiveCalls : 0;
-        // Los datos ahora vienen raw, solo formatear la hora sin conversión
-  // Los valores de first/last vienen como 'YYYY-MM-DD HH:mm:ss' en raw.
-  // Para evitar problemas de zona horaria, extraemos la parte de hora directamente.
-  if (p.firstCallTime && String(p.firstCallTime).length >= 19) p.firstCallTime = String(p.firstCallTime).substring(11, 19);
-  if (p.lastCallTime && String(p.lastCallTime).length >= 19) p.lastCallTime = String(p.lastCallTime).substring(11, 19);
+        
+        // Formatear horas: extraer la porción HH:mm:ss directamente del timestamp raw
+        if (p.firstCallTime && String(p.firstCallTime).length >= 19) {
+          p.firstCallTime = String(p.firstCallTime).substring(11, 19);
+        }
+        if (p.lastCallTime && String(p.lastCallTime).length >= 19) {
+          p.lastCallTime = String(p.lastCallTime).substring(11, 19);
+        }
+        
         return p;
       };
 

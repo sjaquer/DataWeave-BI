@@ -50,13 +50,19 @@ export async function updateZadarmaCallsInFirestore(calls: ZadarmaCall[], date: 
 }
 
 export async function getZadarmaCallsFromFirestore(startDate: Date, endDate: Date): Promise<ZadarmaCall[]> {
+  // Nota: evitamos pedir un orderBy a Firestore que implique un índice compuesto
+  // porque consultas con filtros de rango sobre un campo y ordenamiento sobre
+  // otro requieren un índice compuesto en Firestore. Para evitar el error
+  // FAILED_PRECONDITION en entornos donde el índice no exista, hacemos la
+  // ordenación en memoria después de recuperar los documentos.
   const snapshot = await db.collection('zadarma_calls')
     .where('callDate', '>=', format(startDate, 'yyyy-MM-dd'))
     .where('callDate', '<=', format(endDate, 'yyyy-MM-dd'))
-    .orderBy('callstart', 'asc') // ORDENAR POR TIMESTAMP
     .get();
 
-  return snapshot.docs.map((doc: DocumentData) => doc.data() as ZadarmaCall);
+  const results = snapshot.docs.map((doc: DocumentData) => doc.data() as ZadarmaCall);
+  // Ordenar localmente por callstart (cadena ISO-like yyyy-MM-dd HH:mm:ss funciona con lexicographical)
+  return results.sort((a: ZadarmaCall, b: ZadarmaCall) => (a.callstart || '').localeCompare(b.callstart || ''));
 }
 
 export async function hasDataForDateRange(startDate: Date, endDate: Date): Promise<boolean> {

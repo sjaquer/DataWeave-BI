@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/zadarma-daily-sync",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/zadarma-backfill",
+      "schedule": "0 2 * * *"
     }
   ]
 }

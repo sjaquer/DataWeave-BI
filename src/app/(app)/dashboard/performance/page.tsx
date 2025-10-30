@@ -375,22 +375,10 @@ export default function AdvisorPerformancePage() {
                   <div className="flex items-center gap-3">
                     <h2 className="text-3xl font-bold tracking-tight">Rendimiento de Asesores</h2>
                     {!isLoading && (
-                      dataSource === 'mixed' ? (
-                        <Badge variant="outline" className="flex items-center gap-1 bg-blue-500/20 text-blue-500 border-blue-500/40">
-                          <Database className="h-3 w-3" />
-                          Datos combinados (caché histórico + API hoy)
-                        </Badge>
-                      ) : dataSource ? (
-                        <Badge variant="outline" className="flex items-center gap-1 bg-green-500/20 text-green-500 border-green-500/40">
-                          <Database className="h-3 w-3" />
-                          Datos desde caché
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="flex items-center gap-1 bg-orange-500/20 text-orange-500 border-orange-500/40">
-                          <Cloud className="h-3 w-3" />
-                          Datos desde API (fetch adaptativo)
-                        </Badge>
-                      )
+                      <Badge variant="outline" className="flex items-center gap-1 bg-green-500/20 text-green-500 border-green-500/40">
+                        <Database className="h-3 w-3" />
+                        Datos desde Firestore (Webhook + Backfill)
+                      </Badge>
                     )}
                   </div>
                   <p className="text-muted-foreground">Métricas de llamadas y cumplimiento de objetivos.</p>
@@ -443,7 +431,7 @@ export default function AdvisorPerformancePage() {
               </Button>
           </div>
         </div>
-        {!isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground">{dataSource === 'mixed' ? <><Database className="h-4 w-4 text-green-500" /><Cloud className="h-4 w-4 text-blue-500" /></> : dataSource ? <Database className="h-4 w-4 text-green-500" /> : <Cloud className="h-4 w-4 text-blue-500" />}<p>{dataSource === 'mixed' ? "Datos combinados (caché histórico + API hoy)" : dataSource ? "Datos desde Firestore (caché histórico)" : "Datos desde API de Zadarma (usando caché de sesión)"}</p></div>}
+        {!isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Database className="h-4 w-4 text-green-500" /><p>Datos poblados por Webhook (tiempo real) + Backfill diario (rectificación automática)</p></div>}
       
         {isLoading ? ( <div className="flex items-center justify-center min-h-[400px]"><Loader className="h-8 w-8 animate-spin text-primary" /><p className="ml-4 text-muted-foreground">Calculando rendimiento...</p></div> ) :
         (<div className="space-y-6">

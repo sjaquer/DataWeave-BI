@@ -11,7 +11,11 @@
     "postinstall": "patch-package",
     "zadarma:backfill": "tsx scripts/zadarma-backfill.ts",
     "zadarma:backfill:test": "tsx scripts/zadarma-backfill.ts --from=\"2025-10-29\" --to=\"2025-10-29\" --timezone=\"America/Lima\"",
-    "zadarma:backfill:daily": "tsx scripts/zadarma-backfill.ts --days=1 --timezone=\"America/Lima\""
+    "zadarma:backfill:daily": "tsx scripts/zadarma-backfill.ts --days=1 --timezone=\"America/Lima\"",
+    "test:webhook": "tsx scripts/test-webhook-manual.ts",
+    "test:api": "tsx scripts/test-api-stats.ts",
+    "check:firestore": "tsx scripts/check-firestore-simple.ts",
+    "fill:testdata": "tsx scripts/fill-test-data.ts"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.0.0",

@@ -47,13 +47,14 @@ const AGENT_MAP: { [key: string]: string } = {
 };
 
 // ============================================================================
-// HANDLER DEL WEBHOOK
+// HANDLER DEL WEBHOOK - GET Y POST
 // ============================================================================
 
-export async function POST(req: NextRequest) {
-  // ══════════════════════════════════════════════════════════════════════════
-  // VERIFICACIÓN DE WEBHOOK (Zadarma envía zd_echo para validar el endpoint)
-  // ══════════════════════════════════════════════════════════════════════════
+/**
+ * GET - Verificación de webhook por Zadarma
+ * Zadarma envía ?zd_echo=XXXXX para validar que el endpoint es tuyo
+ */
+export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const zdEcho = searchParams.get('zd_echo');
   
@@ -65,15 +66,28 @@ export async function POST(req: NextRequest) {
       headers: { 'Content-Type': 'text/plain' }
     });
   }
+  
+  // Si no hay zd_echo, devolver error
+  return NextResponse.json({ 
+    error: 'Missing zd_echo parameter for verification' 
+  }, { status: 400 });
+}
 
+/**
+ * POST - Recepción de eventos de webhook
+ * Zadarma envía NOTIFY_END, NOTIFY_MISSED, etc.
+ */
+export async function POST(req: NextRequest) {
   // ══════════════════════════════════════════════════════════════════════════
-  // PROCESAMIENTO NORMAL DE WEBHOOKS
+  // RESPUESTA INMEDIATA A ZADARMA
   // ══════════════════════════════════════════════════════════════════════════
-  // CRÍTICO: Responder inmediatamente a Zadarma con 200 OK
-  // El procesamiento se hace después de enviar la respuesta
+  // CRÍTICO: Responder inmediatamente con 200 OK para evitar timeouts
   const response = NextResponse.json({ status: 'ok' }, { status: 200 });
 
-  // Procesar en "segundo plano" (dentro del mismo request pero después de preparar la respuesta)
+  // ══════════════════════════════════════════════════════════════════════════
+  // PROCESAMIENTO EN SEGUNDO PLANO
+  // ══════════════════════════════════════════════════════════════════════════
+  // Procesar después de enviar la respuesta
   processWebhookInBackground(req).catch((error) => {
     console.error('[WEBHOOK ERROR] Error procesando webhook de Zadarma:', error);
   });
@@ -216,13 +230,4 @@ async function handleNotifyMissed(payload: any) {
     console.error('[WEBHOOK] Error en handleNotifyMissed:', error);
     throw error;
   }
-}
-
-// Handler GET para verificación
-export async function GET() {
-  return NextResponse.json({
-    status: 'ok',
-    message: 'Zadarma Webhook Endpoint - Ready to receive POST requests',
-    timestamp: new Date().toISOString(),
-  });
 }

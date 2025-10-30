@@ -51,6 +51,24 @@ const AGENT_MAP: { [key: string]: string } = {
 // ============================================================================
 
 export async function POST(req: NextRequest) {
+  // ══════════════════════════════════════════════════════════════════════════
+  // VERIFICACIÓN DE WEBHOOK (Zadarma envía zd_echo para validar el endpoint)
+  // ══════════════════════════════════════════════════════════════════════════
+  const { searchParams } = new URL(req.url);
+  const zdEcho = searchParams.get('zd_echo');
+  
+  if (zdEcho) {
+    console.log('[WEBHOOK VERIFICATION] Zadarma validation request, zd_echo:', zdEcho);
+    // Zadarma espera que devolvamos el valor de zd_echo tal cual
+    return new NextResponse(zdEcho, { 
+      status: 200,
+      headers: { 'Content-Type': 'text/plain' }
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // PROCESAMIENTO NORMAL DE WEBHOOKS
+  // ══════════════════════════════════════════════════════════════════════════
   // CRÍTICO: Responder inmediatamente a Zadarma con 200 OK
   // El procesamiento se hace después de enviar la respuesta
   const response = NextResponse.json({ status: 'ok' }, { status: 200 });

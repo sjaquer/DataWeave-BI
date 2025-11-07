@@ -4,6 +4,7 @@ import * as dotenv from "dotenv";
 import CryptoJS from "crypto-js";
 import { db } from "@/lib/firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
+import { saveSyncMetadata } from "@/lib/zadarma-helpers";
 
 dotenv.config();
 
@@ -72,10 +73,89 @@ async function saveCallToFirestore(call: any): Promise<boolean> {
 }
 
 /**
- * Obtiene llamadas de un día específico desde Zadarma API
+ * Contador global de requests para rate limiting
+ */
+let globalRequestCount = 0;
+
+/**
+ * Función para hacer una petición con rate limiting global
+ */
+async function makeZadarmaRequest(params: any, apiKey: string, apiSecret: string): Promise<any> {
+  // Rate limiting: Máximo 2 requests, luego wait 120s
+  if (globalRequestCount >= 2) {
+    console.log(`[BACKFILL-RANGE] ⏳ Rate limit alcanzado (${globalRequestCount}/2). Esperando 120s...`);
+    await sleep(120000);
+    globalRequestCount = 0;
+  }
+
+  const method = "/v1/statistics/pbx/";
+  
+  const sortedKeys = Object.keys(params).sort();
+  const sortedParams = new URLSearchParams();
+  sortedKeys.forEach((key) =>
+    sortedParams.append(key, String(params[key]))
+  );
+  const queryString = sortedParams.toString();
+
+  const md5Hash = CryptoJS.MD5(queryString).toString(CryptoJS.enc.Hex);
+  const dataToSign = method + queryString + md5Hash;
+
+  const hmac = CryptoJS.HmacSHA1(dataToSign, apiSecret);
+  const hmacHex = hmac.toString(CryptoJS.enc.Hex);
+
+  const signature = CryptoJS.enc.Base64.stringify(
+    CryptoJS.enc.Utf8.parse(hmacHex)
+  );
+  const authHeader = `${apiKey}:${signature}`;
+
+  const apiUrl = `https://api.zadarma.com${method}?${queryString}`;
+
+  let attempt = 0;
+  let success = false;
+  let data: any;
+
+  while (!success && attempt < 3) {
+    attempt++;
+    try {
+      console.log(`[BACKFILL-RANGE] 📤 Request #${globalRequestCount + 1}/2 - skip=${params.skip}, intento=${attempt}`);
+      
+      const response = await fetch(apiUrl, {
+        method: "GET",
+        headers: { Authorization: authHeader },
+      });
+
+      // Incrementar contador DESPUÉS del request
+      globalRequestCount++;
+
+      data = await response.json();
+
+      if (data.status === "error") {
+        if (
+          data.message?.toLowerCase()?.includes("limit exceeded") ||
+          response.status === 429
+        ) {
+          console.log(`[BACKFILL-RANGE] ⏳ API rate limit excedido, esperando 60s...`);
+          await sleep(60000);
+          continue; // Reintentar sin incrementar attempt
+        }
+        throw new Error(`Error Zadarma: ${data.message}`);
+      }
+
+      success = true;
+    } catch (err) {
+      console.warn(`[BACKFILL-RANGE] ❌ Error en intento ${attempt}/3:`, err);
+      if (attempt === 3) throw err;
+      await sleep(30000);
+    }
+  }
+
+  return data;
+}
+
+/**
+ * Obtiene llamadas de un día específico desde Zadarma API con paginación completa
  */
 async function fetchCallsForDay(date: string, apiKey: string, apiSecret: string): Promise<any[]> {
-  const method = "/v1/statistics/pbx/";
   const limit = 1000;
   let skip = 0;
   const allCalls: any[] = [];
@@ -85,74 +165,29 @@ async function fetchCallsForDay(date: string, apiKey: string, apiSecret: string)
 
   let continuePaging = true;
 
+  console.log(`[BACKFILL-RANGE] 🔍 Iniciando paginación para ${date}...`);
+
   while (continuePaging) {
-    let attempt = 0;
-    let success = false;
-    let data: any;
+    const params = {
+      start: formattedStartDate,
+      end: formattedEndDate,
+      format: "json",
+      version: "2",
+      skip,
+    };
 
-    while (!success && attempt < 3) {
-      attempt++;
-      try {
-        const params: { [key: string]: string | number } = {
-          start: formattedStartDate,
-          end: formattedEndDate,
-          format: "json",
-          version: "2",
-          skip,
-        };
+    const data = await makeZadarmaRequest(params, apiKey, apiSecret);
 
-        const sortedKeys = Object.keys(params).sort();
-        const sortedParams = new URLSearchParams();
-        sortedKeys.forEach((key) =>
-          sortedParams.append(key, String(params[key]))
-        );
-        const queryString = sortedParams.toString();
+    const calls = data.stats || [];
+    allCalls.push(...calls);
 
-        const md5Hash = CryptoJS.MD5(queryString).toString(CryptoJS.enc.Hex);
-        const dataToSign = method + queryString + md5Hash;
+    console.log(`[BACKFILL-RANGE] 📊 ${date} página skip=${skip}: ${calls.length} llamadas (total: ${allCalls.length})`);
 
-        const hmac = CryptoJS.HmacSHA1(dataToSign, apiSecret);
-        const hmacHex = hmac.toString(CryptoJS.enc.Hex);
-
-        const signature = CryptoJS.enc.Base64.stringify(
-          CryptoJS.enc.Utf8.parse(hmacHex)
-        );
-        const authHeader = `${apiKey}:${signature}`;
-
-        const apiUrl = `https://api.zadarma.com${method}?${queryString}`;
-
-        const response = await fetch(apiUrl, {
-          method: "GET",
-          headers: { Authorization: authHeader },
-        });
-
-        data = await response.json();
-
-        if (data.status === "error") {
-          if (
-            data.message?.toLowerCase()?.includes("limit exceeded") ||
-            response.status === 429
-          ) {
-            console.log(`[BACKFILL-RANGE] ⏳ Rate limit excedido, esperando 60s...`);
-            await sleep(60000);
-            continue;
-          }
-          throw new Error(`Error Zadarma: ${data.message}`);
-        }
-
-        success = true;
-      } catch (err) {
-        console.warn(`[BACKFILL-RANGE] ❌ Error en intento ${attempt}/3:`, err);
-        if (attempt === 3) throw err;
-        await sleep(30000);
-      }
-    }
-
-    allCalls.push(...(data.stats || []));
-    continuePaging = data.stats?.length === limit;
+    continuePaging = calls.length === limit;
     skip += limit;
   }
 
+  console.log(`[BACKFILL-RANGE] ✅ ${date} completado: ${allCalls.length} llamadas totales`);
   return allCalls;
 }
 
@@ -164,9 +199,16 @@ async function fetchCallsForDay(date: string, apiKey: string, apiSecret: string)
  * PROPÓSITO:
  * ==========
  * - Permite rellenar datos faltantes cuando usuario selecciona fechas históricas
- * - Respeta rate limits de Zadarma (2 requests/min, con wait automático)
- * - Procesamiento día por día con reporte de progreso
- * - Evita duplicados usando merge: true
+ * - Procesamiento día por día con PAGINACIÓN COMPLETA por cada día
+ * - Rate limiting global respeta 2 requests/min de Zadarma con espera automática
+ * - Evita duplicados usando merge: true en Firestore
+ * 
+ * LÓGICA DE RATE LIMITING:
+ * ========================
+ * - Contador global que rastrea cada petición HTTP real a Zadarma
+ * - Cada día puede requerir múltiples peticiones (paginación: 1000 registros/petición)
+ * - Tras 2 peticiones → espera 120s antes de continuar
+ * - Maneja rate limits de API (429) con esperas adicionales
  * 
  * USO:
  * ====
@@ -179,9 +221,9 @@ async function fetchCallsForDay(date: string, apiKey: string, apiSecret: string)
  *   "status": "success",
  *   "processed": ["2025-11-01", "2025-11-02", ...],
  *   "totalDays": 7,
- *   "totalCalls": 350,
- *   "saved": 348,
- *   "failed": 2
+ *   "totalCalls": 2847,  // Total de llamadas obtenidas
+ *   "saved": 2845,       // Llamadas guardadas exitosamente 
+ *   "failed": 2          // Llamadas que fallaron al guardar
  * }
  * 
  * ═══════════════════════════════════════════════════════════════════════════
@@ -237,28 +279,22 @@ export async function POST(req: Request) {
     let totalCalls = 0;
     let savedCalls = 0;
     let failedCalls = 0;
-    let requestCount = 0;
+
+    // Reset del contador global de requests
+    globalRequestCount = 0;
 
     for (const date of dateRange) {
       const dateStr = format(date, 'yyyy-MM-dd');
-      console.log(`[BACKFILL-RANGE] 📅 Procesando ${dateStr}...`);
+      console.log(`[BACKFILL-RANGE] 📅 Procesando día ${dateStr}...`);
 
       try {
-        // Rate limiting: Máximo 2 requests, luego wait 120s
-        if (requestCount >= 2) {
-          console.log(`[BACKFILL-RANGE] ⏳ Esperando 120s por rate limit...`);
-          await sleep(120000);
-          requestCount = 0;
-        }
-
-        // Obtener llamadas del día
+        // Obtener todas las llamadas del día (con paginación automática y rate limiting)
         const calls = await fetchCallsForDay(dateStr, ZADARMA_API_KEY, ZADARMA_API_SECRET);
-        requestCount++;
 
         console.log(`[BACKFILL-RANGE] 📊 ${dateStr}: ${calls.length} llamadas obtenidas`);
         totalCalls += calls.length;
 
-        // Guardar cada llamada
+        // Guardar cada llamada en Firestore
         for (const call of calls) {
           const success = await saveCallToFirestore(call);
           if (success) {
@@ -269,7 +305,15 @@ export async function POST(req: Request) {
         }
 
         processedDays.push(dateStr);
-        console.log(`[BACKFILL-RANGE] ✅ ${dateStr}: ${calls.length} llamadas procesadas`);
+        console.log(`[BACKFILL-RANGE] ✅ ${dateStr}: ${calls.length} llamadas procesadas (guardadas: ${savedCalls})`);
+
+        // 🔥 IMPORTANTE: Marcar día como sincronizado en metadata
+        try {
+          await saveSyncMetadata(date, calls.length, 'success');
+          console.log(`[BACKFILL-RANGE] 📝 Metadata de sincronización guardada para ${dateStr}`);
+        } catch (metaError) {
+          console.warn(`[BACKFILL-RANGE] ⚠️ Error guardando metadata para ${dateStr}:`, metaError);
+        }
 
       } catch (error) {
         console.error(`[BACKFILL-RANGE] ❌ Error procesando ${dateStr}:`, error);

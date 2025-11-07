@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import agentMap from '@/lib/agents.json';
 import { ScheduleManager } from "@/components/dashboard/ScheduleManager";
+import { BackfillProgress } from "@/components/dashboard/BackfillProgress";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -78,9 +79,9 @@ export default function AdvisorPerformancePage() {
   const [tempDate, setTempDate] = useState<DateRange | undefined>(date);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   
-  // Estado para backfill automático
-  const [isBackfilling, setIsBackfilling] = useState(false);
-  const [backfillProgress, setBackfillProgress] = useState<string>('');
+  // Estado para backfill automático con progreso
+  const [showBackfillProgress, setShowBackfillProgress] = useState(false);
+  const [backfillDates, setBackfillDates] = useState<{ start: string; end: string } | null>(null);
   
   // Estados para auto-refresh
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
@@ -91,12 +92,9 @@ export default function AdvisorPerformancePage() {
 
   const showDailyBreakdown = useMemo(() => (date?.from && date.to) ? differenceInCalendarDays(date.to, date.from) >= 0 : false, [date]);
 
-  // Función para verificar y rellenar datos faltantes automáticamente
-  const checkAndBackfillMissingData = useCallback(async (startDate: Date, endDate: Date): Promise<boolean> => {
+  // Función para verificar y rellenar datos faltantes EN BACKGROUND (no bloquea UI)
+  const checkAndBackfillMissingDataInBackground = useCallback(async (startDate: Date, endDate: Date): Promise<void> => {
     try {
-      setIsBackfilling(true);
-      setBackfillProgress('🔍 Verificando datos faltantes...');
-      
       // Verificar qué días faltan en Firestore
       const response = await fetch('/api/zadarma/check-missing', {
         method: 'POST',
@@ -111,16 +109,118 @@ export default function AdvisorPerformancePage() {
       const missingDays = checkData.missingDays || [];
       
       if (missingDays.length === 0) {
-        setBackfillProgress('✅ Todos los datos están disponibles');
-        setTimeout(() => setIsBackfilling(false), 1000);
-        return true;
+        console.log('[PERFORMANCE] ✅ Todos los datos están completos');
+        return;
       }
       
-      setBackfillProgress(`📅 Rellenando ${missingDays.length} días faltantes...`);
-      console.log('[PERFORMANCE] 🔧 Datos faltantes detectados:', missingDays);
+      console.log('[PERFORMANCE] 🔧 Datos faltantes detectados en background:', missingDays);
       
-      // Ejecutar backfill automático
-      const backfillResponse = await fetch('/api/zadarma/backfill-range', {
+      // Mostrar componente de progreso con backfill automático solo para días faltantes
+      setBackfillDates({
+        start: missingDays[0], // Primer día faltante
+        end: missingDays[missingDays.length - 1] // Último día faltante
+      });
+      setShowBackfillProgress(true);
+      
+    } catch (error) {
+      console.error('[PERFORMANCE] ❌ Error verificando datos faltantes en background:', error);
+      // No mostrar error al usuario, esto es verificación en background
+    }
+  }, []);
+
+  // Función para procesar datos de llamadas
+  const processCallsData = useCallback((calls: any[]) => {
+    // Procesar llamadas y agrupar por agente
+    const performanceByAgent: { [k: string]: AdvisorPerformance } = {};
+    const dailyPerformance: DailyPerformanceData = {};
+    
+    Object.keys(agentMap).forEach(id => {
+      performanceByAgent[id] = { 
+        id, 
+        name: (agentMap as any)[id], 
+        totalCalls: 0, 
+        effectiveCalls: 0, 
+        effectivenessRate: 0, 
+        totalSeconds: 0, 
+        averageCallDuration: 0,
+        firstCallTime: null,
+        lastCallTime: null
+      };
+      dailyPerformance[id] = {};
+    });
+
+    // Procesar cada llamada
+    calls.forEach((call: any) => {
+      const agentId = call.sip || call.agentId;
+      if (!performanceByAgent[agentId]) return;
+
+      const isEffective = call.disposition === 'answered' && (call.seconds || 0) > 0;
+      const callDate = call.callDate || call.callstart?.substring(0, 10) || format(new Date(), 'yyyy-MM-dd');
+      const callTime = call.callstart?.substring(11, 19) || '';
+
+      // Actualizar totales del agente
+      performanceByAgent[agentId].totalCalls++;
+      if (isEffective) performanceByAgent[agentId].effectiveCalls++;
+      performanceByAgent[agentId].totalSeconds += (call.seconds || 0);
+
+      // Actualizar horarios de primera y última llamada
+      if (!performanceByAgent[agentId].firstCallTime || callTime < performanceByAgent[agentId].firstCallTime!) {
+        performanceByAgent[agentId].firstCallTime = callTime;
+      }
+      if (!performanceByAgent[agentId].lastCallTime || callTime > performanceByAgent[agentId].lastCallTime!) {
+        performanceByAgent[agentId].lastCallTime = callTime;
+      }
+
+      // Actualizar datos diarios
+      if (!dailyPerformance[agentId][callDate]) {
+        dailyPerformance[agentId][callDate] = {
+          totalCalls: 0,
+          effectiveCalls: 0,
+          effectivenessRate: 0,
+          totalSeconds: 0,
+          averageCallDuration: 0,
+          firstCallTime: null,
+          lastCallTime: null
+        };
+      }
+
+      const dayData = dailyPerformance[agentId][callDate];
+      dayData.totalCalls++;
+      if (isEffective) dayData.effectiveCalls++;
+      dayData.totalSeconds += (call.seconds || 0);
+
+      if (!dayData.firstCallTime || callTime < dayData.firstCallTime) {
+        dayData.firstCallTime = callTime;
+      }
+      if (!dayData.lastCallTime || callTime > dayData.lastCallTime) {
+        dayData.lastCallTime = callTime;
+      }
+    });
+
+    // Calcular métricas finales
+    const performance = Object.values(performanceByAgent).map(agent => {
+      agent.effectivenessRate = agent.totalCalls > 0 ? (agent.effectiveCalls / agent.totalCalls) * 100 : 0;
+      agent.averageCallDuration = agent.effectiveCalls > 0 ? agent.totalSeconds / agent.effectiveCalls : 0;
+      return agent;
+    });
+
+    // Calcular métricas diarias
+    Object.keys(dailyPerformance).forEach(agentId => {
+      Object.keys(dailyPerformance[agentId]).forEach(date => {
+        const dayData = dailyPerformance[agentId][date];
+        dayData.effectivenessRate = dayData.totalCalls > 0 ? (dayData.effectiveCalls / dayData.totalCalls) * 100 : 0;
+        dayData.averageCallDuration = dayData.effectiveCalls > 0 ? dayData.totalSeconds / dayData.effectiveCalls : 0;
+      });
+    });
+
+    return { performance, daily: dailyPerformance };
+  }, []);
+
+  // Función para verificar y rellenar datos faltantes automáticamente
+  const checkAndBackfillMissingData = useCallback(async (startDate: Date, endDate: Date): Promise<boolean> => {
+    try {
+      // Verificar qué días faltan en Firestore
+      const response = await fetch('/api/zadarma/check-missing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -129,28 +229,63 @@ export default function AdvisorPerformancePage() {
         })
       });
       
-      const backfillData = await backfillResponse.json();
+      const checkData = await response.json();
+      const missingDays = checkData.missingDays || [];
       
-      if (backfillData.status === 'success') {
-        setBackfillProgress(`✅ Backfill completado: ${backfillData.saved} llamadas guardadas`);
-        console.log('[PERFORMANCE] ✅ Backfill automático completado:', backfillData);
-        setTimeout(() => setIsBackfilling(false), 2000);
+      if (missingDays.length === 0) {
+        console.log('[PERFORMANCE] ✅ Todos los datos están disponibles');
         return true;
-      } else {
-        throw new Error(backfillData.message || 'Error en backfill');
       }
       
+      console.log('[PERFORMANCE] 🔧 Datos faltantes detectados:', missingDays);
+      
+      // Mostrar componente de progreso con backfill automático
+      setBackfillDates({
+        start: format(startDate, 'yyyy-MM-dd'),
+        end: format(endDate, 'yyyy-MM-dd')
+      });
+      setShowBackfillProgress(true);
+      
+      return false; // Indicar que se está ejecutando backfill
+      
     } catch (error) {
-      console.error('[PERFORMANCE] ❌ Error en backfill automático:', error);
-      setBackfillProgress('❌ Error rellenando datos');
-      setTimeout(() => setIsBackfilling(false), 3000);
+      console.error('[PERFORMANCE] ❌ Error verificando datos faltantes:', error);
       toast({
-        title: "Error rellenando datos",
-        description: `No se pudieron obtener datos históricos: ${error}`,
+        title: "Error verificando datos",
+        description: `No se pudo verificar datos históricos: ${error}`,
         variant: "destructive",
       });
-      return false;
+      return true; // Continuar con datos existentes
     }
+  }, [toast]);
+
+  // Callback cuando el backfill se completa exitosamente
+  const handleBackfillComplete = useCallback(() => {
+    setShowBackfillProgress(false);
+    setBackfillDates(null);
+    
+    toast({
+      title: "Datos históricos cargados",
+      description: "Los datos están ahora disponibles y se han actualizado automáticamente.",
+      variant: "default",
+    });
+    
+    // Recargar datos automáticamente después del backfill
+    setTimeout(() => {
+      fetchAndProcessData(false, false);
+    }, 1000);
+  }, [toast]);
+
+  // Callback cuando hay error en el backfill
+  const handleBackfillError = useCallback((error: string) => {
+    setShowBackfillProgress(false);
+    setBackfillDates(null);
+    
+    toast({
+      title: "Error cargando datos históricos",
+      description: error,
+      variant: "destructive",
+    });
   }, [toast]);
 
   const fetchAndProcessData = useCallback(async (silent = false, isAutoRefresh = false) => {
@@ -162,15 +297,6 @@ export default function AdvisorPerformancePage() {
       const today = format(new Date(), 'yyyy-MM-dd');
       const isViewingToday = format(date.from, 'yyyy-MM-dd') === today && 
                             (!date.to || format(date.to, 'yyyy-MM-dd') === today);
-      
-      // 🎯 VERIFICACIÓN AUTOMÁTICA: Si no es auto-refresh, verificar datos faltantes
-      if (!isAutoRefresh) {
-        const backfillSuccess = await checkAndBackfillMissingData(date.from, date.to || date.from);
-        if (!backfillSuccess) {
-          // Si backfill falla, continuar con datos existentes
-          console.warn('[PERFORMANCE] ⚠️ Backfill falló, usando datos existentes');
-        }
-      }
       
       let endpoint = '/api/zadarma/calls'; // Siempre leer desde Firestore
       let params: URLSearchParams;
@@ -216,93 +342,23 @@ export default function AdvisorPerformancePage() {
       const calls = data.calls || [];
       console.log('[PERFORMANCE] Datos recibidos desde Firestore:', calls.length, 'llamadas');
 
-      // Procesar llamadas y agrupar por agente
-      const performanceByAgent: { [k: string]: AdvisorPerformance } = {};
-      const dailyPerformance: DailyPerformanceData = {};
+      // 🔄 PROCESAR DATOS EXISTENTES INMEDIATAMENTE
+      const processedData = processCallsData(calls);
+      setPerformanceData(processedData.performance);
+      setDailyPerformanceData(processedData.daily);
       
-      Object.keys(agentMap).forEach(id => {
-        performanceByAgent[id] = { 
-          id, 
-          name: (agentMap as any)[id], 
-          totalCalls: 0, 
-          effectiveCalls: 0, 
-          effectivenessRate: 0, 
-          totalSeconds: 0, 
-          averageCallDuration: 0, 
-          firstCallTime: null, 
-          lastCallTime: null 
-        };
-        dailyPerformance[id] = {};
-      });
-      
-      // Procesar llamadas y agrupar por agente y día
-      (calls || []).forEach((call: ZadarmaCall) => {
-        if (!call || !call.sip) return;
-        if (!performanceByAgent[call.sip]) return;
+      if (!silent) setIsLoading(false);
 
-        const dayKey = (call as any).callDate || (call.callstart || '').substring(0, 10);
-        if (!dailyPerformance[call.sip][dayKey]) {
-          dailyPerformance[call.sip][dayKey] = { totalCalls: 0, effectiveCalls: 0, effectivenessRate: 0, totalSeconds: 0, averageCallDuration: 0, firstCallTime: null, lastCallTime: null };
-        }
-
-        const agentTotal = performanceByAgent[call.sip];
-        const agentDaily = dailyPerformance[call.sip][dayKey];
-
-        // Actividad
-        if (!agentTotal.firstCallTime || call.callstart < agentTotal.firstCallTime) agentTotal.firstCallTime = call.callstart;
-        if (!agentTotal.lastCallTime || call.callstart > agentTotal.lastCallTime) agentTotal.lastCallTime = call.callstart;
-        if (!agentDaily.firstCallTime || call.callstart < agentDaily.firstCallTime) agentDaily.firstCallTime = call.callstart;
-        if (!agentDaily.lastCallTime || call.callstart > agentDaily.lastCallTime) agentDaily.lastCallTime = call.callstart;
-
-        const isOutboundCall = (call as any).isOutbound !== undefined ? (call as any).isOutbound : String(call.destination || '').length >= 5;
-        const isAnsweredCall = (call as any).isAnswered !== undefined ? (call as any).isAnswered : call.disposition === 'answered';
-
-        if (isOutboundCall) {
-          agentTotal.totalCalls++; agentDaily.totalCalls++;
-          agentTotal.totalSeconds += Number(call.seconds) || 0; agentDaily.totalSeconds += Number(call.seconds) || 0;
-          if (isAnsweredCall) { agentTotal.effectiveCalls++; agentDaily.effectiveCalls++; }
-        }
-      });
-      
-      const formatMetrics = (p: PerformanceMetrics & ActivityMetrics) => {
-        p.effectivenessRate = p.totalCalls > 0 ? (p.effectiveCalls / p.totalCalls) * 100 : 0;
-        p.averageCallDuration = p.effectiveCalls > 0 ? p.totalSeconds / p.effectiveCalls : 0;
-        
-        // Formatear horas: extraer la porción HH:mm:ss directamente del timestamp raw
-        if (p.firstCallTime && String(p.firstCallTime).length >= 19) {
-          p.firstCallTime = String(p.firstCallTime).substring(11, 19);
-        }
-        if (p.lastCallTime && String(p.lastCallTime).length >= 19) {
-          p.lastCallTime = String(p.lastCallTime).substring(11, 19);
-        }
-        
-        return p;
-      };
-
-      const daysInInterval = eachDayOfInterval({ start: date.from, end: date.to || date.from });
-      // Sin horarios específicos disponibles, asumimos jornada estándar de 8h/día
-      const hoursPerDay = 8;
-      Object.keys(performanceByAgent).forEach(agentId => {
-        let totalHours = daysInInterval.length * hoursPerDay;
-        const agentPerformance = performanceByAgent[agentId];
-        agentPerformance.callTarget = totalHours * CALLS_PER_HOUR_TARGET;
-        agentPerformance.compliance = agentPerformance.callTarget! > 0 ? (agentPerformance.totalCalls / agentPerformance.callTarget!) * 100 : 100;
-
-        // daily targets
-        daysInInterval.forEach(day => {
-          const dayKey = format(day, 'yyyy-MM-dd');
-          if (dailyPerformance[agentId][dayKey]) {
-            const dailyStats = dailyPerformance[agentId][dayKey];
-            dailyStats.callTarget = hoursPerDay * CALLS_PER_HOUR_TARGET;
-            dailyStats.compliance = dailyStats.callTarget! > 0 ? (dailyStats.totalCalls / dailyStats.callTarget!) * 100 : 100;
+      // 🔍 VERIFICACIÓN EN PARALELO: Si no es auto-refresh y no es consulta silenciosa, verificar datos faltantes
+      if (!isAutoRefresh && !silent && date.from) {
+        // Ejecutar en paralelo sin bloquear la UI
+        setTimeout(async () => {
+          if (date.from) {
+            await checkAndBackfillMissingDataInBackground(date.from, date.to || date.from);
           }
-        });
-      });
+        }, 500);
+      }
 
-      setPerformanceData(Object.values(performanceByAgent).map(p => formatMetrics(p) as AdvisorPerformance));
-      Object.values(dailyPerformance).forEach(agentDays => Object.values(agentDays).forEach(formatMetrics));
-      setDailyPerformanceData(dailyPerformance);
-      
       // Mostrar solo mensaje genérico (silent = sin toast si es auto-refresh)
       if (!silent) {
         toast({ title: "Datos Cargados" });
@@ -314,7 +370,7 @@ export default function AdvisorPerformancePage() {
     } finally {
       if (!silent) setIsLoading(false);
     }
-  }, [date, checkAndBackfillMissingData, toast]);
+  }, [date, checkAndBackfillMissingDataInBackground, processCallsData, toast]);
   
   
   // Auto-refresh cada 60 segundos SOLO para el día actual
@@ -475,19 +531,14 @@ export default function AdvisorPerformancePage() {
           </Card>
         )}
 
-        {/* Estado del Backfill Automático */}
-        {isBackfilling && (
-          <Card className="border-orange-200 bg-orange-50">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <Loader className="h-5 w-5 animate-spin text-orange-600" />
-                <div>
-                  <p className="font-medium text-orange-800">Rellenando datos históricos</p>
-                  <p className="text-sm text-orange-600">{backfillProgress}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Barra de Progreso del Backfill */}
+        {showBackfillProgress && backfillDates && (
+          <BackfillProgress
+            startDate={backfillDates.start}
+            endDate={backfillDates.end}
+            onComplete={handleBackfillComplete}
+            onError={handleBackfillError}
+          />
         )}
       
         {isLoading ? ( <div className="flex items-center justify-center min-h-[400px]"><Loader className="h-8 w-8 animate-spin text-primary" /><p className="ml-4 text-muted-foreground">Consultando Firestore...</p></div> ) :

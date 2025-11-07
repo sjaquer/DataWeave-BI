@@ -82,6 +82,7 @@ export default function AdvisorPerformancePage() {
   // Estado para backfill automático con progreso
   const [showBackfillProgress, setShowBackfillProgress] = useState(false);
   const [backfillDates, setBackfillDates] = useState<{ start: string; end: string } | null>(null);
+  const [isBackfillInProgress, setIsBackfillInProgress] = useState(false);
   
   // Estados para auto-refresh
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
@@ -95,6 +96,12 @@ export default function AdvisorPerformancePage() {
   // Función para verificar y rellenar datos faltantes EN BACKGROUND (no bloquea UI)
   const checkAndBackfillMissingDataInBackground = useCallback(async (startDate: Date, endDate: Date): Promise<void> => {
     try {
+      // ⚠️ PREVENIR MÚLTIPLES EJECUCIONES
+      if (isBackfillInProgress) {
+        console.log('[PERFORMANCE] 🔄 Backfill ya está en progreso, saltando nueva verificación');
+        return;
+      }
+      
       // Verificar qué días faltan en Firestore
       const response = await fetch('/api/zadarma/check-missing', {
         method: 'POST',
@@ -115,6 +122,9 @@ export default function AdvisorPerformancePage() {
       
       console.log('[PERFORMANCE] 🔧 Datos faltantes detectados en background:', missingDays);
       
+      // Marcar que backfill está en progreso
+      setIsBackfillInProgress(true);
+      
       // Mostrar componente de progreso con backfill automático solo para días faltantes
       setBackfillDates({
         start: missingDays[0], // Primer día faltante
@@ -126,7 +136,7 @@ export default function AdvisorPerformancePage() {
       console.error('[PERFORMANCE] ❌ Error verificando datos faltantes en background:', error);
       // No mostrar error al usuario, esto es verificación en background
     }
-  }, []);
+  }, [isBackfillInProgress]);
 
   // Función para procesar datos de llamadas
   const processCallsData = useCallback((calls: any[]) => {
@@ -263,6 +273,9 @@ export default function AdvisorPerformancePage() {
   const handleBackfillComplete = useCallback(() => {
     setShowBackfillProgress(false);
     setBackfillDates(null);
+    setIsBackfillInProgress(false); // 🔓 Liberar bloqueo de backfill
+    
+    console.log('[PERFORMANCE] ✅ Backfill completado - liberando bloqueo');
     
     toast({
       title: "Datos históricos cargados",
@@ -270,16 +283,17 @@ export default function AdvisorPerformancePage() {
       variant: "default",
     });
     
-    // Recargar datos automáticamente después del backfill
-    setTimeout(() => {
-      fetchAndProcessData(false, false);
-    }, 1000);
+    // La recarga se activará automáticamente cuando isBackfillInProgress se resetee
+    // debido a que el useEffect de fetchAndProcessData lo detectará
   }, [toast]);
 
   // Callback cuando hay error en el backfill
   const handleBackfillError = useCallback((error: string) => {
     setShowBackfillProgress(false);
     setBackfillDates(null);
+    setIsBackfillInProgress(false); // 🔓 Liberar bloqueo de backfill en caso de error
+    
+    console.log('[PERFORMANCE] ❌ Error en backfill - liberando bloqueo');
     
     toast({
       title: "Error cargando datos históricos",
@@ -373,24 +387,38 @@ export default function AdvisorPerformancePage() {
   }, [date, checkAndBackfillMissingDataInBackground, processCallsData, toast]);
   
   
-  // Auto-refresh cada 60 segundos SOLO para el día actual
+  // Auto-refresh cada 60 segundos SOLO para el día actual Y cuando no hay backfill en progreso
   useEffect(() => {
     const isToday = date?.from && date.to && 
       format(date.from, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd') &&
       format(date.to, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
     
-    if (!isToday || !autoRefreshEnabled) {
+    // 🛑 PAUSAR AUTO-REFRESH cuando:
+    // 1. No es el día actual
+    // 2. Auto-refresh deshabilitado manualmente
+    // 3. Hay backfill en progreso (para evitar competencia de requests)
+    if (!isToday || !autoRefreshEnabled || isBackfillInProgress) {
       setCountdown(60);
+      if (isBackfillInProgress) {
+        console.log('[AUTO-REFRESH] ⏸️  Pausado - backfill en progreso');
+      } else if (!isToday) {
+        console.log('[AUTO-REFRESH] ⏸️  Pausado - no es día actual');
+      }
       return;
     }
     
-    console.log('[AUTO-REFRESH] Activado para el día actual (60s)');
+    console.log('[AUTO-REFRESH] ✅ Activado para el día actual (60s)');
     
     // Interval para actualizar datos cada 60s
     const refreshInterval = setInterval(() => {
-      console.log('[AUTO-REFRESH] Actualizando datos...');
-      fetchAndProcessData(false); // Con toast visible
-      setCountdown(60); // Reiniciar countdown
+      // Verificar nuevamente antes de hacer refresh (por si cambió isBackfillInProgress)
+      if (!isBackfillInProgress) {
+        console.log('[AUTO-REFRESH] 🔄 Actualizando datos...');
+        fetchAndProcessData(false); // Con toast visible
+        setCountdown(60); // Reiniciar countdown
+      } else {
+        console.log('[AUTO-REFRESH] ⏸️  Saltando refresh - backfill en progreso');
+      }
     }, 60000);
     
     // Interval para countdown cada segundo
@@ -406,7 +434,7 @@ export default function AdvisorPerformancePage() {
       clearInterval(refreshInterval);
       clearInterval(countdownInterval);
     };
-  }, [date, autoRefreshEnabled, fetchAndProcessData]);
+  }, [date, autoRefreshEnabled, isBackfillInProgress, fetchAndProcessData]);
   
   useEffect(() => { fetchAndProcessData(); }, [fetchAndProcessData]);
 
@@ -513,17 +541,29 @@ export default function AdvisorPerformancePage() {
                       Auto-actualización cada 60s
                     </label>
                   </div>
-                  {autoRefreshEnabled && (
+                  {autoRefreshEnabled && !isBackfillInProgress && (
                     <Badge variant="outline" className="flex items-center gap-2">
                       <Timer className="h-3 w-3 animate-pulse" />
                       Próxima actualización en {countdown}s
                     </Badge>
                   )}
+                  {autoRefreshEnabled && isBackfillInProgress && (
+                    <Badge variant="secondary" className="flex items-center gap-2">
+                      <Timer className="h-3 w-3" />
+                      Pausado (backfill en progreso)
+                    </Badge>
+                  )}
                 </div>
-                {autoRefreshEnabled && (
+                {autoRefreshEnabled && !isBackfillInProgress && (
                   <div className="text-sm text-muted-foreground">
                     <RefreshCw className="h-4 w-4 inline mr-1" />
                     Datos en tiempo real activados
+                  </div>
+                )}
+                {autoRefreshEnabled && isBackfillInProgress && (
+                  <div className="text-sm text-amber-600">
+                    <RefreshCw className="h-4 w-4 inline mr-1" />
+                    Pausado durante sincronización
                   </div>
                 )}
               </div>

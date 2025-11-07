@@ -30,6 +30,31 @@ export function BackfillProgress({ startDate, endDate, onComplete, onError }: Ba
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
+  
+  // 🎯 NUEVA LÓGICA: Estados para progreso fluido y dinámico
+  const [smoothProgress, setSmoothProgress] = useState(0);
+  const [estimatedTotalTime, setEstimatedTotalTime] = useState(0);
+  const [startTime, setStartTime] = useState(0);
+  const [lastServerUpdate, setLastServerUpdate] = useState(0);
+
+  // 📊 CÁLCULOS DE PROGRESO DINÁMICO
+  const MINUTES_PER_DAY = 3; // 3 minutos por día como margen
+  
+  // Calcular tiempo total estimado basado en días
+  const calculateEstimatedTime = (totalDays: number) => {
+    return totalDays * MINUTES_PER_DAY * 60; // en segundos
+  };
+  
+  // Calcular progreso fluido basado en tiempo transcurrido
+  const calculateSmoothProgress = (currentTime: number, startTime: number, totalEstimatedTime: number, serverProgress: number) => {
+    if (totalEstimatedTime === 0) return serverProgress;
+    
+    const timeElapsed = (currentTime - startTime) / 1000; // en segundos
+    const timeBasedProgress = Math.min((timeElapsed / totalEstimatedTime) * 100, 95); // máximo 95% hasta confirmación del servidor
+    
+    // Usar el mayor entre progreso basado en tiempo y progreso del servidor
+    return Math.max(timeBasedProgress, serverProgress);
+  };
 
   // Formatear tiempo en formato MM:SS
   const formatTime = (seconds: number): string => {
@@ -73,9 +98,19 @@ export function BackfillProgress({ startDate, endDate, onComplete, onError }: Ba
       const data = await response.json();
 
       if (response.ok && data.status !== 'not_found') {
+        // 🎯 INICIALIZAR TIEMPOS EN LA PRIMERA ACTUALIZACIÓN
+        if (!startTime && data.totalDays) {
+          const now = Date.now();
+          setStartTime(now);
+          setEstimatedTotalTime(calculateEstimatedTime(data.totalDays));
+          setLastServerUpdate(now);
+        }
+        
         setProgressData(data);
+        setLastServerUpdate(Date.now());
 
         if (data.status === 'completed') {
+          setSmoothProgress(100); // Completar inmediatamente la barra
           setIsPolling(false);
           setTimeout(() => onComplete(), 2000);
         } else if (data.status === 'error') {
@@ -105,6 +140,23 @@ export function BackfillProgress({ startDate, endDate, onComplete, onError }: Ba
       return () => clearInterval(interval);
     }
   }, [sessionId, isPolling]);
+
+  // 🎬 Effect para progreso fluido (actualización cada segundo)
+  useEffect(() => {
+    if (!progressData || progressData.status === 'completed' || progressData.status === 'error' || !startTime) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const currentTime = Date.now();
+      const serverProgress = progressData.progress || 0;
+      const newSmoothProgress = calculateSmoothProgress(currentTime, startTime, estimatedTotalTime, serverProgress);
+      
+      setSmoothProgress(newSmoothProgress);
+    }, 1000); // Actualizar cada segundo para fluidez
+
+    return () => clearInterval(interval);
+  }, [progressData, startTime, estimatedTotalTime]);
 
   if (!progressData) {
     return (
@@ -182,13 +234,21 @@ export function BackfillProgress({ startDate, endDate, onComplete, onError }: Ba
                   {progressData.processedDays} de {progressData.totalDays} días procesados
                 </span>
                 <span className={`${getTextColor()} opacity-80`}>
-                  {Math.round(progressData.progress)}%
+                  {Math.round(smoothProgress)}%
                 </span>
               </div>
               <Progress 
-                value={progressData.progress} 
+                value={smoothProgress} 
                 className="h-3"
               />
+              <div className="flex items-center justify-between text-xs">
+                <span className={`${getTextColor()} opacity-60`}>
+                  Tiempo estimado: {MINUTES_PER_DAY} min/día
+                </span>
+                <span className={`${getTextColor()} opacity-60`}>
+                  Progreso fluido activado
+                </span>
+              </div>
             </div>
           )}
 
@@ -217,12 +277,17 @@ export function BackfillProgress({ startDate, endDate, onComplete, onError }: Ba
               </div>
             )}
 
-            {progressData.status === 'in_progress' && progressData.estimatedTimeRemaining > 0 && (
+            {(progressData.status === 'in_progress' || progressData.status === 'starting') && estimatedTotalTime > 0 && (
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-orange-600" />
                 <div>
-                  <p className="font-medium">{formatTime(progressData.estimatedTimeRemaining)}</p>
-                  <p className="text-xs opacity-70">Tiempo estimado</p>
+                  <p className="font-medium">
+                    {startTime ? 
+                      formatTime(Math.max(0, estimatedTotalTime - Math.floor((Date.now() - startTime) / 1000))) :
+                      formatTime(estimatedTotalTime)
+                    }
+                  </p>
+                  <p className="text-xs opacity-70">Tiempo restante est.</p>
                 </div>
               </div>
             )}

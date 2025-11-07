@@ -154,7 +154,7 @@ export async function POST(req: Request) {
     });
 
     const totalDays = dateRange.length;
-    const estimatedTimePerDay = 150; // segundos (considerando rate limits)
+    const estimatedTimePerDay = 180; // 🎯 3 minutos por día (180 segundos)
     const totalEstimatedTime = totalDays * estimatedTimePerDay;
 
     // Inicializar progreso
@@ -329,7 +329,7 @@ async function executeBackfillWithProgress(sessionId: string, dateRange: Date[],
 
 function calculateEstimatedTime(totalDays: number, processedDays: number): number {
   const remainingDays = totalDays - processedDays;
-  const secondsPerDay = 150; // Estimación conservadora con rate limits
+  const secondsPerDay = 180; // 🎯 3 minutos por día (180 segundos)
   return remainingDays * secondsPerDay;
 }
 

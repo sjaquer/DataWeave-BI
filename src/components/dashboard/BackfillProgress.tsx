@@ -53,6 +53,11 @@ export function BackfillProgress({ startDate, endDate, onComplete, onError }: Ba
       if (data.status === 'started') {
         setSessionId(data.sessionId);
         setIsPolling(true);
+      } else if (data.status === 'already_in_progress') {
+        // 🔄 Ya hay un backfill en progreso, usar esa sesión
+        console.log('[BACKFILL] Ya hay proceso en progreso, usando sesión existente:', data.currentSessionId);
+        setSessionId(data.currentSessionId);
+        setIsPolling(true);
       } else {
         throw new Error(data.message || 'Error iniciando backfill');
       }
@@ -192,7 +197,7 @@ export function BackfillProgress({ startDate, endDate, onComplete, onError }: Ba
             <div className="flex items-center gap-2">
               <Database className="h-4 w-4 text-blue-600" />
               <div>
-                <p className="font-medium">{progressData.callsSaved.toLocaleString()}</p>
+                <p className="font-medium">{(progressData.callsSaved || 0).toLocaleString()}</p>
                 <p className="text-xs opacity-70">Llamadas guardadas</p>
               </div>
             </div>
@@ -200,7 +205,7 @@ export function BackfillProgress({ startDate, endDate, onComplete, onError }: Ba
             <div className="flex items-center gap-2">
               <Database className="h-4 w-4 text-green-600" />
               <div>
-                <p className="font-medium">{progressData.totalCalls.toLocaleString()}</p>
+                <p className="font-medium">{(progressData.totalCalls || 0).toLocaleString()}</p>
                 <p className="text-xs opacity-70">Total obtenidas</p>
               </div>
             </div>

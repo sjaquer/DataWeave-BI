@@ -20,6 +20,10 @@ const AGENT_MAP: { [key: string]: string } = {
 // Store global para el progreso (en producción usar Redis o similar)
 const progressStore = new Map<string, any>();
 
+// 🔒 CONTROL DE CONCURRENCIA GLOBAL
+let currentBackfillSessionId: string | null = null;
+let isBackfillInProgress = false;
+
 /**
  * Guarda el progreso del backfill para un sessionId
  */
@@ -112,6 +116,20 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { startDate, endDate } = body;
+    
+    // 🔒 VERIFICAR SI YA HAY UN BACKFILL EN PROGRESO
+    if (isBackfillInProgress && currentBackfillSessionId) {
+      console.log(`[BACKFILL-LOCK] ⚠️  Backfill ya en progreso (sesión: ${currentBackfillSessionId})`);
+      return NextResponse.json(
+        { 
+          status: "already_in_progress", 
+          message: "Ya hay un backfill en progreso. Espera a que termine.",
+          currentSessionId: currentBackfillSessionId
+        },
+        { status: 409 } // Conflict
+      );
+    }
+    
     const sessionId = `backfill_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     if (!startDate || !endDate) {
@@ -152,6 +170,11 @@ export async function POST(req: Request) {
       startTime: Date.now(),
       message: 'Iniciando backfill...'
     });
+
+    // 🔒 ESTABLECER LOCK GLOBAL
+    isBackfillInProgress = true;
+    currentBackfillSessionId = sessionId;
+    console.log(`[BACKFILL-LOCK] 🔒 Lock establecido para sesión: ${sessionId}`);
 
     // Ejecutar backfill en background (no bloquear respuesta)
     setImmediate(async () => {
@@ -279,6 +302,11 @@ async function executeBackfillWithProgress(sessionId: string, dateRange: Date[],
       message: `🎉 Backfill completado: ${savedCalls}/${totalCalls} llamadas guardadas en ${totalTime}s`
     });
 
+    // 🔓 LIBERAR LOCK GLOBAL
+    isBackfillInProgress = false;
+    currentBackfillSessionId = null;
+    console.log(`[BACKFILL-LOCK] 🔓 Lock liberado - sesión ${sessionId} completada`);
+
   } catch (error: any) {
     console.error(`[BACKFILL-PROGRESS] Error fatal:`, error);
     updateProgress(sessionId, {
@@ -291,6 +319,11 @@ async function executeBackfillWithProgress(sessionId: string, dateRange: Date[],
       error: error?.message || String(error),
       message: `💥 Error fatal: ${error?.message || String(error)}`
     });
+    
+    // 🔓 LIBERAR LOCK GLOBAL EN CASO DE ERROR
+    isBackfillInProgress = false;
+    currentBackfillSessionId = null;
+    console.log(`[BACKFILL-LOCK] 🔓 Lock liberado - sesión ${sessionId} con error`);
   }
 }
 

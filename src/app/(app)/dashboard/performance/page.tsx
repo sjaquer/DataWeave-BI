@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp, Timer, PlayCircle, StopCircle, PhoneForwarded, PhoneOutgoing, BarChartHorizontal, Database, Cloud, Percent, ChevronDown, Download, Cog, Target, BarChart2 } from "lucide-react";
+import { Loader, RefreshCw, Users, Clock, CheckCircle, Calendar as CalendarIcon, ArrowDown, ArrowUp, Timer, PlayCircle, StopCircle, PhoneForwarded, PhoneOutgoing, BarChartHorizontal, Database, Percent, ChevronDown, Download, Cog, Target, BarChart2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -20,10 +20,10 @@ import download from 'downloadjs';
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import agentMap from '@/lib/agents.json';
 import { ScheduleManager } from "@/components/dashboard/ScheduleManager";
-import { PerformanceCalendar } from "@/components/dashboard/PerformanceCalendar";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -77,172 +77,190 @@ export default function AdvisorPerformancePage() {
   const [date, setDate] = useState<DateRange | undefined>({ from: new Date(), to: new Date() });
   const [tempDate, setTempDate] = useState<DateRange | undefined>(date);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const [dataSource, setDataSource] = useState<boolean | 'mixed'> (false);
+  
+  // Estado para backfill automático
+  const [isBackfilling, setIsBackfilling] = useState(false);
+  const [backfillProgress, setBackfillProgress] = useState<string>('');
+  
+  // Estados para auto-refresh
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [countdown, setCountdown] = useState(60);
+  
   const { toast } = useToast();
   const tableRef = useRef<HTMLDivElement>(null);
 
   const showDailyBreakdown = useMemo(() => (date?.from && date.to) ? differenceInCalendarDays(date.to, date.from) >= 0 : false, [date]);
 
-  const fetchAndProcessData = useCallback(async () => {
+  // Función para verificar y rellenar datos faltantes automáticamente
+  const checkAndBackfillMissingData = useCallback(async (startDate: Date, endDate: Date): Promise<boolean> => {
+    try {
+      setIsBackfilling(true);
+      setBackfillProgress('🔍 Verificando datos faltantes...');
+      
+      // Verificar qué días faltan en Firestore
+      const response = await fetch('/api/zadarma/check-missing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          startDate: format(startDate, 'yyyy-MM-dd'), 
+          endDate: format(endDate, 'yyyy-MM-dd') 
+        })
+      });
+      
+      const checkData = await response.json();
+      const missingDays = checkData.missingDays || [];
+      
+      if (missingDays.length === 0) {
+        setBackfillProgress('✅ Todos los datos están disponibles');
+        setTimeout(() => setIsBackfilling(false), 1000);
+        return true;
+      }
+      
+      setBackfillProgress(`📅 Rellenando ${missingDays.length} días faltantes...`);
+      console.log('[PERFORMANCE] 🔧 Datos faltantes detectados:', missingDays);
+      
+      // Ejecutar backfill automático
+      const backfillResponse = await fetch('/api/zadarma/backfill-range', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          startDate: format(startDate, 'yyyy-MM-dd'), 
+          endDate: format(endDate, 'yyyy-MM-dd') 
+        })
+      });
+      
+      const backfillData = await backfillResponse.json();
+      
+      if (backfillData.status === 'success') {
+        setBackfillProgress(`✅ Backfill completado: ${backfillData.saved} llamadas guardadas`);
+        console.log('[PERFORMANCE] ✅ Backfill automático completado:', backfillData);
+        setTimeout(() => setIsBackfilling(false), 2000);
+        return true;
+      } else {
+        throw new Error(backfillData.message || 'Error en backfill');
+      }
+      
+    } catch (error) {
+      console.error('[PERFORMANCE] ❌ Error en backfill automático:', error);
+      setBackfillProgress('❌ Error rellenando datos');
+      setTimeout(() => setIsBackfilling(false), 3000);
+      toast({
+        title: "Error rellenando datos",
+        description: `No se pudieron obtener datos históricos: ${error}`,
+        variant: "destructive",
+      });
+      return false;
+    }
+  }, [toast]);
+
+  const fetchAndProcessData = useCallback(async (silent = false, isAutoRefresh = false) => {
     if (!date?.from) return;
-    setIsLoading(true);
+    if (!silent) setIsLoading(true);
     setOpenAdvisorId(null);
     try {
-      // rate-limit guard: evitar llamadas repetidas seguidas
-      const lastKey = `zadarma_stats_last_${format(date.from, 'yyyy-MM-dd')}_${format(date.to || date.from, 'yyyy-MM-dd')}`;
-      const lastTs = sessionStorage.getItem(lastKey);
-      if (lastTs && Date.now() - Number(lastTs) < 6000) {
-        // si la última petición fue hace menos de 6s, esperar un poco para no golpear la API
-        await new Promise(r => setTimeout(r, 6000));
-      }
-      const params = new URLSearchParams({ startDate: format(date.from, 'yyyy-MM-dd'), endDate: format(date.to || date.from, 'yyyy-MM-dd') });
-
-      // Helper: retries with backoff and respect Retry-After
-      const attemptFetch = async (url: string, retries = 3) => {
-        let attempt = 0;
-        while (true) {
-          try {
-            const res = await fetch(url);
-            if (res.status === 429) {
-              const ra = res.headers.get('Retry-After');
-              const wait = ra ? Number(ra) * 1000 : Math.min(60000, Math.pow(2, attempt) * 1000);
-              await new Promise(r => setTimeout(r, wait));
-              attempt++;
-              if (attempt > retries) throw new Error('Rate limit excedido');
-              continue;
-            }
-            if (!res.ok) throw new Error((await res.json()).message || `HTTP ${res.status}`);
-            return await res.json();
-          } catch (err) {
-            attempt++;
-            if (attempt > retries) throw err;
-            await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 500));
-          }
-        }
-      };
-
-      // Stats: cache inteligente por sesión con invalidación para día actual
-      const statsCacheKey = `zadarma_stats_${format(date.from, 'yyyy-MM-dd')}_${format(date.to || date.from, 'yyyy-MM-dd')}`;
-      const isRequestingToday = format(date.to || date.from, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+      // 🔥 NUEVA LÓGICA: Solo usar Firestore, pero actualizar en auto-refresh si es hoy
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const isViewingToday = format(date.from, 'yyyy-MM-dd') === today && 
+                            (!date.to || format(date.to, 'yyyy-MM-dd') === today);
       
-      let statsData: any = null;
-      
-      // Para el día actual, invalidar caché cada 10 minutos para obtener datos frescos
-      if (!isRequestingToday) {
-        const statsCachedRaw = sessionStorage.getItem(statsCacheKey);
-        if (statsCachedRaw) {
-          try { statsData = JSON.parse(statsCachedRaw); } catch(e) { statsData = null; }
-        }
-      } else {
-        const cacheWithTimestamp = sessionStorage.getItem(statsCacheKey + '_ts');
-        if (cacheWithTimestamp) {
-          try { 
-            const { data, timestamp } = JSON.parse(cacheWithTimestamp);
-            // Invalidar caché del día actual después de 10 minutos
-            if (Date.now() - timestamp < 10 * 60 * 1000) {
-              statsData = data;
-            }
-          } catch(e) { statsData = null; }
+      // 🎯 VERIFICACIÓN AUTOMÁTICA: Si no es auto-refresh, verificar datos faltantes
+      if (!isAutoRefresh) {
+        const backfillSuccess = await checkAndBackfillMissingData(date.from, date.to || date.from);
+        if (!backfillSuccess) {
+          // Si backfill falla, continuar con datos existentes
+          console.warn('[PERFORMANCE] ⚠️ Backfill falló, usando datos existentes');
         }
       }
       
-      if (!statsData) {
-        console.log('[ZADARMA FETCH] Requesting fresh data from API...');
-        statsData = await attemptFetch(`/api/zadarma/stats?${params.toString()}`);
+      let endpoint = '/api/zadarma/calls'; // Siempre leer desde Firestore
+      let params: URLSearchParams;
+      
+      // Si es auto-refresh del día actual, PRIMERO actualizar Firestore con datos frescos
+      if (isAutoRefresh && isViewingToday) {
+        console.log('[PERFORMANCE] 🔄 Auto-refresh: Actualizando Firestore con datos frescos...');
         
-        // Guardar con timestamp para días actuales, sin timestamp para históricos
-        if (isRequestingToday) {
-          try { 
-            sessionStorage.setItem(statsCacheKey + '_ts', JSON.stringify({ data: statsData, timestamp: Date.now() })); 
-          } catch(e){}
-        } else {
-          try { 
-            sessionStorage.setItem(statsCacheKey, JSON.stringify(statsData)); 
-          } catch(e){}
-        }
-      }
-      setDataSource(statsData.fromCache);
-      try { sessionStorage.setItem(lastKey, String(Date.now())); } catch(e) {}
-
-      // Logs de debug para monitorear nueva API adaptativa
-      const sipsInStats = [...new Set((statsData.stats || []).map((call: ZadarmaCall) => call.sip))].filter(Boolean) as string[];
-      const agentMapKeys = Object.keys(agentMap);
-      const missingAgentsInMap = sipsInStats.filter((sip: string) => !agentMapKeys.includes(sip));
-      const agentsWithNoCalls = agentMapKeys.filter(agentId => !sipsInStats.includes(agentId));
-      
-      console.log('[ZADARMA DEBUG] Stats loaded:', {
-        totalCalls: (statsData.stats || []).length,
-        dataSource: statsData.fromCache,
-        message: statsData.message || 'Sin mensaje',
-        sipsInStats: sipsInStats.slice(0, 12),
-        missingAgentsInMap: missingAgentsInMap.slice(0, 10),
-        agentsWithNoCalls: agentsWithNoCalls.slice(0, 10),
-        metadata: statsData.metadata || 'Sin metadata'
-      });
-
-      // Schedules: fetch con concurrencia limitada y cache por agente
-      const agentIds = Object.keys(agentMap);
-      const schedules: { [id: string]: Schedule } = {};
-      const concurrency = 4;
-      let idx = 0;
-      const fetchScheduleFor = async (agentId: string) => {
-        const sk = `schedule_${agentId}`;
-        const cached = sessionStorage.getItem(sk);
-        if (cached) {
-          try { schedules[agentId] = JSON.parse(cached); return; } catch(e) {}
-        }
+        // Llamar a /api/zadarma/stats para actualizar Firestore con últimos 5 minutos
+        const now = new Date();
+        const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+        
+        const refreshParams = new URLSearchParams({ 
+          startDate: format(fiveMinutesAgo, 'yyyy-MM-dd HH:mm:ss'),
+          endDate: format(now, 'yyyy-MM-dd HH:mm:ss')
+        });
+        
         try {
-          const json = await attemptFetch(`/api/schedules/${agentId}`);
-          schedules[agentId] = json;
-          try { sessionStorage.setItem(sk, JSON.stringify(json)); } catch(e) {}
-        } catch (e) {
-          schedules[agentId] = {};
+          await fetch(`/api/zadarma/stats?${refreshParams.toString()}`);
+          console.log('[PERFORMANCE] ✅ Firestore actualizado con datos frescos');
+        } catch (error) {
+          console.warn('[PERFORMANCE] ⚠️ Error actualizando Firestore:', error);
+          // Continuar con datos existentes
         }
-      };
-      const workers: Promise<void>[] = [];
-      while (idx < agentIds.length) {
-        const batch = agentIds.slice(idx, idx + concurrency).map(id => fetchScheduleFor(id));
-        workers.push(...batch);
-        await Promise.all(batch);
-        idx += concurrency;
+      }
+      
+      // Siempre consultar desde Firestore (día completo o rango seleccionado)
+      params = new URLSearchParams({ 
+        startDate: format(date.from, 'yyyy-MM-dd'), 
+        endDate: format(date.to || date.from, 'yyyy-MM-dd')
+      });
+      
+      console.log(`[PERFORMANCE] 📊 Consultando Firestore: ${format(date.from, 'yyyy-MM-dd')} → ${format(date.to || date.from, 'yyyy-MM-dd')}`);
+      
+      const response = await fetch(`${endpoint}?${params.toString()}`);
+      const data = await response.json();
+
+      if (data.status === 'error') {
+        throw new Error(data.message || 'Error al obtener datos');
       }
 
+      // Los datos vienen de Firestore como "calls"
+      const calls = data.calls || [];
+      console.log('[PERFORMANCE] Datos recibidos desde Firestore:', calls.length, 'llamadas');
+
+      // Procesar llamadas y agrupar por agente
       const performanceByAgent: { [k: string]: AdvisorPerformance } = {};
       const dailyPerformance: DailyPerformanceData = {};
+      
       Object.keys(agentMap).forEach(id => {
-        performanceByAgent[id] = { id, name: (agentMap as any)[id], totalCalls: 0, effectiveCalls: 0, effectivenessRate: 0, totalSeconds: 0, averageCallDuration: 0, firstCallTime: null, lastCallTime: null };
+        performanceByAgent[id] = { 
+          id, 
+          name: (agentMap as any)[id], 
+          totalCalls: 0, 
+          effectiveCalls: 0, 
+          effectivenessRate: 0, 
+          totalSeconds: 0, 
+          averageCallDuration: 0, 
+          firstCallTime: null, 
+          lastCallTime: null 
+        };
         dailyPerformance[id] = {};
       });
       
-      (statsData.stats || []).forEach((call: ZadarmaCall) => {
+      // Procesar llamadas y agrupar por agente y día
+      (calls || []).forEach((call: ZadarmaCall) => {
+        if (!call || !call.sip) return;
         if (!performanceByAgent[call.sip]) return;
-        
-        // Usar metadatos pre-calculados cuando estén disponibles, sino calcular como antes
+
         const dayKey = (call as any).callDate || (call.callstart || '').substring(0, 10);
-        
         if (!dailyPerformance[call.sip][dayKey]) {
           dailyPerformance[call.sip][dayKey] = { totalCalls: 0, effectiveCalls: 0, effectivenessRate: 0, totalSeconds: 0, averageCallDuration: 0, firstCallTime: null, lastCallTime: null };
         }
-        
+
         const agentTotal = performanceByAgent[call.sip];
         const agentDaily = dailyPerformance[call.sip][dayKey];
 
-        // 1. Cálculo de Actividad (para horas): usa TODAS las llamadas.
+        // Actividad
         if (!agentTotal.firstCallTime || call.callstart < agentTotal.firstCallTime) agentTotal.firstCallTime = call.callstart;
         if (!agentTotal.lastCallTime || call.callstart > agentTotal.lastCallTime) agentTotal.lastCallTime = call.callstart;
         if (!agentDaily.firstCallTime || call.callstart < agentDaily.firstCallTime) agentDaily.firstCallTime = call.callstart;
         if (!agentDaily.lastCallTime || call.callstart > agentDaily.lastCallTime) agentDaily.lastCallTime = call.callstart;
-        
-        // 2. Cálculo de Rendimiento: usar metadatos pre-calculados cuando estén disponibles
+
         const isOutboundCall = (call as any).isOutbound !== undefined ? (call as any).isOutbound : String(call.destination || '').length >= 5;
         const isAnsweredCall = (call as any).isAnswered !== undefined ? (call as any).isAnswered : call.disposition === 'answered';
-        
+
         if (isOutboundCall) {
-            agentTotal.totalCalls++; agentDaily.totalCalls++;
-            agentTotal.totalSeconds += call.seconds; agentDaily.totalSeconds += call.seconds;
-            if (isAnsweredCall) {
-                agentTotal.effectiveCalls++; agentDaily.effectiveCalls++;
-            }
+          agentTotal.totalCalls++; agentDaily.totalCalls++;
+          agentTotal.totalSeconds += Number(call.seconds) || 0; agentDaily.totalSeconds += Number(call.seconds) || 0;
+          if (isAnsweredCall) { agentTotal.effectiveCalls++; agentDaily.effectiveCalls++; }
         }
       });
       
@@ -262,38 +280,77 @@ export default function AdvisorPerformancePage() {
       };
 
       const daysInInterval = eachDayOfInterval({ start: date.from, end: date.to || date.from });
+      // Sin horarios específicos disponibles, asumimos jornada estándar de 8h/día
+      const hoursPerDay = 8;
       Object.keys(performanceByAgent).forEach(agentId => {
-        const agentSchedule = schedules[agentId];
-        let totalHours = 0;
-        if (agentSchedule) {
-          daysInInterval.forEach(day => {
-            const hours = calculateHoursForDay(agentSchedule, day);
-            totalHours += hours;
-            const dayKey = format(day, 'yyyy-MM-dd');
-            if (dailyPerformance[agentId][dayKey]) {
-              const dailyStats = dailyPerformance[agentId][dayKey];
-              dailyStats.callTarget = hours * CALLS_PER_HOUR_TARGET;
-              dailyStats.compliance = dailyStats.callTarget! > 0 ? (dailyStats.totalCalls / dailyStats.callTarget!) * 100 : 100;
-            }
-          });
-        }
+        let totalHours = daysInInterval.length * hoursPerDay;
         const agentPerformance = performanceByAgent[agentId];
         agentPerformance.callTarget = totalHours * CALLS_PER_HOUR_TARGET;
         agentPerformance.compliance = agentPerformance.callTarget! > 0 ? (agentPerformance.totalCalls / agentPerformance.callTarget!) * 100 : 100;
+
+        // daily targets
+        daysInInterval.forEach(day => {
+          const dayKey = format(day, 'yyyy-MM-dd');
+          if (dailyPerformance[agentId][dayKey]) {
+            const dailyStats = dailyPerformance[agentId][dayKey];
+            dailyStats.callTarget = hoursPerDay * CALLS_PER_HOUR_TARGET;
+            dailyStats.compliance = dailyStats.callTarget! > 0 ? (dailyStats.totalCalls / dailyStats.callTarget!) * 100 : 100;
+          }
+        });
       });
 
       setPerformanceData(Object.values(performanceByAgent).map(p => formatMetrics(p) as AdvisorPerformance));
       Object.values(dailyPerformance).forEach(agentDays => Object.values(agentDays).forEach(formatMetrics));
       setDailyPerformanceData(dailyPerformance);
       
-  // Mostrar solo mensaje genérico para evitar avisos de corrección horaria en la UI
-  toast({ title: "Datos Cargados" });
+      // Mostrar solo mensaje genérico (silent = sin toast si es auto-refresh)
+      if (!silent) {
+        toast({ title: "Datos Cargados" });
+      }
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Error de Conexión", description: error.message });
+      if (!silent) {
+        toast({ variant: "destructive", title: "Error de Conexión", description: error.message });
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
-  }, [date, toast]);
+  }, [date, checkAndBackfillMissingData, toast]);
+  
+  
+  // Auto-refresh cada 60 segundos SOLO para el día actual
+  useEffect(() => {
+    const isToday = date?.from && date.to && 
+      format(date.from, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd') &&
+      format(date.to, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+    
+    if (!isToday || !autoRefreshEnabled) {
+      setCountdown(60);
+      return;
+    }
+    
+    console.log('[AUTO-REFRESH] Activado para el día actual (60s)');
+    
+    // Interval para actualizar datos cada 60s
+    const refreshInterval = setInterval(() => {
+      console.log('[AUTO-REFRESH] Actualizando datos...');
+      fetchAndProcessData(false); // Con toast visible
+      setCountdown(60); // Reiniciar countdown
+    }, 60000);
+    
+    // Interval para countdown cada segundo
+    const countdownInterval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) return 60;
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => {
+      console.log('[AUTO-REFRESH] Desactivado');
+      clearInterval(refreshInterval);
+      clearInterval(countdownInterval);
+    };
+  }, [date, autoRefreshEnabled, fetchAndProcessData]);
   
   useEffect(() => { fetchAndProcessData(); }, [fetchAndProcessData]);
 
@@ -315,31 +372,6 @@ export default function AdvisorPerformancePage() {
   const totalEffectiveCalls = useMemo(() => performanceData.reduce((s, a) => s + a.effectiveCalls, 0), [performanceData]);
   const averageEffectiveness = totalCalls > 0 ? (totalEffectiveCalls / totalCalls) * 100 : 0;
   const chartData = useMemo(() => performanceData.filter(d => d.totalCalls > 0).sort((a,b) => a.name.localeCompare(b.name)), [performanceData]);
-  const calendarData = useMemo(() => {
-    const data: { [date: string]: { value: number; tooltip: string[] } } = {};
-    Object.values(dailyPerformanceData).forEach(agentDays => {
-      Object.entries(agentDays).forEach(([dayKey, stats]) => {
-        if (!data[dayKey]) data[dayKey] = { value: 0, tooltip: [] };
-        if (stats.compliance !== undefined) {
-          data[dayKey].value += stats.compliance;
-          data[dayKey].tooltip.push(`${(agentMap as any)[Object.keys(agentDays)[0]]}: ${stats.compliance.toFixed(0)}%`);
-        }
-      });
-    });
-    return Object.entries(data).map(([date, { value, tooltip }]) => {
-      const numAgents = tooltip.length;
-      const avgCompliance = numAgents > 0 ? value / numAgents : 0;
-      let count = 0;
-      if (avgCompliance < 75) count = 1;
-      else if (avgCompliance < 95) count = 2;
-      else if (avgCompliance >= 95) count = 3;
-      return {
-        date,
-        count,
-        tooltip: `${format(parseISO(date), "dd LLL", { locale: es })}: ${avgCompliance.toFixed(0)}% promedio. ${tooltip.join(', ')}`
-      };
-    });
-  }, [dailyPerformanceData]);
   
   const handleDownloadReport = useCallback(() => {
     if (tableRef.current === null) return;
@@ -374,14 +406,8 @@ export default function AdvisorPerformancePage() {
               <div>
                   <div className="flex items-center gap-3">
                     <h2 className="text-3xl font-bold tracking-tight">Rendimiento de Asesores</h2>
-                    {!isLoading && (
-                      <Badge variant="outline" className="flex items-center gap-1 bg-green-500/20 text-green-500 border-green-500/40">
-                        <Database className="h-3 w-3" />
-                        Datos desde Firestore (Webhook + Backfill)
-                      </Badge>
-                    )}
                   </div>
-                  <p className="text-muted-foreground">Métricas de llamadas y cumplimiento de objetivos.</p>
+                  <p className="text-muted-foreground">Métricas de llamadas con datos en tiempo real desde Firestore</p>
               </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -410,38 +436,67 @@ export default function AdvisorPerformancePage() {
                    </div>
                 </PopoverContent>
               </Popover>
+              <Button variant="outline" size="sm" onClick={() => fetchAndProcessData()}><RefreshCw className="h-4 w-4 mr-2"/>Refrescar Ahora</Button>
               <Button variant="outline" size="sm" onClick={() => setIsScheduleManagerOpen(true)}><Cog className="h-4 w-4 mr-2"/>Gestionar Horarios</Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => {
-                  // Limpiar caches para forzar datos frescos
-                  const keys = Object.keys(sessionStorage);
-                  keys.forEach(key => {
-                    if (key.startsWith('zadarma_stats_') || key.startsWith('schedule_')) {
-                      sessionStorage.removeItem(key);
-                    }
-                  });
-                  fetchAndProcessData();
-                }} 
-                disabled={isLoading}
-              >
-                <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")}/>
-                Refrescar Datos
-              </Button>
           </div>
         </div>
-        {!isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Database className="h-4 w-4 text-green-500" /><p>Datos poblados por Webhook (tiempo real) + Backfill diario (rectificación automática)</p></div>}
+
+        {/* Control de Auto-Refresh y Fuente de Datos */}
+        {format(date?.from || new Date(), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd') && (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex items-center space-x-2">
+                    <Switch 
+                      id="auto-refresh" 
+                      checked={autoRefreshEnabled}
+                      onCheckedChange={setAutoRefreshEnabled}
+                    />
+                    <label htmlFor="auto-refresh" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                      Auto-actualización cada 60s
+                    </label>
+                  </div>
+                  {autoRefreshEnabled && (
+                    <Badge variant="outline" className="flex items-center gap-2">
+                      <Timer className="h-3 w-3 animate-pulse" />
+                      Próxima actualización en {countdown}s
+                    </Badge>
+                  )}
+                </div>
+                {autoRefreshEnabled && (
+                  <div className="text-sm text-muted-foreground">
+                    <RefreshCw className="h-4 w-4 inline mr-1" />
+                    Datos en tiempo real activados
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Estado del Backfill Automático */}
+        {isBackfilling && (
+          <Card className="border-orange-200 bg-orange-50">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <Loader className="h-5 w-5 animate-spin text-orange-600" />
+                <div>
+                  <p className="font-medium text-orange-800">Rellenando datos históricos</p>
+                  <p className="text-sm text-orange-600">{backfillProgress}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       
-        {isLoading ? ( <div className="flex items-center justify-center min-h-[400px]"><Loader className="h-8 w-8 animate-spin text-primary" /><p className="ml-4 text-muted-foreground">Calculando rendimiento...</p></div> ) :
+        {isLoading ? ( <div className="flex items-center justify-center min-h-[400px]"><Loader className="h-8 w-8 animate-spin text-primary" /><p className="ml-4 text-muted-foreground">Consultando Firestore...</p></div> ) :
         (<div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-3">
               <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Total de Intentos</CardTitle><PhoneForwarded className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalCalls}</div></CardContent></Card>
               <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Llamadas Efectivas</CardTitle><CheckCircle className="h-4 w-4 text-green-500" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalEffectiveCalls}</div></CardContent></Card>
               <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Efectividad Promedio</CardTitle><Percent className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className={cn("text-2xl font-bold", averageEffectiveness < 30 ? "text-red-500" : averageEffectiveness < 50 ? "text-yellow-500" : "text-green-500")}>{averageEffectiveness.toFixed(1)}%</div></CardContent></Card>
             </div>
-
-            <Card><CardHeader><CardTitle className="flex items-center"><CalendarIcon className="mr-2 h-5 w-5" />Resumen de Cumplimiento Mensual</CardTitle></CardHeader><CardContent><PerformanceCalendar data={calendarData} /></CardContent></Card>
             
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Detalle por Asesor</CardTitle><CardDescription>{showDailyBreakdown ? "Haz clic en una fila para ver el desglose por día." : "Selecciona un rango de más de un día para ver desglose."}</CardDescription></div><Button variant="outline" size="icon" onClick={handleDownloadReport}><Download className="h-4 w-4" /></Button></CardHeader>

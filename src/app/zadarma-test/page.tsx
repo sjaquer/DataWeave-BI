@@ -7,11 +7,19 @@ export default function ZadarmaTestPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<AnyObj[]>([]);
+  // Por defecto no guardamos en la BD desde la test page
   const [skipSave, setSkipSave] = useState<boolean>(true);
-  // For test-only behaviour: always request using the Spain-time debug endpoint
-  // to compare results with/without timezone conversion. This is intentionally
-  // enabled here only for the test page.
-  const [useSpainTz, setUseSpainTz] = useState<boolean>(true);
+  // Cambiado: ahora usamos 'firestore' por defecto para leer desde cache
+  const defaultSource = 'firestore';
+  // Fecha inicio/fin para rango de prueba
+  const [startDate, setStartDate] = useState<string>(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState<string>(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
   const [reloadKey, setReloadKey] = useState<number>(0);
   const [lastRequestAt, setLastRequestAt] = useState<number>(0);
   const [queued, setQueued] = useState<boolean>(false);
@@ -80,15 +88,12 @@ export default function ZadarmaTestPage() {
     setError(null);
 
     try {
-  // Construir fecha de hoy en formato YYYY-MM-DD (Lima local date)
-      const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
-      const isoDay = `${yyyy}-${mm}-${dd}`;
+    // Usar las fechas seleccionadas (YYYY-MM-DD)
+    const isoStart = startDate;
+    const isoEnd = endDate;
 
-      // Caching key simplificado
-  const cacheKey = `zadarma_${isoDay}_${skipSave ? 'nosave' : 'save'}_${useSpainTz ? 'spain' : 'local'}`;
+    // Caching key simplificado por rango
+    const cacheKey = `zadarma_${isoStart}_${isoEnd}_${skipSave ? 'nosave' : 'save'}`;
       const cached = sessionStorage.getItem(cacheKey);
       if (cached) {
         try {
@@ -102,13 +107,10 @@ export default function ZadarmaTestPage() {
         } catch (e) { /* ignore cache parse errors */ }
       }
 
-      // Test page: always use the debug-spain endpoint so we can compare behavior
-      // with Spain timezone logic even if the checkbox is unchecked.
-      const params = new URLSearchParams({ startDate: isoDay, endDate: isoDay });
-      if (skipSave) params.set('skipSave', 'true');
-      const url = `/api/zadarma/debug-spain?${params.toString()}`;
-
-      const data = await attemptFetch(url, 3);
+      const params = new URLSearchParams({ startDate: isoStart, endDate: isoEnd, source: defaultSource });
+      // skipSave ya no es relevante cuando source=firestore (solo lectura)
+      // Solo se usa cuando manualmente cambias a source=api en zadarma-api-test
+      const url = `/api/zadarma/stats?${params.toString()}`;      const data = await attemptFetch(url, 3);
       if (data.status === 'error') throw new Error(data.message || 'Error desde la API');
 
       setRows(data.stats || []);
@@ -134,8 +136,8 @@ export default function ZadarmaTestPage() {
   useEffect(() => { load(); }, [reloadKey]);
   // run when toggles change, but guard by triggering reloadKey (so cooldown logic centralizes)
   useEffect(() => { setReloadKey(k => k + 1); }, [skipSave]);
-  // When user switches the Spain timezone toggle, force a reload so cacheKey changes and new endpoint is called
-  useEffect(() => { setReloadKey(k => k + 1); }, [useSpainTz]);
+  // When date range changes, force a reload so cacheKey changes
+  useEffect(() => { setReloadKey(k => k + 1); }, [startDate, endDate]);
 
   return (
     <div style={{ padding: 24 }}>
@@ -143,15 +145,24 @@ export default function ZadarmaTestPage() {
       <p>Esto consulta <code>/api/zadarma/stats?startDate=YYYY-MM-DD&amp;endDate=YYYY-MM-DD</code> y muestra todos los campos recibidos.</p>
 
       <div style={{ marginBottom: 12 }}>
-        <label style={{ marginRight: 12 }}>
-          <input type="checkbox" checked={skipSave} onChange={e => setSkipSave(e.target.checked)} />{' '}
-          Evitar guardar en BD (skipSave)
-        </label>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>Fecha inicio</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>Fecha fin</label>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          </div>
+
           <label style={{ marginRight: 12 }}>
-            <input type="checkbox" checked={useSpainTz} onChange={e => setUseSpainTz(e.target.checked)} />{' '}
-            Pedir datos según zona España (solo para test)
+            <input type="checkbox" checked={skipSave} onChange={e => setSkipSave(e.target.checked)} />{' '}
+            Evitar guardar en BD (skipSave)
           </label>
-        <button onClick={() => setReloadKey(k => k + 1)} style={{ marginLeft: 8 }}>Recargar</button>
+
+          <button onClick={() => setReloadKey(k => k + 1)} style={{ marginLeft: 8 }}>Recargar</button>
+        </div>
 
         <div style={{ display: 'inline-block', marginLeft: 16, verticalAlign: 'middle', color: '#444' }}>
           <div style={{ fontSize: 12 }}>Cooldown: {cooldownSeconds}s entre peticiones (máx 10/min)</div>

@@ -4,7 +4,7 @@ import * as dotenv from "dotenv";
 import CryptoJS from "crypto-js";
 import { db } from "@/lib/firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
-import { saveSyncMetadata } from "@/lib/zadarma-helpers";
+import { saveSyncMetadata, getLastSyncedHour, fetchZadarmaAdaptive, getZadarmaCallsFromFirestore } from "@/lib/zadarma-helpers";
 
 dotenv.config();
 
@@ -287,33 +287,51 @@ export async function POST(req: Request) {
       const dateStr = format(date, 'yyyy-MM-dd');
       console.log(`[BACKFILL-RANGE] 📅 Procesando día ${dateStr}...`);
 
-      try {
-        // Obtener todas las llamadas del día (con paginación automática y rate limiting)
-        const calls = await fetchCallsForDay(dateStr, ZADARMA_API_KEY, ZADARMA_API_SECRET);
-
-        console.log(`[BACKFILL-RANGE] 📊 ${dateStr}: ${calls.length} llamadas obtenidas`);
-        totalCalls += calls.length;
-
-        // Guardar cada llamada en Firestore
-        for (const call of calls) {
-          const success = await saveCallToFirestore(call);
-          if (success) {
-            savedCalls++;
-          } else {
-            failedCalls++;
-          }
-        }
-
-        processedDays.push(dateStr);
-        console.log(`[BACKFILL-RANGE] ✅ ${dateStr}: ${calls.length} llamadas procesadas (guardadas: ${savedCalls})`);
-
-        // 🔥 IMPORTANTE: Marcar día como sincronizado en metadata
         try {
-          await saveSyncMetadata(date, calls.length, 'success');
-          console.log(`[BACKFILL-RANGE] 📝 Metadata de sincronización guardada para ${dateStr}`);
-        } catch (metaError) {
-          console.warn(`[BACKFILL-RANGE] ⚠️ Error guardando metadata para ${dateStr}:`, metaError);
-        }
+          // Verificar si ya tenemos llamadas guardadas para este día y hasta qué hora
+          const lastSynced = await getLastSyncedHour(date);
+
+          let calls: any[] = [];
+
+          if (lastSynced && lastSynced.getFullYear() === date.getFullYear() && lastSynced.getMonth() === date.getMonth() && lastSynced.getDate() === date.getDate()) {
+            // Si existe última hora sincronizada y no cubre todo el día, pedir solo el rango restante
+            const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59);
+            const startFetch = new Date(lastSynced.getTime() + 1000); // comenzar justo después de la última llamada guardada
+            if (startFetch <= endOfDay) {
+              console.log(`[BACKFILL-RANGE] 🔁 Detectado última llamada guardada a ${lastSynced.toISOString()} - solicitando llamadas desde ${startFetch.toISOString()} hasta ${endOfDay.toISOString()}`);
+              calls = await fetchZadarmaAdaptive(startFetch, endOfDay, ZADARMA_API_KEY, ZADARMA_API_SECRET);
+            } else {
+              calls = [];
+            }
+          } else {
+            // No hay datos parciales: solicitar todo el día
+            calls = await fetchCallsForDay(dateStr, ZADARMA_API_KEY, ZADARMA_API_SECRET);
+          }
+
+          console.log(`[BACKFILL-RANGE] 📊 ${dateStr}: ${calls.length} llamadas obtenidas (rango parcial/full)`);
+          totalCalls += calls.length;
+
+          // Guardar cada llamada en Firestore
+          for (const call of calls) {
+            const success = await saveCallToFirestore(call);
+            if (success) {
+              savedCalls++;
+            } else {
+              failedCalls++;
+            }
+          }
+
+          processedDays.push(dateStr);
+          console.log(`[BACKFILL-RANGE] ✅ ${dateStr}: ${calls.length} llamadas procesadas (guardadas: ${savedCalls})`);
+
+          // 🔥 IMPORTANTE: Marcar día como sincronizado en metadata - usar conteo real desde Firestore
+          try {
+            const totalSavedForDate = (await getZadarmaCallsFromFirestore(date, date)).length;
+            await saveSyncMetadata(date, totalSavedForDate, 'success');
+            console.log(`[BACKFILL-RANGE] 📝 Metadata de sincronización actualizada para ${dateStr} (totalSaved=${totalSavedForDate})`);
+          } catch (metaError) {
+            console.warn(`[BACKFILL-RANGE] ⚠️ Error guardando metadata para ${dateStr}:`, metaError);
+          }
 
       } catch (error) {
         console.error(`[BACKFILL-RANGE] ❌ Error procesando ${dateStr}:`, error);

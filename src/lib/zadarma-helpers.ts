@@ -94,21 +94,65 @@ export async function getMissingDaysFromFirestore(startDate: Date, endDate: Date
         currentDate = addDays(currentDate, 1);
     }
     
-    if (daysInRange.length === 0) return [];
-    
-    const syncIds = daysInRange.map(d => `sync_${format(d, 'yyyy-MM-dd')}`);
-    const foundDates = new Set<string>();
+  if (daysInRange.length === 0) return [];
 
-    for (let i = 0; i < syncIds.length; i += 30) {
-        const chunk = syncIds.slice(i, i + 30);
-        const foundDocs = await db.collection('zadarma_sync_metadata')
-            .where('__name__', 'in', chunk)
-            .where('status', '==', 'success')
-            .get();
-        foundDocs.docs.forEach((doc: DocumentData) => foundDates.add(doc.data().date));
+  const syncIds = daysInRange.map(d => `sync_${format(d, 'yyyy-MM-dd')}`);
+  const foundDates = new Set<string>();
+
+  for (let i = 0; i < syncIds.length; i += 30) {
+    const chunk = syncIds.slice(i, i + 30);
+    const foundDocs = await db.collection('zadarma_sync_metadata')
+      .where('__name__', 'in', chunk)
+      .where('status', '==', 'success')
+      .get();
+    foundDocs.docs.forEach((doc: DocumentData) => foundDates.add(doc.data().date));
+  }
+
+  // Considerar días parcialmente sincronizados como 'faltantes' para los días recientes
+  // (ej. hoy y ayer) si la última hora sincronizada no cubre todo el día.
+  const recentWindowDays = 1; // revisar hoy y ayer
+  const missing: Date[] = [];
+  const todayStart = startOfDay(new Date());
+
+  for (const d of daysInRange) {
+    const key = format(d, 'yyyy-MM-dd');
+
+    // Si no hay metadata de éxito, el día está faltante
+    if (!foundDates.has(key)) {
+      missing.push(d);
+      continue;
     }
-    
-    return daysInRange.filter(d => !foundDates.has(format(d, 'yyyy-MM-dd')));
+
+    // Si la metadata existe, pero la fecha es reciente (hoy/ayer), verificar la última hora sincronizada
+    const diffDays = Math.floor((todayStart.getTime() - startOfDay(d).getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= recentWindowDays) {
+      try {
+        const lastHour = await getLastSyncedHour(d);
+        // Si no hay llamadas registradas o la última hora es menor a 23, consideramos faltante
+        if (!lastHour) {
+          missing.push(d);
+          continue;
+        }
+        if (lastHour.getFullYear() === d.getFullYear() && lastHour.getMonth() === d.getMonth() && lastHour.getDate() === d.getDate()) {
+          if (lastHour.getHours() < 23) {
+            missing.push(d);
+            continue;
+          }
+        } else {
+          // Si la última hora no corresponde al mismo día (por error), marcar como faltante
+          missing.push(d);
+          continue;
+        }
+      } catch (err) {
+        // En caso de error al determinar la última hora, marcar como faltante para ser seguro
+        missing.push(d);
+        continue;
+      }
+    }
+    // Si metadata existe y no es reciente o ya cubre hasta las 23h, lo consideramos sincronizado
+  }
+
+  return missing;
 }
 
 export async function getLastSyncedHour(date: Date): Promise<Date | null> {

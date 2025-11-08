@@ -108,50 +108,67 @@ export async function getMissingDaysFromFirestore(startDate: Date, endDate: Date
     foundDocs.docs.forEach((doc: DocumentData) => foundDates.add(doc.data().date));
   }
 
-  // Considerar días parcialmente sincronizados como 'faltantes' para los días recientes
-  // (ej. hoy y ayer) si la última hora sincronizada no cubre todo el día.
-  const recentWindowDays = 1; // revisar hoy y ayer
+  // IMPORTANTE: Excluir el día actual (HOY) del backfill
+  // El día actual se maneja EXCLUSIVAMENTE con auto-refresh de 60s
   const missing: Date[] = [];
   const todayStart = startOfDay(new Date());
+  
+  console.log(`[MISSING-DAYS] 🔍 Analizando ${daysInRange.length} días. HOY (${format(todayStart, 'yyyy-MM-dd')}) será EXCLUIDO del backfill.`);
 
   for (const d of daysInRange) {
     const key = format(d, 'yyyy-MM-dd');
 
+    // 🚫 EXCLUIR EL DÍA ACTUAL - no debe procesarse en backfill
+    const isToday = startOfDay(d).getTime() === todayStart.getTime();
+    if (isToday) {
+      console.log(`[MISSING-DAYS] ⚠️ ${key}: EXCLUIDO - día actual manejado por auto-refresh`);
+      continue;
+    }
+
     // Si no hay metadata de éxito, el día está faltante
     if (!foundDates.has(key)) {
+      console.log(`[MISSING-DAYS] 📝 ${key}: SIN METADATA - agregado a backfill`);
       missing.push(d);
       continue;
     }
 
-    // Si la metadata existe, pero la fecha es reciente (hoy/ayer), verificar la última hora sincronizada
+    // Para días anteriores (no HOY), verificar si están parcialmente sincronizados
     const diffDays = Math.floor((todayStart.getTime() - startOfDay(d).getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDays <= recentWindowDays) {
+    if (diffDays === 1) { // Solo ayer - verificar última hora sincronizada
       try {
         const lastHour = await getLastSyncedHour(d);
         // Si no hay llamadas registradas o la última hora es menor a 23, consideramos faltante
         if (!lastHour) {
+          console.log(`[MISSING-DAYS] 📝 ${key}: SIN LLAMADAS - agregado a backfill`);
           missing.push(d);
           continue;
         }
         if (lastHour.getFullYear() === d.getFullYear() && lastHour.getMonth() === d.getMonth() && lastHour.getDate() === d.getDate()) {
           if (lastHour.getHours() < 23) {
+            console.log(`[MISSING-DAYS] 📝 ${key}: PARCIAL hasta ${lastHour.getHours()}h - agregado a backfill`);
             missing.push(d);
             continue;
           }
         } else {
           // Si la última hora no corresponde al mismo día (por error), marcar como faltante
+          console.log(`[MISSING-DAYS] 📝 ${key}: HORA INCONSISTENTE - agregado a backfill`);
           missing.push(d);
           continue;
         }
+        console.log(`[MISSING-DAYS] ✅ ${key}: COMPLETO hasta ${lastHour.getHours()}h`);
       } catch (err) {
         // En caso de error al determinar la última hora, marcar como faltante para ser seguro
+        console.log(`[MISSING-DAYS] 📝 ${key}: ERROR verificación - agregado a backfill`);
         missing.push(d);
         continue;
       }
+    } else {
+      console.log(`[MISSING-DAYS] ✅ ${key}: TIENE METADATA y no es reciente`);
     }
     // Si metadata existe y no es reciente o ya cubre hasta las 23h, lo consideramos sincronizado
   }
 
+  console.log(`[MISSING-DAYS] 📊 Resultado: ${missing.length} días para backfill de ${daysInRange.length} total`);
   return missing;
 }
 

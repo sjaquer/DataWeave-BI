@@ -285,52 +285,83 @@ export async function POST(req: Request) {
 
     for (const date of dateRange) {
       const dateStr = format(date, 'yyyy-MM-dd');
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      
       console.log(`[BACKFILL-RANGE] 📅 Procesando día ${dateStr}...`);
+      
+      // 🚫 VALIDACIÓN DE SEGURIDAD: NO permitir backfill del día actual
+      if (dateStr === todayStr) {
+        console.log(`[BACKFILL-RANGE] ⚠️ ${dateStr}: RECHAZADO - día actual debe manejarse solo con auto-refresh`);
+        processedDays.push(`${dateStr} (RECHAZADO - día actual)`);
+        continue;
+      }
 
         try {
+          // 🔍 LOGGING DETALLADO: Estado inicial del día
+          console.log(`[BACKFILL-RANGE] 📅 Analizando estado del día: ${dateStr}`);
+          
           // Verificar si ya tenemos llamadas guardadas para este día y hasta qué hora
           const lastSynced = await getLastSyncedHour(date);
 
           let calls: any[] = [];
+          let fetchStartTime: Date;
+          let fetchEndTime: Date;
 
           if (lastSynced && lastSynced.getFullYear() === date.getFullYear() && lastSynced.getMonth() === date.getMonth() && lastSynced.getDate() === date.getDate()) {
             // Si existe última hora sincronizada y no cubre todo el día, pedir solo el rango restante
             const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59);
-            const startFetch = new Date(lastSynced.getTime() + 1000); // comenzar justo después de la última llamada guardada
-            if (startFetch <= endOfDay) {
-              console.log(`[BACKFILL-RANGE] 🔁 Detectado última llamada guardada a ${lastSynced.toISOString()} - solicitando llamadas desde ${startFetch.toISOString()} hasta ${endOfDay.toISOString()}`);
-              calls = await fetchZadarmaAdaptive(startFetch, endOfDay, ZADARMA_API_KEY, ZADARMA_API_SECRET);
+            fetchStartTime = new Date(lastSynced.getTime() + 1000); // comenzar justo después de la última llamada guardada
+            fetchEndTime = endOfDay;
+            
+            if (fetchStartTime <= endOfDay) {
+              console.log(`[BACKFILL-RANGE] 🔁 ${dateStr}: Última llamada guardada a las ${lastSynced.getHours()}:${String(lastSynced.getMinutes()).padStart(2,'0')}`);
+              console.log(`[BACKFILL-RANGE] 📡 ${dateStr}: Solicitando rango PARCIAL - desde ${fetchStartTime.toISOString()} hasta ${fetchEndTime.toISOString()}`);
+              calls = await fetchZadarmaAdaptive(fetchStartTime, fetchEndTime, ZADARMA_API_KEY, ZADARMA_API_SECRET);
+              console.log(`[BACKFILL-RANGE] 📊 ${dateStr}: Rango parcial devolvió ${calls.length} llamadas nuevas`);
             } else {
+              console.log(`[BACKFILL-RANGE] ✅ ${dateStr}: Ya sincronizado hasta el final del día (${lastSynced.getHours()}h)`);
               calls = [];
             }
           } else {
             // No hay datos parciales: solicitar todo el día
+            fetchStartTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0);
+            fetchEndTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59);
+            
+            console.log(`[BACKFILL-RANGE] 📡 ${dateStr}: Sin datos previos - solicitando día COMPLETO`);
+            console.log(`[BACKFILL-RANGE] 📡 ${dateStr}: Rango: ${fetchStartTime.toISOString()} hasta ${fetchEndTime.toISOString()}`);
             calls = await fetchCallsForDay(dateStr, ZADARMA_API_KEY, ZADARMA_API_SECRET);
+            console.log(`[BACKFILL-RANGE] 📊 ${dateStr}: Día completo devolvió ${calls.length} llamadas`);
           }
 
-          console.log(`[BACKFILL-RANGE] 📊 ${dateStr}: ${calls.length} llamadas obtenidas (rango parcial/full)`);
+          console.log(`[BACKFILL-RANGE] 📊 ${dateStr}: Total de llamadas obtenidas de API: ${calls.length}`);
           totalCalls += calls.length;
 
-          // Guardar cada llamada en Firestore
+          // Guardar cada llamada en Firestore (con deduplicación automática)
+          let callsSavedThisDay = 0;
+          let callsSkippedThisDay = 0;
+          
           for (const call of calls) {
             const success = await saveCallToFirestore(call);
             if (success) {
               savedCalls++;
+              callsSavedThisDay++;
             } else {
               failedCalls++;
+              callsSkippedThisDay++;
             }
           }
 
+          console.log(`[BACKFILL-RANGE] 💾 ${dateStr}: Llamadas procesadas - Guardadas: ${callsSavedThisDay}, Fallos: ${callsSkippedThisDay}`);
           processedDays.push(dateStr);
-          console.log(`[BACKFILL-RANGE] ✅ ${dateStr}: ${calls.length} llamadas procesadas (guardadas: ${savedCalls})`);
+          console.log(`[BACKFILL-RANGE] ✅ ${dateStr}: Día procesado completo`);
 
           // 🔥 IMPORTANTE: Marcar día como sincronizado en metadata - usar conteo real desde Firestore
           try {
             const totalSavedForDate = (await getZadarmaCallsFromFirestore(date, date)).length;
             await saveSyncMetadata(date, totalSavedForDate, 'success');
-            console.log(`[BACKFILL-RANGE] 📝 Metadata de sincronización actualizada para ${dateStr} (totalSaved=${totalSavedForDate})`);
+            console.log(`[BACKFILL-RANGE] 📝 ${dateStr}: Metadata actualizada (totalSaved=${totalSavedForDate})`);
           } catch (metaError) {
-            console.warn(`[BACKFILL-RANGE] ⚠️ Error guardando metadata para ${dateStr}:`, metaError);
+            console.warn(`[BACKFILL-RANGE] ⚠️ ${dateStr}: Error guardando metadata:`, metaError);
           }
 
       } catch (error) {

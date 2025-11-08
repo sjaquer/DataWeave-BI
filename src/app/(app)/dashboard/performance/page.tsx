@@ -327,47 +327,54 @@ export default function AdvisorPerformancePage() {
       
       let calls: any[] = [];
       
-      // 🔥 CRÍTICO: Si estamos viendo HOY, SIEMPRE pedir a la API en tiempo real (auto-refresh o no)
+      // 🔥 CRÍTICO: Si estamos viendo HOY, mostrar Firestore INMEDIATAMENTE y actualizar en background
       if (isViewingToday) {
-        console.log('[PERFORMANCE] � DÍA DE HOY detectado - pidiendo SIEMPRE a API en tiempo real...');
+        console.log('[PERFORMANCE] 🔥 DÍA DE HOY - mostrando Firestore y actualizando en background...');
         
-        // 🔥 IMPORTANTE: Para HOY, pedir TODO EL DÍA directamente a la API
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const now = new Date();
-        
-        const refreshParams = new URLSearchParams({ 
-          startDate: format(todayStart, 'yyyy-MM-dd HH:mm:ss'),
-          endDate: format(now, 'yyyy-MM-dd HH:mm:ss')
+        // 1️⃣ PRIMERO: Cargar datos existentes de Firestore INMEDIATAMENTE
+        const firestoreParams = new URLSearchParams({ 
+          startDate: format(date.from, 'yyyy-MM-dd'), 
+          endDate: format(date.to || date.from, 'yyyy-MM-dd')
         });
         
-        console.log(`[PERFORMANCE] 📡 Solicitando TODO HOY a API desde ${format(todayStart, 'yyyy-MM-dd HH:mm:ss')} hasta ${format(now, 'yyyy-MM-dd HH:mm:ss')}`);
+        console.log(`[PERFORMANCE] ⚡ Cargando Firestore para mostrar inmediatamente...`);
+        const firestoreResponse = await fetch(`/api/zadarma/calls?${firestoreParams.toString()}`);
+        const firestoreData = await firestoreResponse.json();
+        calls = firestoreData.calls || [];
+        console.log(`[PERFORMANCE] ✅ Firestore cargado: ${calls.length} llamadas (mostrando AHORA)`);
         
-        try {
-          const statsResponse = await fetch(`/api/zadarma/stats?${refreshParams.toString()}`);
-          const statsData = await statsResponse.json();
+        // 2️⃣ SEGUNDO: Actualizar desde API en BACKGROUND (sin bloquear)
+        setTimeout(async () => {
+          console.log('[PERFORMANCE] 🔄 Actualizando desde API Zadarma en segundo plano...');
           
-          if (statsData.status === 'error') {
-            throw new Error(statsData.message || 'Error al obtener datos de la API');
-          }
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
+          const now = new Date();
           
-          // 🔥 USAR DIRECTAMENTE LOS DATOS DE LA API (stats), NO leer de Firestore
-          calls = statsData.stats || [];
-          const saved = statsData.saved || 0;
-          const failed = statsData.failed || 0;
-          console.log(`[PERFORMANCE] ✅ API completada - devolvió ${calls.length} llamadas, guardadas: ${saved}, fallos: ${failed}`);
-          console.log('[PERFORMANCE] 🎯 Usando datos DIRECTOS de la API, sin consultar Firestore');
-        } catch (error) {
-          console.warn('[PERFORMANCE] ⚠️ Error con API, fallback a Firestore:', error);
-          // Si falla la API, hacer fallback a Firestore
-          const params = new URLSearchParams({ 
-            startDate: format(date.from, 'yyyy-MM-dd'), 
-            endDate: format(date.to || date.from, 'yyyy-MM-dd')
+          const refreshParams = new URLSearchParams({ 
+            startDate: format(todayStart, 'yyyy-MM-dd HH:mm:ss'),
+            endDate: format(now, 'yyyy-MM-dd HH:mm:ss')
           });
-          const response = await fetch(`/api/zadarma/calls?${params.toString()}`);
-          const data = await response.json();
-          calls = data.calls || [];
-        }
+          
+          try {
+            const statsResponse = await fetch(`/api/zadarma/stats?${refreshParams.toString()}`);
+            const statsData = await statsResponse.json();
+            
+            if (statsData.status === 'success') {
+              const freshCalls = statsData.stats || [];
+              const saved = statsData.saved || 0;
+              console.log(`[PERFORMANCE] ✅ Background API completada - ${freshCalls.length} llamadas, guardadas: ${saved}`);
+              
+              // 🔄 Actualizar UI con datos frescos
+              const processedData = processCallsData(freshCalls);
+              setPerformanceData(processedData.performance);
+              setDailyPerformanceData(processedData.daily);
+              console.log('[PERFORMANCE] 🎯 UI actualizada con datos frescos de API');
+            }
+          } catch (error) {
+            console.warn('[PERFORMANCE] ⚠️ Error en background update:', error);
+          }
+        }, 100);
       } else {
         // Para días anteriores, consultar desde Firestore
         params = new URLSearchParams({ 

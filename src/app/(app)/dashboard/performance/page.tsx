@@ -102,13 +102,23 @@ export default function AdvisorPerformancePage() {
         return;
       }
       
-      // Verificar qué días faltan en Firestore
+      // 🚫 SI ES HOY, NO HACER CHECK-MISSING - HOY se maneja solo con auto-refresh
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const startDateStr = format(startDate, 'yyyy-MM-dd');
+      const endDateStr = format(endDate, 'yyyy-MM-dd');
+      
+      if (startDateStr === today && endDateStr === today) {
+        console.log('[PERFORMANCE] ⏭️ HOY detectado - saltando check-missing (se maneja con auto-refresh)');
+        return;
+      }
+      
+      // Verificar qué días faltan en Firestore (solo para días anteriores)
       const response = await fetch('/api/zadarma/check-missing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          startDate: format(startDate, 'yyyy-MM-dd'), 
-          endDate: format(endDate, 'yyyy-MM-dd') 
+          startDate: startDateStr, 
+          endDate: endDateStr
         })
       });
       
@@ -315,46 +325,68 @@ export default function AdvisorPerformancePage() {
       let endpoint = '/api/zadarma/calls'; // Siempre leer desde Firestore
       let params: URLSearchParams;
       
-      // Si es auto-refresh del día actual, PRIMERO actualizar Firestore con datos frescos
-      if (isAutoRefresh && isViewingToday) {
-        console.log('[PERFORMANCE] 🔄 Auto-refresh: Actualizando Firestore con datos frescos...');
+      let calls: any[] = [];
+      
+      // 🔥 CRÍTICO: Si estamos viendo HOY, SIEMPRE pedir a la API en tiempo real (auto-refresh o no)
+      if (isViewingToday) {
+        console.log('[PERFORMANCE] � DÍA DE HOY detectado - pidiendo SIEMPRE a API en tiempo real...');
         
-        // Llamar a /api/zadarma/stats para actualizar Firestore con últimos 5 minutos
+        // 🔥 IMPORTANTE: Para HOY, pedir TODO EL DÍA directamente a la API
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
         const now = new Date();
-        const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
         
         const refreshParams = new URLSearchParams({ 
-          startDate: format(fiveMinutesAgo, 'yyyy-MM-dd HH:mm:ss'),
+          startDate: format(todayStart, 'yyyy-MM-dd HH:mm:ss'),
           endDate: format(now, 'yyyy-MM-dd HH:mm:ss')
         });
         
+        console.log(`[PERFORMANCE] 📡 Solicitando TODO HOY a API desde ${format(todayStart, 'yyyy-MM-dd HH:mm:ss')} hasta ${format(now, 'yyyy-MM-dd HH:mm:ss')}`);
+        
         try {
-          await fetch(`/api/zadarma/stats?${refreshParams.toString()}`);
-          console.log('[PERFORMANCE] ✅ Firestore actualizado con datos frescos');
+          const statsResponse = await fetch(`/api/zadarma/stats?${refreshParams.toString()}`);
+          const statsData = await statsResponse.json();
+          
+          if (statsData.status === 'error') {
+            throw new Error(statsData.message || 'Error al obtener datos de la API');
+          }
+          
+          // 🔥 USAR DIRECTAMENTE LOS DATOS DE LA API (stats), NO leer de Firestore
+          calls = statsData.stats || [];
+          const saved = statsData.saved || 0;
+          const failed = statsData.failed || 0;
+          console.log(`[PERFORMANCE] ✅ API completada - devolvió ${calls.length} llamadas, guardadas: ${saved}, fallos: ${failed}`);
+          console.log('[PERFORMANCE] 🎯 Usando datos DIRECTOS de la API, sin consultar Firestore');
         } catch (error) {
-          console.warn('[PERFORMANCE] ⚠️ Error actualizando Firestore:', error);
-          // Continuar con datos existentes
+          console.warn('[PERFORMANCE] ⚠️ Error con API, fallback a Firestore:', error);
+          // Si falla la API, hacer fallback a Firestore
+          const params = new URLSearchParams({ 
+            startDate: format(date.from, 'yyyy-MM-dd'), 
+            endDate: format(date.to || date.from, 'yyyy-MM-dd')
+          });
+          const response = await fetch(`/api/zadarma/calls?${params.toString()}`);
+          const data = await response.json();
+          calls = data.calls || [];
         }
-      }
-      
-      // Siempre consultar desde Firestore (día completo o rango seleccionado)
-      params = new URLSearchParams({ 
-        startDate: format(date.from, 'yyyy-MM-dd'), 
-        endDate: format(date.to || date.from, 'yyyy-MM-dd')
-      });
-      
-      console.log(`[PERFORMANCE] 📊 Consultando Firestore: ${format(date.from, 'yyyy-MM-dd')} → ${format(date.to || date.from, 'yyyy-MM-dd')}`);
-      
-      const response = await fetch(`${endpoint}?${params.toString()}`);
-      const data = await response.json();
+      } else {
+        // Para días anteriores, consultar desde Firestore
+        params = new URLSearchParams({ 
+          startDate: format(date.from, 'yyyy-MM-dd'), 
+          endDate: format(date.to || date.from, 'yyyy-MM-dd')
+        });
+        
+        console.log(`[PERFORMANCE] 📊 Consultando Firestore: ${format(date.from, 'yyyy-MM-dd')} → ${format(date.to || date.from, 'yyyy-MM-dd')}`);
+        
+        const response = await fetch(`${endpoint}?${params.toString()}`);
+        const data = await response.json();
 
-      if (data.status === 'error') {
-        throw new Error(data.message || 'Error al obtener datos');
-      }
+        if (data.status === 'error') {
+          throw new Error(data.message || 'Error al obtener datos');
+        }
 
-      // Los datos vienen de Firestore como "calls"
-      const calls = data.calls || [];
-      console.log('[PERFORMANCE] Datos recibidos desde Firestore:', calls.length, 'llamadas');
+        calls = data.calls || [];
+        console.log('[PERFORMANCE] Datos recibidos desde Firestore:', calls.length, 'llamadas');
+      }
 
       // 🔄 PROCESAR DATOS EXISTENTES INMEDIATAMENTE
       const processedData = processCallsData(calls);
@@ -364,13 +396,16 @@ export default function AdvisorPerformancePage() {
       if (!silent) setIsLoading(false);
 
       // 🔍 VERIFICACIÓN EN PARALELO: Si no es auto-refresh y no es consulta silenciosa, verificar datos faltantes
-      if (!isAutoRefresh && !silent && date.from) {
+      // 🚫 PERO NUNCA PARA EL DÍA DE HOY - HOY se maneja solo con auto-refresh
+      if (!isAutoRefresh && !silent && date.from && !isViewingToday) {
         // Ejecutar en paralelo sin bloquear la UI
         setTimeout(async () => {
           if (date.from) {
             await checkAndBackfillMissingDataInBackground(date.from, date.to || date.from);
           }
         }, 500);
+      } else if (isViewingToday) {
+        console.log('[PERFORMANCE] ⏭️ HOY detectado - saltando verificación de datos faltantes (auto-refresh lo maneja)');
       }
 
       // Mostrar solo mensaje genérico (silent = sin toast si es auto-refresh)

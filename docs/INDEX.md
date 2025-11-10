@@ -1,6 +1,17 @@
 # 📚 Índice de Documentación - DataWeave BI
-**Última actualización:** 2025-10-15  
-**Versión:** 2.0.0
+**Última actualización:** 2025-11-09  
+**Versión:** 2.1.0
+
+---
+
+## 🚨 CRÍTICO - Acción Requerida
+
+### ⚡ Optimización y Rendimiento
+| Documento | Descripción | Prioridad |
+|-----------|-------------|-----------|
+| [ACCION-INMEDIATA-CPU-2025-11-09.md](./ACCION-INMEDIATA-CPU-2025-11-09.md) | 🚀 **EMPEZAR AQUÍ**: Guía paso a paso para implementar optimizaciones AHORA (2-3 horas) | 🔴 CRÍTICA |
+| [OPTIMIZACION-CPU-VERCEL-2025-11-09.md](./OPTIMIZACION-CPU-VERCEL-2025-11-09.md) | 🚨 **ANÁLISIS COMPLETO**: Plan de optimización de consumo CPU en Vercel (91.2% del límite). Análisis detallado, cache+lock, batch writes, plan de implementación | 🔴 CRÍTICA |
+| [RESUMEN-ACTUALIZACION-DOCS-2025-11-09.md](./RESUMEN-ACTUALIZACION-DOCS-2025-11-09.md) | 📝 Resumen de cambios en documentación (2025-11-09) | 🟡 MEDIA |
 
 ---
 
@@ -226,7 +237,11 @@ src/
 
 ## ⚠️ Notas Importantes
 
-### 🔴 Acción Requerida
+### 🔴 Acción Requerida - CRÍTICA
+- [ ] **IMPLEMENTAR OPTIMIZACIONES DE CPU** (Ver OPTIMIZACION-CPU-VERCEL-2025-11-09.md)
+  - [ ] Cache + Lock system en `/api/zadarma/stats`
+  - [ ] Batch writes en todos los endpoints
+  - [ ] Eliminar sleeps bloqueantes
 - [ ] Deploy del Apps Script actualizado (ver INSTRUCCIONES-DEPLOY-APPS-SCRIPT.md)
 - [ ] Testing E2E en producción (24-48 horas)
 
@@ -237,11 +252,15 @@ src/
 - [x] Verificación FORMA DE PAGO
 - [x] Interfaces TypeScript creadas
 - [x] Documentación completa
+- [x] **Análisis de optimización de CPU Vercel (2025-11-09)**
+- [x] **Plan de acción para reducir consumo 70-90%**
 
 ### 🟡 Recomendado
 - [ ] Usar interfaces TypeScript en webhooks
 - [ ] Implementar validación con `validarFilaMinima()`
 - [ ] Monitorear logs durante 48 horas post-deploy
+- [ ] **Monitorear métricas de cache (hit rate > 95%)**
+- [ ] **Configurar alertas CPU > 80% en Vercel**
 
 ---
 
@@ -252,9 +271,10 @@ Para preguntas sobre:
 - **Estructura de Datos**: Ver ESTRUCTURA-COLUMNAS-SHEETS.md
 - **Deploy**: Ver INSTRUCCIONES-DEPLOY-APPS-SCRIPT.md
 - **Errores**: Revisar sección Troubleshooting en INSTRUCCIONES-DEPLOY-APPS-SCRIPT.md
+- **Optimización CPU**: Ver OPTIMIZACION-CPU-VERCEL-2025-11-09.md
 
 ---
 
-**Última verificación:** 2025-10-15  
+**Última verificación:** 2025-11-09  
 **Estado:** ✅ Documentación completa y actualizada  
-**Versión del sistema:** 2.0.0
+**Versión del sistema:** 2.1.0

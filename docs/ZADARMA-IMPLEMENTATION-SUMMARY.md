@@ -1,11 +1,14 @@
 # ✅ Implementación Completada: Webhook + Backfill de Zadarma
 
+> ⚡ **ACTUALIZACIÓN 2025-11-09**: Sistema optimizado para bajo consumo de CPU. Incluye cache inteligente, batch writes y locks cross-instance. Ver [OPTIMIZACION-CPU-VERCEL-2025-11-09.md](./OPTIMIZACION-CPU-VERCEL-2025-11-09.md).
+
 ## 🎯 Resumen Ejecutivo
 
 Se ha implementado exitosamente una **arquitectura de doble componente** para reemplazar el sistema de polling de Zadarma, resolviendo los problemas de:
 - ❌ Rate limiting (bloqueos por 3 llamadas/min)
 - ❌ Desfase de timezone (pérdida de datos después de las 8 PM)
 - ❌ Duplicados y latencia en datos
+- ✅ **Optimizado para bajo consumo de CPU** (cache + batching + locks)
 
 ## 📦 Componentes Creados
 

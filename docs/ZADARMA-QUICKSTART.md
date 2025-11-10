@@ -1,5 +1,7 @@
 # Zadarma Webhook + Backfill - Quick Start
 
+> ⚡ **NOTA**: Este sistema está optimizado para bajo consumo de CPU. Ver [OPTIMIZACION-CPU-VERCEL-2025-11-09.md](./OPTIMIZACION-CPU-VERCEL-2025-11-09.md) para detalles sobre cache, batching y locks.
+
 ## 📦 Instalación
 
 Todos los componentes ya están creados. Solo necesitas configurar variables de entorno.

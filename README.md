@@ -95,10 +95,29 @@ Si la respuesta tiene `status: 'error'` o es 500, revisar logs de Vercel y compa
 - `npm run test:webhook` — ejecuta `scripts/test-webhook-manual.ts`
 - `npm run fill:testdata` — llena Firestore con datos de prueba
 
+## ⚡ Optimización y Rendimiento
+
+**IMPORTANTE:** El sistema está optimizado para reducir consumo de CPU en Vercel. Ver documentación completa:
+- 📄 **[docs/OPTIMIZACION-CPU-VERCEL-2025-11-09.md](./docs/OPTIMIZACION-CPU-VERCEL-2025-11-09.md)** - Análisis completo y plan de optimización
+
+### Mejores Prácticas de Uso
+
+**Para evitar picos de CPU:**
+1. ⏱️ **Cache automático**: Los endpoints `/api/zadarma/stats` usan cache de 30s. No hacer polling más frecuente.
+2. 📦 **Batch writes**: Todas las escrituras a Firestore usan batching (500 ops/batch) para máxima eficiencia.
+3. 🔒 **Lock cross-instance**: Sistema de locks previene trabajo duplicado cuando múltiples usuarios solicitan los mismos datos.
+4. 🎯 **Backfills inteligentes**: Usar `days=1` para actualizaciones frecuentes, `days=7` solo para recuperación histórica.
+
+**Variables de entorno relacionadas con rendimiento:**
+- `CACHE_TTL` (opcional, default: 30000ms) - TTL del cache en milisegundos
+- `BATCH_SIZE` (opcional, default: 500) - Tamaño de batch para escrituras Firestore
+- `LOCK_TTL` (opcional, default: 60000ms) - TTL de locks en milisegundos
+
 ## Troubleshooting rápido
 - Si `500` en `/api/zadarma/backfill`: comprobar que `ZADARMA_API_KEY` y `ZADARMA_API_SECRET` están en Vercel.
 - Si Firestore no se inicializa: verificar `SERVICE_ACCOUNT` o que el Admin SDK esté correctamente configurado.
 - Si la UI de Performance no muestra datos: usar `GET /api/zadarma/stats?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` para comprobar si Firestore tiene datos.
+- Si **consumo alto de CPU**: revisar [OPTIMIZACION-CPU-VERCEL-2025-11-09.md](./docs/OPTIMIZACION-CPU-VERCEL-2025-11-09.md) para métricas y soluciones.
 
 ## Qué hice y por qué (histórico de cambios relevantes)
 - Separé GET/POST en el webhook para cumplir con la verificación `zd_echo` de Zadarma.

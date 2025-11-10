@@ -102,15 +102,12 @@ export default function AdvisorPerformancePage() {
         return;
       }
       
-      // 🚫 SI ES HOY, NO HACER CHECK-MISSING - HOY se maneja solo con auto-refresh
+      // Comprobar siempre si faltan días, incluyendo HOY. El comportamiento anterior
+      // omitía HOY para evitar solaparse con el auto-refresh, pero ahora queremos
+      // verificar siempre y dejar que la lógica de backfill/locks maneje concurrencia.
       const today = format(new Date(), 'yyyy-MM-dd');
       const startDateStr = format(startDate, 'yyyy-MM-dd');
       const endDateStr = format(endDate, 'yyyy-MM-dd');
-      
-      if (startDateStr === today && endDateStr === today) {
-        console.log('[PERFORMANCE] ⏭️ HOY detectado - saltando check-missing (se maneja con auto-refresh)');
-        return;
-      }
       
       // Verificar qué días faltan en Firestore (solo para días anteriores)
       const response = await fetch('/api/zadarma/check-missing', {
@@ -436,15 +433,13 @@ export default function AdvisorPerformancePage() {
 
       // 🔍 VERIFICACIÓN EN PARALELO: Si no es auto-refresh y no es consulta silenciosa, verificar datos faltantes
       // 🚫 PERO NUNCA PARA EL DÍA DE HOY - HOY se maneja solo con auto-refresh
-      if (!isAutoRefresh && !silent && date.from && !isViewingToday) {
+      if (!isAutoRefresh && !silent && date.from) {
         // Ejecutar en paralelo sin bloquear la UI
         setTimeout(async () => {
           if (date.from) {
             await checkAndBackfillMissingDataInBackground(date.from, date.to || date.from);
           }
         }, 500);
-      } else if (isViewingToday) {
-        console.log('[PERFORMANCE] ⏭️ HOY detectado - saltando verificación de datos faltantes (auto-refresh lo maneja)');
       }
 
       // Mostrar solo mensaje genérico (silent = sin toast si es auto-refresh)

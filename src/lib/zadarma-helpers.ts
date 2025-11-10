@@ -84,7 +84,7 @@ export async function saveSyncMetadata(date: Date, totalCalls: number, status: '
   }, { merge: true });
 }
 
-export async function getMissingDaysFromFirestore(startDate: Date, endDate: Date, includeToday = false): Promise<Date[]> {
+export async function getMissingDaysFromFirestore(startDate: Date, endDate: Date, includeToday = true): Promise<Date[]> {
     const daysInRange: Date[] = [];
     let currentDate = startOfDay(startDate);
     const finalDate = startOfDay(endDate);
@@ -113,7 +113,7 @@ export async function getMissingDaysFromFirestore(startDate: Date, endDate: Date
   const missing: Date[] = [];
   const todayStart = startOfDay(new Date());
   
-  console.log(`[MISSING-DAYS] 🔍 Analizando ${daysInRange.length} días. HOY (${format(todayStart, 'yyyy-MM-dd')}) será ${includeToday ? 'INCLUIDO (includeToday=true)' : 'EXCLUIDO'} en la evaluación.`);
+  console.log(`[MISSING-DAYS] 🔍 Analizando ${daysInRange.length} días. HOY (${format(todayStart, 'yyyy-MM-dd')}) será ${includeToday ? 'INCLUIDO' : 'EXCLUIDO'} en la evaluación.`);
 
   for (const d of daysInRange) {
     const key = format(d, 'yyyy-MM-dd');

@@ -155,14 +155,33 @@ function normalizeOrderNumber(name: string): string {
 }
 
 function normalizeStoreId(storeId: string): string {
-    return (storeId || 'sin-tienda')
+    const normalized = (storeId || 'sin-tienda')
         .toLowerCase()
         .trim()
-        .replace(/perú/g, '') // Eliminar 'perú'
-        .replace(/peru/g, '')  // Eliminar 'peru'
-        .replace(/\s+/g, '-')  // Reemplazar espacios con guion simple
-        .replace(/-+/g, '-')   // Reemplazar múltiples guiones con uno solo
+        .replace(/perú/g, '')  // Eliminar 'perú'
+        .replace(/peru/g, '')   // Eliminar 'peru'
+        .replace(/\s+/g, '-')   // Reemplazar espacios con guion simple
+        .replace(/-+/g, '-')    // Reemplazar múltiples guiones con uno solo
         .replace(/^-|-$/g, ''); // Eliminar guiones al inicio y final
+    
+    // Mapeo de tiendas específicas para asegurar nombres consistentes
+    const storeMap: { [key: string]: string } = {
+        'blumi-': 'blumi',
+        'blumi-peru': 'blumi',
+        'blumi-perú': 'blumi',
+        'dearel-': 'dearel',
+        'dearel-peru': 'dearel',
+        'novi-': 'novi',
+        'trazto-': 'trazto',
+        'cumbre-': 'cumbre'
+    };
+    
+    // Si el ID normalizado está en el mapeo, usar el valor correcto
+    if (storeMap[normalized]) {
+        return storeMap[normalized];
+    }
+    
+    return normalized;
 }
 
 function getShopifyOrderDocId(orderName: string, storeId: string): string {

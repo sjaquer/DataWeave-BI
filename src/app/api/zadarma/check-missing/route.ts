@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import { parseISO } from "date-fns";
-import { getMissingDaysFromFirestore } from "@/lib/zadarma-helpers";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -45,27 +43,39 @@ export async function POST(req: Request) {
       );
     }
 
-    console.log(`[CHECK-MISSING] 🔍 Verificando datos: ${startDate} → ${endDate}`);
+    console.log(`[CHECK-MISSING] 🔍 Verificando datos contra API ZADARMA: ${startDate} → ${endDate}`);
 
-    // Usar la función existente para detectar días faltantes
-  // body puede incluir includeToday: true para forzar que el backfill incluya HOY
-  // Si no se envía includeToday asumimos que queremos verificar siempre (includeToday = true)
-  const includeToday = body.includeToday === undefined ? true : Boolean(body.includeToday === true);
-    const missingDates = await getMissingDaysFromFirestore(
-      parseISO(startDate),
-      parseISO(endDate),
-      includeToday
-    );
+    // NUEVA ESTRATEGIA: Verificar SIEMPRE contra API de Zadarma real (no solo metadata)
+    // Llamar al endpoint verify-completeness que compara Firestore vs API directa
+    console.log(`[CHECK-MISSING] 🌐 Consultando verify-completeness para verificación real...`);
+    
+    const verifyResponse = await fetch(`${req.url.replace('/check-missing', '/verify-completeness')}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ startDate, endDate })
+    });
 
-    const missingDays = missingDates.map(date => date.toISOString().substring(0, 10));
+    if (!verifyResponse.ok) {
+      throw new Error(`Error en verify-completeness: ${verifyResponse.status}`);
+    }
 
-    console.log(`[CHECK-MISSING] 📊 Resultado: ${missingDays.length} días faltantes de ${endDate ? Math.ceil((parseISO(endDate).getTime() - parseISO(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1 : 1} totales`);
+    const verifyData = await verifyResponse.json();
+    
+    if (verifyData.status !== 'success') {
+      throw new Error(`Fallo en verify-completeness: ${verifyData.message}`);
+    }
+
+    // Extraer días que están incompletos según la verificación real
+    const missingDays = verifyData.incompleteDays.map((item: any) => item.date);
+    
+    console.log(`[CHECK-MISSING] 📊 Verificación real completada:`, verifyData.incompleteDays);    console.log(`[CHECK-MISSING] 📊 Resultado: ${missingDays.length} días faltantes de ${verifyData.totalDays} totales`);
 
     return NextResponse.json({
       status: "success",
       missingDays,
-      totalDays: endDate ? Math.ceil((parseISO(endDate).getTime() - parseISO(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1 : 1,
+      totalDays: verifyData.totalDays,
       missingCount: missingDays.length,
+      verificationDetails: verifyData.incompleteDays, // Incluir detalles de la verificación
     }, { status: 200 });
 
   } catch (error: any) {

@@ -372,38 +372,42 @@ export default function AdvisorPerformancePage() {
         calls = firestoreData.calls || [];
         console.log(`[PERFORMANCE] ✅ Firestore cargado: ${calls.length} llamadas (mostrando AHORA)`);
         
-        // 2️⃣ SEGUNDO: Actualizar desde API en BACKGROUND (sin bloquear)
-        setTimeout(async () => {
-          console.log('[PERFORMANCE] 🔄 Actualizando desde API Zadarma en segundo plano...');
-          
-          const todayStart = new Date();
-          todayStart.setHours(0, 0, 0, 0);
-          const now = new Date();
-          
-          const refreshParams = new URLSearchParams({ 
-            startDate: format(todayStart, 'yyyy-MM-dd HH:mm:ss'),
-            endDate: format(now, 'yyyy-MM-dd HH:mm:ss')
-          });
-          
-          try {
-            const statsResponse = await fetch(`/api/zadarma/stats?${refreshParams.toString()}`);
-            const statsData = await statsResponse.json();
+        // 2️⃣ SEGUNDO: Solo si es auto-refresh, actualizar desde API en BACKGROUND
+        if (isAutoRefresh) {
+          setTimeout(async () => {
+            console.log('[PERFORMANCE] 🔄 Actualizando desde API Zadarma (auto-refresh)...');
             
-            if (statsData.status === 'success') {
-              const freshCalls = statsData.stats || [];
-              const saved = statsData.saved || 0;
-              console.log(`[PERFORMANCE] ✅ Background API completada - ${freshCalls.length} llamadas, guardadas: ${saved}`);
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+            const now = new Date();
+            
+            const refreshParams = new URLSearchParams({ 
+              startDate: format(todayStart, 'yyyy-MM-dd HH:mm:ss'),
+              endDate: format(now, 'yyyy-MM-dd HH:mm:ss')
+            });
+            
+            try {
+              const statsResponse = await fetch(`/api/zadarma/stats?${refreshParams.toString()}`);
+              const statsData = await statsResponse.json();
               
-              // 🔄 Actualizar UI con datos frescos
-              const processedData = processCallsData(freshCalls);
-              setPerformanceData(processedData.performance);
-              setDailyPerformanceData(processedData.daily);
-              console.log('[PERFORMANCE] 🎯 UI actualizada con datos frescos de API');
+              if (statsData.status === 'success') {
+                const freshCalls = statsData.stats || [];
+                const saved = statsData.saved || 0;
+                console.log(`[PERFORMANCE] ✅ Background API completada - ${freshCalls.length} llamadas, guardadas: ${saved}`);
+                
+                // 🔄 Actualizar UI con datos frescos
+                const processedData = processCallsData(freshCalls);
+                setPerformanceData(processedData.performance);
+                setDailyPerformanceData(processedData.daily);
+                console.log('[PERFORMANCE] 🎯 UI actualizada con datos frescos de API');
+              }
+            } catch (error) {
+              console.warn('[PERFORMANCE] ⚠️ Error en background update:', error);
             }
-          } catch (error) {
-            console.warn('[PERFORMANCE] ⚠️ Error en background update:', error);
-          }
-        }, 100);
+          }, 100);
+        } else {
+          console.log('[PERFORMANCE] 🚫 NO es auto-refresh - omitiendo actualización API background');
+        }
       } else {
         // Para días anteriores, consultar desde Firestore
         params = new URLSearchParams({ 
@@ -485,7 +489,7 @@ export default function AdvisorPerformancePage() {
       // Verificar nuevamente antes de hacer refresh (por si cambió isBackfillInProgress)
       if (!isBackfillInProgress) {
         console.log('[AUTO-REFRESH] 🔄 Actualizando datos...');
-        fetchAndProcessData(false); // Con toast visible
+        fetchAndProcessData(false, true); // Con toast visible Y marcado como auto-refresh
         setCountdown(60); // Reiniciar countdown
       } else {
         console.log('[AUTO-REFRESH] ⏸️  Saltando refresh - backfill en progreso');

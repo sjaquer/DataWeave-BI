@@ -431,9 +431,11 @@ export default function AdvisorPerformancePage() {
       
       if (!silent) setIsLoading(false);
 
-      // 🔍 VERIFICACIÓN EN PARALELO: Si no es auto-refresh y no es consulta silenciosa, verificar datos faltantes
-      // 🚫 PERO NUNCA PARA EL DÍA DE HOY - HOY se maneja solo con auto-refresh
-      if (!isAutoRefresh && !silent && date.from) {
+      // VERIFICACIÓN EN PARALELO: Si no es auto-refresh y no es consulta silenciosa, verificar datos faltantes
+      // Ejecutar esta verificación SOLO cuando NO estamos viendo HOY. Esto garantiza que al
+      // visualizar días anteriores (ej. ayer) no se lancen auto-refreshes o backfills que
+      // modifiquen Firestore cada 60s y cambien la vista del usuario inesperadamente.
+      if (!isAutoRefresh && !silent && date.from && !isViewingToday) {
         // Ejecutar en paralelo sin bloquear la UI
         setTimeout(async () => {
           if (date.from) {

@@ -148,6 +148,38 @@ export default function AdvisorPerformancePage() {
     }
   }, [isBackfillInProgress]);
 
+  // Forzar sincronización del día ACTUAL: consulta check-missing con includeToday=true
+  const handleForceSyncToday = useCallback(async () => {
+    try {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      toast({ title: 'Forzando sincronización de HOY...' });
+
+      const response = await fetch('/api/zadarma/check-missing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startDate: today, endDate: today, includeToday: true })
+      });
+
+      const data = await response.json();
+      const missingDays = data.missingDays || [];
+
+      if (missingDays.length === 0) {
+        toast({ title: 'Nada que sincronizar', description: 'No se detectaron huecos para HOY.' });
+        return;
+      }
+
+      // Iniciar backfill para HOY
+      setIsBackfillInProgress(true);
+      setBackfillDates({ start: missingDays[0], end: missingDays[missingDays.length - 1] });
+      setShowBackfillProgress(true);
+      toast({ title: 'Backfill iniciado', description: `Sincronizando ${missingDays.length} rango(s) para HOY.` });
+
+    } catch (error: any) {
+      console.error('[FORCE-SYNC-TODAY] Error:', error);
+      toast({ variant: 'destructive', title: 'Error forzando sync', description: String(error) });
+    }
+  }, [toast]);
+
   // Función para procesar datos de llamadas
   const processCallsData = useCallback((calls: any[]) => {
     // Procesar llamadas y agrupar por agente
@@ -563,6 +595,7 @@ export default function AdvisorPerformancePage() {
                 </PopoverContent>
               </Popover>
               <Button variant="outline" size="sm" onClick={() => fetchAndProcessData()}><RefreshCw className="h-4 w-4 mr-2"/>Refrescar Ahora</Button>
+              <Button variant="outline" size="sm" onClick={handleForceSyncToday}><PlayCircle className="h-4 w-4 mr-2"/>Forzar HOY</Button>
               <Button variant="outline" size="sm" onClick={() => setIsScheduleManagerOpen(true)}><Cog className="h-4 w-4 mr-2"/>Gestionar Horarios</Button>
           </div>
         </div>

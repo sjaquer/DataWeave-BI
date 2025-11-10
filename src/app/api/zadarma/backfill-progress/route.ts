@@ -33,6 +33,24 @@ function updateProgress(sessionId: string, progress: any) {
     updatedAt: Date.now()
   });
   console.log(`[PROGRESS] ${sessionId}:`, progress.message || progress.status);
+  // Persistir de forma no bloqueante
+  void persistProgressToFirestore(sessionId, progress);
+}
+
+// Persistir progreso en Firestore para que el frontend pueda leerlo aun cuando
+// el proceso que inició el backfill haya sido reciclado (entornos serverless).
+async function persistProgressToFirestore(sessionId: string, progress: any) {
+  try {
+    const doc = {
+      ...progress,
+      sessionId,
+      updatedAtMillis: Date.now(),
+      last_updated_by: 'backfill-progress-api'
+    };
+    await db.collection('zadarma_backfill_sessions').doc(sessionId).set(doc, { merge: true });
+  } catch (err) {
+    console.error('[PERSIST-PROGRESS] Error guardando progreso en Firestore:', err);
+  }
 }
 
 /**
@@ -78,7 +96,26 @@ export async function GET(req: Request) {
       );
     }
 
-    const progress = progressStore.get(sessionId);
+    let progress = progressStore.get(sessionId);
+
+    if (!progress) {
+      // Intentar leer desde Firestore en caso de que el proceso que inició el
+      // backfill se haya reciclado (entorno serverless). Esto evita 404 para
+      // sesiones recién iniciadas en otra instancia.
+      try {
+        const doc = await db.collection('zadarma_backfill_sessions').doc(sessionId).get();
+        if (doc.exists) {
+          const data = doc.data() || {};
+          // Compatibilidad con la estructura en memoria
+          data.updatedAt = data.updatedAtMillis || Date.now();
+          // Guardar en cache de memoria para cargas subsecuentes
+          progressStore.set(sessionId, data);
+          progress = data;
+        }
+      } catch (err) {
+        console.error('[BACKFILL-PROGRESS] Error leyendo progreso desde Firestore:', err);
+      }
+    }
 
     if (!progress) {
       return NextResponse.json(
@@ -118,6 +155,36 @@ export async function POST(req: Request) {
     const { startDate, endDate } = body;
     
     // 🔒 VERIFICAR SI YA HAY UN BACKFILL EN PROGRESO
+    // También verificar sesión activa en Firestore para entornos serverless
+    try {
+      const recentWindowMs = 1000 * 60 * 15; // 15 minutos
+      const cutoff = Date.now() - recentWindowMs;
+      const recentQuery = await db.collection('zadarma_backfill_sessions')
+        .where('status', 'in', ['starting', 'in_progress'])
+        .get();
+
+      if (!recentQuery.empty) {
+        for (const d of recentQuery.docs) {
+          const doc = d.data();
+          const updatedAtMillis = doc?.updatedAtMillis || 0;
+          if (updatedAtMillis && updatedAtMillis > cutoff) {
+            const existingSessionId = d.id;
+            console.log(`[BACKFILL-LOCK] ⚠️ Backfill detectado en Firestore (sesión: ${existingSessionId})`);
+            return NextResponse.json(
+              {
+                status: 'already_in_progress',
+                message: 'Ya hay un backfill en progreso (firestore). Espera a que termine.',
+                currentSessionId: existingSessionId
+              },
+              { status: 409 }
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[BACKFILL-LOCK] Error verificando sesiones en Firestore:', err);
+    }
+
     if (isBackfillInProgress && currentBackfillSessionId) {
       console.log(`[BACKFILL-LOCK] ⚠️  Backfill ya en progreso (sesión: ${currentBackfillSessionId})`);
       return NextResponse.json(

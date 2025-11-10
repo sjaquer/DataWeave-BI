@@ -84,7 +84,7 @@ export async function saveSyncMetadata(date: Date, totalCalls: number, status: '
   }, { merge: true });
 }
 
-export async function getMissingDaysFromFirestore(startDate: Date, endDate: Date): Promise<Date[]> {
+export async function getMissingDaysFromFirestore(startDate: Date, endDate: Date, includeToday = false): Promise<Date[]> {
     const daysInRange: Date[] = [];
     let currentDate = startOfDay(startDate);
     const finalDate = startOfDay(endDate);
@@ -108,20 +108,20 @@ export async function getMissingDaysFromFirestore(startDate: Date, endDate: Date
     foundDocs.docs.forEach((doc: DocumentData) => foundDates.add(doc.data().date));
   }
 
-  // IMPORTANTE: Excluir el día actual (HOY) del backfill
-  // El día actual se maneja EXCLUSIVAMENTE con auto-refresh de 60s
+  // Por defecto excluimos el día actual (evita solaparse con auto-refresh de 60s).
+  // Si includeToday === true entonces NO lo excluimos y el backfill puede procesar HOY.
   const missing: Date[] = [];
   const todayStart = startOfDay(new Date());
   
-  console.log(`[MISSING-DAYS] 🔍 Analizando ${daysInRange.length} días. HOY (${format(todayStart, 'yyyy-MM-dd')}) será EXCLUIDO del backfill.`);
+  console.log(`[MISSING-DAYS] 🔍 Analizando ${daysInRange.length} días. HOY (${format(todayStart, 'yyyy-MM-dd')}) será ${includeToday ? 'INCLUIDO (includeToday=true)' : 'EXCLUIDO'} en la evaluación.`);
 
   for (const d of daysInRange) {
     const key = format(d, 'yyyy-MM-dd');
 
-    // 🚫 EXCLUIR EL DÍA ACTUAL - no debe procesarse en backfill
+    // Si se solicita explícitamente incluir HOY, no lo excluimos
     const isToday = startOfDay(d).getTime() === todayStart.getTime();
-    if (isToday) {
-      console.log(`[MISSING-DAYS] ⚠️ ${key}: EXCLUIDO - día actual manejado por auto-refresh`);
+    if (isToday && !includeToday) {
+      console.log(`[MISSING-DAYS] ⚠️ ${key}: EXCLUIDO - día actual manejado por auto-refresh (usar includeToday=true para forzar)`);
       continue;
     }
 

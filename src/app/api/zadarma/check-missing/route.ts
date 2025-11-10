@@ -48,9 +48,12 @@ export async function POST(req: Request) {
     console.log(`[CHECK-MISSING] 🔍 Verificando datos: ${startDate} → ${endDate}`);
 
     // Usar la función existente para detectar días faltantes
+    // body puede incluir includeToday: true para forzar que el backfill incluya HOY
+    const includeToday = Boolean(body.includeToday === true);
     const missingDates = await getMissingDaysFromFirestore(
-      parseISO(startDate), 
-      parseISO(endDate)
+      parseISO(startDate),
+      parseISO(endDate),
+      includeToday
     );
 
     const missingDays = missingDates.map(date => date.toISOString().substring(0, 10));

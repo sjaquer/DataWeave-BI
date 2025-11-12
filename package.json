@@ -17,7 +17,8 @@
     "test:webhook": "tsx scripts/test-webhook-manual.ts",
     "test:api": "tsx scripts/test-api-stats.ts",
     "check:firestore": "tsx scripts/check-firestore-simple.ts",
-    "fill:testdata": "tsx scripts/fill-test-data.ts"
+    "fill:testdata": "tsx scripts/fill-test-data.ts",
+    "validate:render": "node scripts/validate-render-deployment.js"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.0.0",

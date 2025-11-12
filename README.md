@@ -29,9 +29,38 @@ Este README documenta la arquitectura, endpoints, scripts y procedimientos para 
 ## Variables de entorno necesarias
 - `ZADARMA_API_KEY` (prod/backfill)
 - `ZADARMA_API_SECRET` (prod/backfill)
-- `SERVICE_ACCOUNT` (Firebase Admin JSON string, para despliegues que usen firebase-admin)
+- `FIREBASE_SERVICE_ACCOUNT` o `SERVICE_ACCOUNT` (Firebase Admin JSON string)
+- `REFRESH_TODAY_SECRET` (secret para endpoint `/api/zadarma/refresh-today`)
+- `BASE_API_URL` (URL base de tu deployment, ej: `https://dataweave-bi.onrender.com`)
 
-Colocar estas variables en Vercel (o `.env.local` para desarrollo local). Si `SERVICE_ACCOUNT` no está presente, `src/lib/firebase-admin.ts` no inicializará admin y las funciones que dependen de Firestore fallarán en runtime.
+Colocar estas variables en Render/Vercel (o `.env.local` para desarrollo local). Si `FIREBASE_SERVICE_ACCOUNT` no está presente, `src/lib/firebase-admin.ts` no inicializará admin y las funciones que dependen de Firestore fallarán en runtime.
+
+## 🚀 Migración a Render
+
+**Este proyecto ahora usa un patrón de worker durable para backfills.**
+
+**Servicios requeridos:**
+1. **Web Service** (Next.js app) - `npm run start`
+2. **Background Worker** (worker.js) - `node worker.js`
+
+**Ventajas sobre Vercel:**
+- ✅ Backfills durables (sobreviven reinicios de instancias)
+- ✅ Worker always-on procesa jobs sin interrupciones
+- ✅ Sin límites de CPU por función serverless
+- ✅ Más predecible en costos
+
+📖 **Guía completa paso a paso:** [docs/MIGRATE-TO-RENDER.md](./docs/MIGRATE-TO-RENDER.md)
+
+**Resumen rápido:**
+```powershell
+# 1. Deploy a Render (conectar repo GitHub)
+# 2. Crear Web Service + Background Worker
+# 3. Configurar env vars (FIREBASE_SERVICE_ACCOUNT, ZADARMA_API_KEY, etc)
+# 4. Actualizar webhooks de Shopify a nueva URL
+# 5. Validar con health check: /api/health
+```
+
+Ver [MIGRATE-TO-RENDER.md](./docs/MIGRATE-TO-RENDER.md) para detalles completos, comandos PowerShell, y troubleshooting.
 
 ## Uso rápido
 

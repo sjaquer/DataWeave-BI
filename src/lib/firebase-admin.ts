@@ -7,10 +7,12 @@ console.log('[FIREBASE-ADMIN] 📊 Apps existentes:', admin.apps.length);
 
 // Evitar la reinicialización en entornos de desarrollo con hot-reload
 if (!admin.apps.length) {
-  const serviceAccountString = process.env.SERVICE_ACCOUNT;
+  // Soportar múltiples nombres de env vars para flexibilidad
+  const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.SERVICE_ACCOUNT;
   const googleCredsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   
-  console.log('[FIREBASE-ADMIN] 🔑 SERVICE_ACCOUNT presente:', !!serviceAccountString, `(${serviceAccountString ? serviceAccountString.substring(0, 50) + '...' : 'no definido'})`);
+  console.log('[FIREBASE-ADMIN] 🔑 FIREBASE_SERVICE_ACCOUNT presente:', !!process.env.FIREBASE_SERVICE_ACCOUNT, `(${process.env.FIREBASE_SERVICE_ACCOUNT ? process.env.FIREBASE_SERVICE_ACCOUNT.substring(0, 50) + '...' : 'no definido'})`);
+  console.log('[FIREBASE-ADMIN] 🔑 SERVICE_ACCOUNT presente:', !!process.env.SERVICE_ACCOUNT, `(${process.env.SERVICE_ACCOUNT ? process.env.SERVICE_ACCOUNT.substring(0, 50) + '...' : 'no definido'})`);
   console.log('[FIREBASE-ADMIN] 🔑 GOOGLE_APPLICATION_CREDENTIALS presente:', !!googleCredsPath, `(${googleCredsPath || 'no definido'})`);
   
   // Solo inicializar si SERVICE_ACCOUNT está disponible

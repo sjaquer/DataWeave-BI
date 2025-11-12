@@ -12,42 +12,171 @@ const AGENT_MAP: { [key: string]: string } = {
 };
 
 export async function saveZadarmaCalls(calls: ZadarmaCall[]): Promise<number> {
+  // Fragmentar en batches de tamaño permitido por Firestore (<= 500)
   if (calls.length === 0) return 0;
-  const batch = db.batch();
+  const BATCH_LIMIT = 400; // margen por seguridad
   const now = Timestamp.now();
-  
-  calls.forEach(call => {
-    // Extraer fecha del callstart raw (formato: 2025-10-27 14:30:00)
-    const callDate = call.callstart.substring(0, 10);
-    const docId = `${call.pbx_call_id}_${call.callstart.replace(/[: -]/g, '')}`;
-    const docRef = db.collection('zadarma_calls').doc(docId);
-    
-    const callDoc: Partial<ZadarmaCallDocument> = {
-      ...call, 
-      id: docId, 
-      callDate, 
-      agentId: call.sip,
-      agentName: AGENT_MAP[call.sip] || 'Desconocido',
-      syncedAt: now.toDate().toISOString(), 
-      createdAt: now,
-    };
-    batch.set(docRef, callDoc, { merge: true });
-  });
+  let saved = 0;
 
-  await batch.commit();
-  console.log(`[ZADARMA CACHE] Guardadas ${calls.length} llamadas en caché`);
-  return calls.length;
+  function chunkArray<T>(arr: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+    return chunks;
+  }
+
+  const chunks = chunkArray(calls, BATCH_LIMIT);
+  for (const chunk of chunks) {
+    const batch = db.batch();
+    for (const call of chunk) {
+      const callDate = call.callstart.substring(0, 10);
+      const docId = `${call.pbx_call_id}_${call.callstart.replace(/[: -]/g, '')}`;
+      const docRef = db.collection('zadarma_calls').doc(docId);
+
+      const callDoc: Partial<ZadarmaCallDocument> = {
+        ...call,
+        id: docId,
+        callDate,
+        agentId: call.sip,
+        agentName: AGENT_MAP[call.sip] || 'Desconocido',
+        syncedAt: now.toDate().toISOString(),
+        createdAt: now,
+      };
+      batch.set(docRef, callDoc, { merge: true });
+    }
+    await batch.commit();
+    saved += chunk.length;
+  }
+
+  console.log(`[ZADARMA CACHE] Guardadas ${saved} llamadas en caché (fragmentadas en ${chunks.length} batches)`);
+  return saved;
 }
 
 export async function updateZadarmaCallsInFirestore(calls: ZadarmaCall[], date: Date): Promise<number> {
   const dateString = format(date, 'yyyy-MM-dd');
-  const querySnapshot = await db.collection('zadarma_calls').where('callDate', '==', dateString).get();
+  // Estrategia safer-swap:
+  // 1) Escribir nuevas llamadas en colección temporal `zadarma_calls_tmp_<date>_<ts>` en batches
+  // 2) Borrar documentos existentes en `zadarma_calls` para esa fecha en batches
+  // 3) Copiar desde la colección temporal a `zadarma_calls` en batches
+  // 4) Borrar la colección temporal
+  const tmpColName = `zadarma_calls_tmp_${dateString.replace(/-/g, '')}_${Date.now()}`;
 
-  const batch = db.batch();
-  querySnapshot.docs.forEach((doc: DocumentData) => batch.delete(doc.ref));
-  await batch.commit();
+  console.log(`[ZADARMA SWAP] Creando colección temporal: ${tmpColName}`);
 
-  return saveZadarmaCalls(calls);
+  // Helper chunk
+  function chunkArray<T>(arr: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+    return chunks;
+  }
+
+  const BATCH_LIMIT = 400;
+
+  try {
+    // 1) Escribir en colección temporal
+    const tmpSaved = await (async (): Promise<number> => {
+      if (!calls || calls.length === 0) return 0;
+      let written = 0;
+      const chunks = chunkArray(calls, BATCH_LIMIT);
+      for (const chunk of chunks) {
+        const batch = db.batch();
+        for (const call of chunk) {
+          const callDate = call.callstart.substring(0, 10);
+          const docId = `${call.pbx_call_id}_${call.callstart.replace(/[: -]/g, '')}`;
+          const docRef = db.collection(tmpColName).doc(docId);
+          const callDoc: any = {
+            ...call,
+            id: docId,
+            callDate,
+            agentId: call.sip,
+            agentName: AGENT_MAP[call.sip] || 'Desconocido',
+            syncedAt: Timestamp.now().toDate().toISOString(),
+            createdAt: Timestamp.now(),
+          };
+          batch.set(docRef, callDoc, { merge: true });
+        }
+        await batch.commit();
+        written += chunk.length;
+      }
+      console.log(`[ZADARMA SWAP] Escritos ${written} docs en temporal ${tmpColName}`);
+      return written;
+    })();
+
+    // 2) Borrar docs existentes en la colección principal para la fecha
+    console.log(`[ZADARMA SWAP] Borrando docs existentes en 'zadarma_calls' para ${dateString}`);
+    const existingSnapshot = await db.collection('zadarma_calls').where('callDate', '==', dateString).get();
+    if (!existingSnapshot.empty) {
+      const existingDocs = existingSnapshot.docs.map((d: any) => d.ref);
+      const deleteChunks = chunkArray(existingDocs, BATCH_LIMIT);
+      for (const dchunk of deleteChunks) {
+        const batch = db.batch();
+        dchunk.forEach((r: any) => batch.delete(r));
+        await batch.commit();
+      }
+      console.log(`[ZADARMA SWAP] Borrados ${existingDocs.length} docs antiguos de 'zadarma_calls' para ${dateString}`);
+    } else {
+      console.log(`[ZADARMA SWAP] No se encontraron docs anteriores para ${dateString}`);
+    }
+
+    // 3) Copiar desde temporal a la colección principal
+    console.log(`[ZADARMA SWAP] Copiando desde temporal ${tmpColName} a 'zadarma_calls'`);
+    const tmpSnapshot = await db.collection(tmpColName).get();
+    const tmpDocs = tmpSnapshot.docs.map((d: any) => ({ id: d.id, data: d.data() }));
+    if (tmpDocs.length > 0) {
+      const copyChunks = chunkArray(tmpDocs, BATCH_LIMIT);
+      let copied = 0;
+      for (const cchunk of copyChunks) {
+        const batch = db.batch();
+        for (const doc of cchunk as { id: string; data: any }[]) {
+          const docRef = db.collection('zadarma_calls').doc(doc.id);
+          batch.set(docRef, doc.data, { merge: true });
+        }
+        await batch.commit();
+        copied += cchunk.length;
+      }
+      console.log(`[ZADARMA SWAP] Copiados ${copied} docs desde temporal a 'zadarma_calls'`);
+    } else {
+      console.log(`[ZADARMA SWAP] Temporal ${tmpColName} está vacío, nada que copiar`);
+    }
+
+    // 4) Borrar colección temporal (borrar documentos en batches)
+    console.log(`[ZADARMA SWAP] Limpiando colección temporal ${tmpColName}`);
+    const tmpSnapshot2 = await db.collection(tmpColName).get();
+    if (!tmpSnapshot2.empty) {
+      const tmpRefs = tmpSnapshot2.docs.map((d: any) => d.ref);
+      const tmpDeleteChunks = chunkArray(tmpRefs, BATCH_LIMIT);
+      for (const tchunk of tmpDeleteChunks) {
+        const batch = db.batch();
+        tchunk.forEach((r: any) => batch.delete(r));
+        await batch.commit();
+      }
+      console.log(`[ZADARMA SWAP] Temporal ${tmpColName} borrada (${tmpRefs.length} docs)`);
+    }
+
+    // Retornar cantidad copiada (guardada en main)
+    const finalCount = (await db.collection('zadarma_calls').where('callDate', '==', dateString).get()).size;
+    return finalCount;
+
+  } catch (error: any) {
+    console.error('[ZADARMA SWAP] Error realizando swap seguro:', error);
+    // Intentar limpieza del temporal si existe
+    try {
+      const tmpSnapshotErr = await db.collection(tmpColName).get();
+      if (!tmpSnapshotErr.empty) {
+        const refs = tmpSnapshotErr.docs.map((d: any) => d.ref);
+        const chunks = [] as any[];
+        for (let i = 0; i < refs.length; i += BATCH_LIMIT) chunks.push(refs.slice(i, i + BATCH_LIMIT));
+        for (const ch of chunks) {
+          const batch = db.batch();
+          ch.forEach((r: any) => batch.delete(r));
+          await batch.commit();
+        }
+      }
+    } catch (e) {
+      console.warn('[ZADARMA SWAP] Error limpiando temporal tras fallo:', e);
+    }
+
+    throw error;
+  }
 }
 
 export async function getZadarmaCallsFromFirestore(startDate: Date, endDate: Date): Promise<ZadarmaCall[]> {

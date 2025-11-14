@@ -23,7 +23,8 @@ export default function Home() {
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
         <Logo className="size-12 text-primary animate-pulse mx-auto mb-4" />
-        <p className="text-muted-foreground">Cargando...</p>
+        <p className="text-muted-foreground">DataWeave BI — Hecho por sjaquer</p>
+        <p className="text-sm text-muted-foreground mt-2">Accede a tu panel: inicia sesión o serás redirigido automáticamente.</p>
       </div>
     </div>
   );

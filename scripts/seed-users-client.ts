@@ -37,32 +37,40 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// Seguridad: evitar ejecutar este script por accidente en entornos públicos.
+if (process.env.ALLOW_RUN_SEED !== 'true') {
+  console.error('❌ Ejecución bloqueada: ALLOW_RUN_SEED !== true. Para ejecutar el seed cliente exporta ALLOW_RUN_SEED=true');
+  process.exit(1);
+}
+
 // Definir los usuarios con sus roles
 const users = [
+  // Datos de demo eliminados. Sustituye por tus propios usuarios o ejecuta con
+  // la variable de entorno ALLOW_RUN_SEED=true y actualiza manualmente los UIDs.
   {
-    uid: '5Re9sPT47DR6bbjntLL9LpKKjn13',
-    email: 'gerencia@dataweave.com',
+    uid: '<REDACTED_UID_1>',
+    email: '<REDACTED_EMAIL_1>',
     role: 'gerente',
     displayName: 'Gerente General',
     description: 'Acceso completo a todas las secciones del sistema',
   },
   {
-    uid: 'n3UuVRSz8LaISnEbJLLy7Yk8HNU2',
-    email: 'encargado@dataweave.com',
+    uid: '<REDACTED_UID_2>',
+    email: '<REDACTED_EMAIL_2>',
     role: 'encargado',
     displayName: 'Encargado de Logística',
     description: 'Acceso a logística general: envíos, inventario, provincias',
   },
   {
-    uid: 'fzQs2Ev1NEReM6YY4JYMZuytumz2',
-    email: 'callcenter@dataweave.com',
+    uid: '<REDACTED_UID_3>',
+    email: '<REDACTED_EMAIL_3>',
     role: 'callcenter',
     displayName: 'Call Center',
     description: 'Acceso a datos de clientes general: dashboard, provincias',
   },
   {
-    uid: 'asA3k52QlMPWr9v6ZjTQON98BB52',
-    email: 'marketing@dataweave.com',
+    uid: '<REDACTED_UID_4>',
+    email: '<REDACTED_EMAIL_4>',
     role: 'marketing',
     displayName: 'Marketing',
     description: 'Acceso a datos de productos y campañas: inventario, análisis diario, campañas Meta',
@@ -104,7 +112,7 @@ async function seedUsers() {
   console.log('📋 Resumen de permisos por rol:');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('');
-  console.log('👔 GERENTE (gerencia@dataweave.com)');
+  console.log('👔 GERENTE (<REDACTED_DEMO_EMAIL>)');
   console.log('   ✓ Dashboard General');
   console.log('   ✓ Envíos');
   console.log('   ✓ Rendimiento');
@@ -115,18 +123,18 @@ async function seedUsers() {
   console.log('   ✓ Estado Inventario');
   console.log('   ✓ Análisis Mensual');
   console.log('');
-  console.log('📦 ENCARGADO DE LOGÍSTICA (encargado@dataweave.com)');
+  console.log('📦 ENCARGADO DE LOGÍSTICA (<REDACTED_DEMO_EMAIL_2>)');
   console.log('   ✓ Dashboard General');
   console.log('   ✓ Envíos');
   console.log('   ✓ Provincias');
   console.log('   ✓ Análisis Inventario');
   console.log('   ✓ Estado Inventario');
   console.log('');
-  console.log('📞 CALL CENTER (callcenter@dataweave.com)');
+  console.log('📞 CALL CENTER (<REDACTED_DEMO_EMAIL_3>)');
   console.log('   ✓ Dashboard General');
   console.log('   ✓ Provincias');
   console.log('');
-  console.log('📊 MARKETING (marketing@dataweave.com)');
+  console.log('📊 MARKETING (<REDACTED_DEMO_EMAIL_4>)');
   console.log('   ✓ Dashboard General');
   console.log('   ✓ Campañas Meta');
   console.log('   ✓ Análisis Diario');

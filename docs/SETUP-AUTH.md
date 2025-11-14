@@ -29,11 +29,11 @@ NEXT_PUBLIC_FIREBASE_APP_ID=tu_app_id
 #### Opción A: Consola de Firebase (Recomendado para principiantes)
 
 1. **Crear Usuario Gerente:**
-   - Ve a Authentication → Users
-   - Click "Add user"
-   - Email: `gerente@dataweave.com`
-   - Password: `gerente123`
-   - Copia el UID generado
+  - Ve a Authentication → Users
+  - Click "Add user"
+  - Email: `<REDACTED_DEMO_EMAIL>`
+  - Password: `<REDACTED_DEMO_PASSWORD>`
+  - Copia el UID generado
 
 2. **Crear Documento de Perfil (Gerente):**
    - Ve a Firestore Database
@@ -41,18 +41,18 @@ NEXT_PUBLIC_FIREBASE_APP_ID=tu_app_id
    - ID del documento: [UID copiado del paso anterior]
    - Campos:
      ```
-     uid: [mismo UID]
-     email: "gerente@dataweave.com"
+  uid: [mismo UID]
+  email: "<REDACTED_DEMO_EMAIL>"
      role: "gerente"
      displayName: "Gerente Principal"
      createdAt: [Click en "Use server timestamp"]
      ```
 
 3. **Repetir para Usuario Empleado:**
-   - Email: `empleado@dataweave.com`
-   - Password: `empleado123`
-   - role: `"empleado"`
-   - displayName: `"Empleado de Ventas"`
+  - Email: `<REDACTED_DEMO_EMAIL_2>`
+  - Password: `<REDACTED_DEMO_PASSWORD_2>`
+  - role: `"empleado"`
+  - displayName: `"Empleado de Ventas"`
 
 #### Opción B: Script Node.js (Avanzado)
 
@@ -70,14 +70,14 @@ async function createDemoUsers() {
   // Usuario Gerente
   try {
     const gerenteUser = await admin.auth().createUser({
-      email: 'gerente@dataweave.com',
-      password: 'gerente123',
+      email: '<REDACTED_DEMO_EMAIL>',
+      password: '<REDACTED_DEMO_PASSWORD>',
       displayName: 'Gerente Principal',
     });
 
     await admin.firestore().collection('users').doc(gerenteUser.uid).set({
       uid: gerenteUser.uid,
-      email: 'gerente@dataweave.com',
+      email: '<REDACTED_DEMO_EMAIL>',
       role: 'gerente',
       displayName: 'Gerente Principal',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -91,14 +91,14 @@ async function createDemoUsers() {
   // Usuario Empleado
   try {
     const empleadoUser = await admin.auth().createUser({
-      email: 'empleado@dataweave.com',
-      password: 'empleado123',
+      email: '<REDACTED_DEMO_EMAIL_2>',
+      password: '<REDACTED_DEMO_PASSWORD_2>',
       displayName: 'Empleado de Ventas',
     });
 
     await admin.firestore().collection('users').doc(empleadoUser.uid).set({
       uid: empleadoUser.uid,
-      email: 'empleado@dataweave.com',
+      email: '<REDACTED_DEMO_EMAIL_2>',
       role: 'empleado',
       displayName: 'Empleado de Ventas',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -137,8 +137,8 @@ firebase deploy --only firestore:rules
    - Navega a `http://localhost:9002`
    - Deberías ser redirigido a `/login`
    - Intenta iniciar sesión con:
-     - Email: `gerente@dataweave.com`
-     - Password: `gerente123`
+    - Email: `<REDACTED_DEMO_EMAIL>`
+    - Password: `<REDACTED_DEMO_PASSWORD>`
 
 3. **Verificar el menú:**
    - Como gerente, deberías ver todas las secciones

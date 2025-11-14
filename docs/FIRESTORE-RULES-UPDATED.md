@@ -103,8 +103,8 @@ service cloud.firestore {
 **Acceso completo a todas las secciones**
 
 **Usuario Demo:**
-- Email: `gerencia@dataweave.com`
-- UID: `5Re9sPT47DR6bbjntLL9LpKKjn13`
+- Email: `<REDACTED_DEMO_EMAIL>`
+- UID: `<REDACTED_UID_1>`
 
 **Permisos en Firestore:**
 - ✅ Leer/escribir todos los pedidos (`shopify_orders`)
@@ -129,8 +129,8 @@ service cloud.firestore {
 **Acceso a logística general**
 
 **Usuario Demo:**
-- Email: `encargado@dataweave.com`
-- UID: `n3UuVRSz8LaISnEbJLLy7Yk8HNU2`
+- Email: `<REDACTED_DEMO_EMAIL_2>`
+- UID: `<REDACTED_UID_2>`
 
 **Permisos en Firestore:**
 - ✅ Leer/escribir todos los pedidos (`shopify_orders`)
@@ -150,8 +150,8 @@ service cloud.firestore {
 **Acceso a datos de clientes general**
 
 **Usuario Demo:**
-- Email: `callcenter@dataweave.com`
-- UID: `fzQs2Ev1NEReM6YY4JYMZuytumz2`
+- Email: `<REDACTED_DEMO_EMAIL_3>`
+- UID: `<REDACTED_UID_3>`
 
 **Permisos en Firestore:**
 - ✅ Leer todos los pedidos (`shopify_orders`)
@@ -168,8 +168,8 @@ service cloud.firestore {
 **Acceso a datos de productos y campañas**
 
 **Usuario Demo:**
-- Email: `marketing@dataweave.com`
-- UID: `asA3k52QlMPWr9v6ZjTQON98BB52`
+- Email: `<REDACTED_DEMO_EMAIL_4>`
+- UID: `<REDACTED_UID_4>`
 
 **Permisos en Firestore:**
 - ✅ Leer pedidos confirmados (`shopify_orders` donde `isConfirmed == true`)

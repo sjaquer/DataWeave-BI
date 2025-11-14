@@ -13,8 +13,8 @@ Se ha implementado exitosamente un sistema de autenticaciÃ³n con **4 roles dif
 ## ðŸ‘¥ Roles Implementados
 
 ### 1. ðŸ‘” Gerente (`gerente`)
-**UID:** `5Re9sPT47DR6bbjntLL9LpKKjn13`  
-**Email:** gerencia@dataweave.com  
+**UID:** `<REDACTED_UID_1>`  
+**Email:** `<REDACTED_DEMO_EMAIL>`  
 **Acceso:** COMPLETO (9 secciones)
 
 **Secciones del Dashboard:**
@@ -37,8 +37,8 @@ Se ha implementado exitosamente un sistema de autenticaciÃ³n con **4 roles dif
 ---
 
 ### 2. ðŸ“¦ Encargado de LogÃ­stica (`encargado`)
-**UID:** `n3UuVRSz8LaISnEbJLLy7Yk8HNU2`  
-**Email:** encargado@dataweave.com  
+**UID:** `<REDACTED_UID_2>`  
+**Email:** `<REDACTED_DEMO_EMAIL_2>`  
 **Acceso:** LogÃ­stica General (5 secciones)
 
 **Secciones del Dashboard:**
@@ -56,8 +56,8 @@ Se ha implementado exitosamente un sistema de autenticaciÃ³n con **4 roles dif
 ---
 
 ### 3. ðŸ“ž Call Center (`callcenter`)
-**UID:** `fzQs2Ev1NEReM6YY4JYMZuytumz2`  
-**Email:** callcenter@dataweave.com  
+**UID:** `<REDACTED_UID_3>`  
+**Email:** `<REDACTED_DEMO_EMAIL_3>`  
 **Acceso:** AtenciÃ³n al Cliente (2 secciones)
 
 **Secciones del Dashboard:**
@@ -72,8 +72,8 @@ Se ha implementado exitosamente un sistema de autenticaciÃ³n con **4 roles dif
 ---
 
 ### 4. ðŸ“Š Marketing (`marketing`)
-**UID:** `asA3k52QlMPWr9v6ZjTQON98BB52`  
-**Email:** marketing@dataweave.com  
+**UID:** `<REDACTED_UID_4>`  
+**Email:** `<REDACTED_DEMO_EMAIL_4>`  
 **Acceso:** Productos y CampaÃ±as (4 secciones)
 
 **Secciones del Dashboard:**
@@ -215,16 +215,16 @@ npm run dev
 # 2. Inicia sesiÃ³n con cada usuario:
 
 # Gerente (ve 9 secciones)
-Email: gerencia@dataweave.com
+Email: <REDACTED_DEMO_EMAIL>
 
 # Encargado (ve 5 secciones)
-Email: encargado@dataweave.com
+Email: <REDACTED_DEMO_EMAIL_2>
 
 # Call Center (ve 2 secciones)
-Email: callcenter@dataweave.com
+Email: <REDACTED_DEMO_EMAIL_3>
 
 # Marketing (ve 4 secciones)
-Email: marketing@dataweave.com
+Email: <REDACTED_DEMO_EMAIL_4>
 ```
 
 **Verificaciones:**

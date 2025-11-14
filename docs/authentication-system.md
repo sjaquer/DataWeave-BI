@@ -88,18 +88,20 @@ Las reglas han sido actualizadas para:
 
 ## Credenciales de Demostración
 
-Para probar el sistema, usa estas credenciales:
+Para probar el sistema en un entorno controlado, usa credenciales de demostración generadas por ti o por el equipo.
+
+Ejemplo (reemplaza por valores propios):
 
 ### Usuario Gerente
 ```
-Email: gerente@dataweave.com
-Contraseña: gerente123
+Email: <REDACTED_DEMO_EMAIL>
+Contraseña: <REDACTED_DEMO_PASSWORD>
 ```
 
 ### Usuario Empleado
 ```
-Email: empleado@dataweave.com
-Contraseña: empleado123
+Email: <REDACTED_DEMO_EMAIL_2>
+Contraseña: <REDACTED_DEMO_PASSWORD_2>
 ```
 
 ## Configuración Inicial

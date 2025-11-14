@@ -159,13 +159,13 @@ src/
 ### Paso 2: Crear Usuarios Demo
 ```
 Gerente:
-  Email: gerente@dataweave.com
-  Pass:  gerente123
+  Email: <REDACTED_DEMO_EMAIL>
+  Pass:  <REDACTED_DEMO_PASSWORD>
   Role:  gerente
 
 Empleado:
-  Email: empleado@dataweave.com
-  Pass:  empleado123
+  Email: <REDACTED_DEMO_EMAIL_2>
+  Pass:  <REDACTED_DEMO_PASSWORD_2>
   Role:  empleado
 ```
 

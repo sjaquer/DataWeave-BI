@@ -9,29 +9,29 @@
 4. Haz clic en "Add user"
 
 ### Usuario Gerente:
-- Email: gerente@dataweave.com
-- Password: gerente123
+- Email: <REDACTED_DEMO_EMAIL>
+- Password: <REDACTED_DEMO_PASSWORD>
 - Después de crear el usuario, ve a Firestore Database
 - Crea una colección llamada "users"
 - Agrega un documento con el ID del usuario (UID) que acabas de crear
 - Campos del documento:
   ```
   uid: [UID del usuario]
-  email: "gerente@dataweave.com"
+  email: "<REDACTED_DEMO_EMAIL>"
   role: "gerente"
   displayName: "Gerente Principal"
   createdAt: [Timestamp actual]
   ```
 
 ### Usuario Empleado:
-- Email: empleado@dataweave.com
-- Password: empleado123
+- Email: <REDACTED_DEMO_EMAIL_2>
+- Password: <REDACTED_DEMO_PASSWORD_2>
 - Después de crear el usuario, ve a Firestore Database
 - En la colección "users", agrega otro documento con el ID del nuevo usuario
 - Campos del documento:
   ```
   uid: [UID del usuario]
-  email: "empleado@dataweave.com"
+  email: "<REDACTED_DEMO_EMAIL_2>"
   role: "empleado"
   displayName: "Empleado de Ventas"
   createdAt: [Timestamp actual]
@@ -51,14 +51,14 @@ async function createDemoUsers() {
   // Crear usuario gerente
   try {
     const gerenteUser = await admin.auth().createUser({
-      email: 'gerente@dataweave.com',
-      password: 'gerente123',
+      email: '<REDACTED_DEMO_EMAIL>',
+      password: '<REDACTED_DEMO_PASSWORD>',
       displayName: 'Gerente Principal',
     });
 
     await admin.firestore().collection('users').doc(gerenteUser.uid).set({
       uid: gerenteUser.uid,
-      email: 'gerente@dataweave.com',
+      email: '<REDACTED_DEMO_EMAIL>',
       role: 'gerente',
       displayName: 'Gerente Principal',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -72,14 +72,14 @@ async function createDemoUsers() {
   // Crear usuario empleado
   try {
     const empleadoUser = await admin.auth().createUser({
-      email: 'empleado@dataweave.com',
-      password: 'empleado123',
+      email: '<REDACTED_DEMO_EMAIL_2>',
+      password: '<REDACTED_DEMO_PASSWORD_2>',
       displayName: 'Empleado de Ventas',
     });
 
     await admin.firestore().collection('users').doc(empleadoUser.uid).set({
       uid: empleadoUser.uid,
-      email: 'empleado@dataweave.com',
+      email: '<REDACTED_DEMO_EMAIL_2>',
       role: 'empleado',
       displayName: 'Empleado de Ventas',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),

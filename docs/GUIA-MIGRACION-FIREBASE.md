@@ -402,7 +402,7 @@ Asegúrate de que lee las variables `NEXT_PUBLIC_FIREBASE_*`:
 
 ```typescript
 const firebaseConfig: FirebaseOptions = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'demo-api-key',
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '<REDACTED_API_KEY>',
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'demo.firebaseapp.com',
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'demo-project',
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'demo.appspot.com',

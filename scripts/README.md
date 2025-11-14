@@ -8,10 +8,10 @@ El sistema incluye 4 roles diferentes:
 
 | Rol | Email | UID |
 |-----|-------|-----|
-| **Gerente** | gerencia@dataweave.com | `5Re9sPT47DR6bbjntLL9LpKKjn13` |
-| **Encargado** | encargado@dataweave.com | `n3UuVRSz8LaISnEbJLLy7Yk8HNU2` |
-| **Call Center** | callcenter@dataweave.com | `fzQs2Ev1NEReM6YY4JYMZuytumz2` |
-| **Marketing** | marketing@dataweave.com | `asA3k52QlMPWr9v6ZjTQON98BB52` |
+| **Gerente** | `<REDACTED_DEMO_EMAIL>` | `<REDACTED_UID_1>` |
+| **Encargado** | `<REDACTED_DEMO_EMAIL_2>` | `<REDACTED_UID_2>` |
+| **Call Center** | `<REDACTED_DEMO_EMAIL_3>` | `<REDACTED_UID_3>` |
+| **Marketing** | `<REDACTED_DEMO_EMAIL_4>` | `<REDACTED_UID_4>` |
 
 ---
 
@@ -62,22 +62,22 @@ Ve a [Firebase Console](https://console.firebase.google.com/) y crea los 4 usuar
 1. Ve a **Authentication** → **Users** → **Add User**
 
 2. **Usuario 1 - Gerente:**
-   - Email: `gerencia@dataweave.com`
+   - Email: `<REDACTED_DEMO_EMAIL>`
    - Contraseña: (la que prefieras, ej: `Gerente123!`)
    - **Importante:** Después de crear, copia el UID generado
 
 3. **Usuario 2 - Encargado:**
-   - Email: `encargado@dataweave.com`
+   - Email: `<REDACTED_DEMO_EMAIL_2>`
    - Contraseña: (la que prefieras, ej: `Encargado123!`)
    - **Importante:** Después de crear, copia el UID generado
 
 4. **Usuario 3 - Call Center:**
-   - Email: `callcenter@dataweave.com`
+   - Email: `<REDACTED_DEMO_EMAIL_3>`
    - Contraseña: (la que prefieras, ej: `CallCenter123!`)
    - **Importante:** Después de crear, copia el UID generado
 
 5. **Usuario 4 - Marketing:**
-   - Email: `marketing@dataweave.com`
+   - Email: `<REDACTED_DEMO_EMAIL_4>`
    - Contraseña: (la que prefieras, ej: `Marketing123!`)
    - **Importante:** Después de crear, copia el UID generado
 
@@ -94,7 +94,7 @@ Cambia los UIDs en el array `users`:
 const users = [
   {
     uid: 'TU_UID_REAL_AQUÍ', // ← Copia el UID de Firebase Console
-    email: 'gerencia@dataweave.com',
+   email: '<REDACTED_DEMO_EMAIL>',
     // ...
   },
   // ...

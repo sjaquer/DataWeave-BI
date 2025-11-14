@@ -112,14 +112,14 @@ src/
 
 **Gerente:**
 ```
-Email: gerente@dataweave.com
-ContraseÃ±a: gerente123
+Email: <REDACTED_DEMO_EMAIL>
+ContraseÃ±a: <REDACTED_DEMO_PASSWORD>
 ```
 
 **Empleado:**
 ```
-Email: empleado@dataweave.com
-ContraseÃ±a: empleado123
+Email: <REDACTED_DEMO_EMAIL_2>
+ContraseÃ±a: <REDACTED_DEMO_PASSWORD_2>
 ```
 
 ### Flujo de Uso:
@@ -191,7 +191,7 @@ ContraseÃ±a: empleado123
 ```json
 {
   "uid": "[UID del usuario]",
-  "email": "gerente@dataweave.com",
+  "email": "<REDACTED_DEMO_EMAIL>",
   "role": "gerente",
   "displayName": "Gerente Principal",
   "createdAt": "[Timestamp actual]"

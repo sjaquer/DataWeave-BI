@@ -31,6 +31,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
+require('dotenv').config();
 const admin = require('firebase-admin');
 const { format, eachDayOfInterval, parseISO } = require('date-fns');
 const CryptoJS = require('crypto-js');
@@ -533,11 +534,17 @@ async function mainLoop() {
 // STARTUP
 // ═══════════════════════════════════════════════════════════════════════════
 
-initFirebase();
-mainLoop().catch(error => {
-  console.error('[WORKER] 💥 Fatal error:', error);
-  process.exit(1);
-});
+async function start() {
+  try {
+    await initFirebase();
+    await mainLoop();
+  } catch (error) {
+    console.error('[WORKER] 💥 Fatal error:', error);
+    process.exit(1);
+  }
+}
+
+start();
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

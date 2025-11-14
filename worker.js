@@ -58,26 +58,55 @@ const AGENT_MAP = {
 
 let db;
 
-function initFirebase() {
-  try {
-    // Leer service account desde env var (JSON string)
-    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
-    
-    if (!serviceAccountJson) {
-      throw new Error('FIREBASE_SERVICE_ACCOUNT env var no configurada');
+// Inicializa Firebase con reintentos y múltiples fallbacks de env vars.
+async function initFirebase() {
+  const retryDelayMs = 30000; // 30s
+  while (true) {
+    try {
+      // Prefer FIREBASE_SERVICE_ACCOUNT, luego SERVICE_ACCOUNT, luego GOOGLE_APPLICATION_CREDENTIALS file
+      const envJson = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.SERVICE_ACCOUNT;
+
+      let serviceAccount;
+
+      if (envJson) {
+        try {
+          serviceAccount = JSON.parse(envJson);
+        } catch (parseErr) {
+          throw new Error(`Error parseando JSON de service account desde env: ${parseErr.message}`);
+        }
+      } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        // Intentar leer el archivo de credenciales (si existe en el filesystem del contenedor)
+        const fs = require('fs');
+        const path = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+        if (!fs.existsSync(path)) {
+          throw new Error(`GOOGLE_APPLICATION_CREDENTIALS definido pero el archivo no existe: ${path}`);
+        }
+        const content = fs.readFileSync(path, 'utf8');
+        try {
+          serviceAccount = JSON.parse(content);
+        } catch (parseErr) {
+          throw new Error(`Error parseando JSON desde GOOGLE_APPLICATION_CREDENTIALS: ${parseErr.message}`);
+        }
+      } else {
+        throw new Error('No se encontró FIREBASE_SERVICE_ACCOUNT ni SERVICE_ACCOUNT ni GOOGLE_APPLICATION_CREDENTIALS');
+      }
+
+      // Inicializar Admin SDK si no está inicializado
+      if (!admin.apps.length) {
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount)
+        });
+      }
+
+      db = admin.firestore();
+      console.log('[WORKER] ✅ Firebase Admin inicializado correctamente');
+      return; // éxito
+
+    } catch (error) {
+      console.error('[WORKER] ❌ Error inicializando Firebase (reintentando):', error.message || error);
+      console.log(`[WORKER] ⏳ Reintentando en ${retryDelayMs / 1000}s...`);
+      await new Promise((r) => setTimeout(r, retryDelayMs));
     }
-
-    const serviceAccount = JSON.parse(serviceAccountJson);
-    
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
-    });
-
-    db = admin.firestore();
-    console.log('[WORKER] ✅ Firebase Admin inicializado correctamente');
-  } catch (error) {
-    console.error('[WORKER] ❌ Error inicializando Firebase:', error);
-    process.exit(1);
   }
 }
 

@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
-import { format, subDays, startOfDay, differenceInCalendarDays, eachDayOfInterval, getDay, parseISO } from "date-fns";
+import { format, subDays, startOfDay, endOfDay, differenceInCalendarDays, getDay } from "date-fns";
 import { es } from "date-fns/locale";
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine } from "recharts";
@@ -144,38 +144,6 @@ export default function AdvisorPerformancePage() {
       // No mostrar error al usuario, esto es verificación en background
     }
   }, [isBackfillInProgress]);
-
-  // Forzar sincronización del día ACTUAL: consulta check-missing con includeToday=true
-  const handleForceSyncToday = useCallback(async () => {
-    try {
-      const today = format(new Date(), 'yyyy-MM-dd');
-      toast({ title: 'Forzando sincronización de HOY...' });
-
-      const response = await fetch('/api/zadarma/check-missing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ startDate: today, endDate: today, includeToday: true })
-      });
-
-      const data = await response.json();
-      const missingDays = data.missingDays || [];
-
-      if (missingDays.length === 0) {
-        toast({ title: 'Nada que sincronizar', description: 'No se detectaron huecos para HOY.' });
-        return;
-      }
-
-      // Iniciar backfill para HOY
-      setIsBackfillInProgress(true);
-      setBackfillDates({ start: missingDays[0], end: missingDays[missingDays.length - 1] });
-      setShowBackfillProgress(true);
-      toast({ title: 'Backfill iniciado', description: `Sincronizando ${missingDays.length} rango(s) para HOY.` });
-
-    } catch (error: any) {
-      console.error('[FORCE-SYNC-TODAY] Error:', error);
-      toast({ variant: 'destructive', title: 'Error forzando sync', description: String(error) });
-    }
-  }, [toast]);
 
   // Función para procesar datos de llamadas
   const processCallsData = useCallback((calls: any[]) => {
@@ -389,17 +357,28 @@ export default function AdvisorPerformancePage() {
             try {
               const statsResponse = await fetch(`/api/zadarma/stats?${refreshParams.toString()}`);
               const statsData = await statsResponse.json();
-              
-              if (statsData.status === 'success') {
+
+              if (statsData.status === 'success' || statsData.status === 'partial') {
                 const freshCalls = statsData.stats || [];
-                const saved = statsData.saved || 0;
+                const saved = typeof statsData.savedTotal === 'number'
+                  ? statsData.savedTotal
+                  : (statsData.count ?? freshCalls.length);
                 console.log(`[PERFORMANCE] ✅ Background API completada - ${freshCalls.length} llamadas, guardadas: ${saved}`);
-                
+
+                if (Array.isArray(statsData.lockedDays) && statsData.lockedDays.length > 0) {
+                  console.log('[PERFORMANCE] ⏳ Sync bloqueada para:', statsData.lockedDays.join(', '));
+                }
+                if (Array.isArray(statsData.errors) && statsData.errors.length > 0) {
+                  console.warn('[PERFORMANCE] ⚠️ Problemas en background:', statsData.errors);
+                }
+
                 // 🔄 Actualizar UI con datos frescos
                 const processedData = processCallsData(freshCalls);
                 setPerformanceData(processedData.performance);
                 setDailyPerformanceData(processedData.daily);
                 console.log('[PERFORMANCE] 🎯 UI actualizada con datos frescos de API');
+              } else {
+                console.warn('[PERFORMANCE] ⚠️ Background API respondió con estado:', statsData.status, statsData.message);
               }
             } catch (error) {
               console.warn('[PERFORMANCE] ⚠️ Error en background update:', error);
@@ -513,6 +492,92 @@ export default function AdvisorPerformancePage() {
   
   useEffect(() => { fetchAndProcessData(); }, [fetchAndProcessData]);
 
+  // Forzar sincronización manual del rango visualizado usando la API directa de Zadarma
+  const handleForceSyncSelection = useCallback(async () => {
+    if (!date?.from) {
+      toast({
+        variant: 'destructive',
+        title: 'Selecciona un rango',
+        description: 'Elige al menos un día para sincronizar manualmente.'
+      });
+      return;
+    }
+
+    const rangeStart = date.from;
+    const rangeEnd = date.to || date.from;
+    const rangeLabel = differenceInCalendarDays(rangeEnd, rangeStart) === 0
+      ? format(rangeStart, 'dd LLL, y', { locale: es })
+      : `${format(rangeStart, 'dd LLL, y', { locale: es })} → ${format(rangeEnd, 'dd LLL, y', { locale: es })}`;
+
+    try {
+      setIsLoading(true);
+      toast({
+        title: 'Sincronizando Zadarma',
+        description: `Forzando ${rangeLabel}...`
+      });
+
+      const response = await fetch('/api/zadarma/stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startDate: format(startOfDay(rangeStart), 'yyyy-MM-dd HH:mm:ss'),
+          endDate: format(endOfDay(rangeEnd), 'yyyy-MM-dd HH:mm:ss'),
+          force: true,
+          save: true
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.status === 'error') {
+        throw new Error(data.message || 'No se pudo sincronizar Zadarma.');
+      }
+
+      const statsArray = Array.isArray(data.stats) ? data.stats : [];
+      if (statsArray.length > 0) {
+        const processed = processCallsData(statsArray);
+        setPerformanceData(processed.performance);
+        setDailyPerformanceData(processed.daily);
+      }
+
+      const totalGuardadas = typeof data.savedTotal === 'number'
+        ? data.savedTotal
+        : Object.values(data.savedPerDay || {}).reduce((acc: number, value: any) => {
+            const numeric = Number(value);
+            return Number.isFinite(numeric) ? acc + numeric : acc;
+          }, 0);
+
+      const hadLocks = Array.isArray(data.lockedDays) && data.lockedDays.length > 0;
+      const hadErrors = Array.isArray(data.errors) && data.errors.length > 0;
+      const errorSummary = hadErrors
+        ? data.errors.map((entry: any) => `${entry.date}: ${entry.message}`).join(' | ')
+        : '';
+
+      const descriptionParts: string[] = [];
+      descriptionParts.push(`Rango: ${rangeLabel}`);
+      if (totalGuardadas > 0) descriptionParts.push(`Actualizadas ${totalGuardadas} llamadas`);
+      if (hadLocks) descriptionParts.push(`Bloqueado: ${data.lockedDays.join(', ')}`);
+      if (errorSummary) descriptionParts.push(`Errores: ${errorSummary}`);
+
+      toast({
+        variant: hadErrors ? 'destructive' : hadLocks ? 'secondary' : 'default',
+        title: hadErrors ? 'Sincronización parcial' : hadLocks ? 'Sincronización en espera' : 'Sincronización completada',
+        description: descriptionParts.join(' | ')
+      });
+
+      await fetchAndProcessData(true);
+    } catch (error: any) {
+      console.error('[FORCE-SYNC] Error:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error forzando sincronización',
+        description: String(error?.message || error)
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [date, fetchAndProcessData, processCallsData, toast]);
+
   const sortedPerformanceData = useMemo(() => [...performanceData].sort((a, b) => {
       if (!sortConfig) return 0;
       const aVal = a[sortConfig.key]; const bVal = b[sortConfig.key];
@@ -520,6 +585,17 @@ export default function AdvisorPerformancePage() {
       const order = typeof aVal === 'string' ? aVal.localeCompare(bVal as string) : (aVal as number) - (bVal as number);
       return sortConfig.direction === 'ascending' ? order : -order;
   }), [performanceData, sortConfig]);
+
+  const forceButtonLabel = useMemo(() => {
+    if (!date?.from) return 'Forzar Hoy';
+    const startKey = format(date.from, 'yyyy-MM-dd');
+    const endKey = format(date.to || date.from, 'yyyy-MM-dd');
+    if (startKey === endKey) {
+      const todayKey = format(new Date(), 'yyyy-MM-dd');
+      return startKey === todayKey ? 'Forzar Hoy' : `Forzar ${format(date.from, 'dd LLL', { locale: es })}`;
+    }
+    return 'Forzar Rango';
+  }, [date]);
 
   const handleSort = (key: SortConfig['key']) => setSortConfig(sc => ({ key, direction: (sc?.key === key && sc.direction === 'ascending') ? 'descending' : 'ascending' }));
   const renderSortArrow = (key: SortConfig['key']) => {
@@ -596,7 +672,10 @@ export default function AdvisorPerformancePage() {
                 </PopoverContent>
               </Popover>
               <Button variant="outline" size="sm" onClick={() => fetchAndProcessData()}><RefreshCw className="h-4 w-4 mr-2"/>Refrescar Ahora</Button>
-              <Button variant="outline" size="sm" onClick={handleForceSyncToday}><PlayCircle className="h-4 w-4 mr-2"/>Forzar HOY</Button>
+              <Button variant="outline" size="sm" onClick={handleForceSyncSelection} disabled={isLoading}>
+                <PlayCircle className="h-4 w-4 mr-2" />
+                {forceButtonLabel}
+              </Button>
               <Button variant="outline" size="sm" onClick={() => setIsScheduleManagerOpen(true)}><Cog className="h-4 w-4 mr-2"/>Gestionar Horarios</Button>
           </div>
         </div>

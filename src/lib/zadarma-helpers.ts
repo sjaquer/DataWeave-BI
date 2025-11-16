@@ -11,6 +11,8 @@ const AGENT_MAP: { [key: string]: string } = {
   "114": "Eduardo", "115": "Daiana", "116": "Noemi",
 };
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function saveZadarmaCalls(calls: ZadarmaCall[]): Promise<number> {
   // Fragmentar en batches de tamaño permitido por Firestore (<= 500)
   if (calls.length === 0) return 0;
@@ -333,98 +335,109 @@ export async function getLastSyncedHour(date: Date): Promise<Date | null> {
     return null;
   }
 }
-
-async function fetchZadarmaDirectAdaptive(startStr: string, endStr: string, apiKey: string, apiSecret: string) {
-  // Función interna para hacer petición directa con retry y 429 handling
-  const method = '/v1/statistics/pbx/';
-  const params: any = { start: startStr, end: endStr, format: 'json', version: '2' };
-  const sortedKeys = Object.keys(params).sort();
-  const sortedParams = new URLSearchParams();
-  sortedKeys.forEach(key => sortedParams.append(key, params[key]));
-  const queryString = sortedParams.toString();
-
-  const md5Hash = CryptoJS.MD5(queryString).toString(CryptoJS.enc.Hex);
-  const dataToSign = method + queryString + md5Hash;
-  const hmac = CryptoJS.HmacSHA1(dataToSign, apiSecret);
-  const signature = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(hmac.toString(CryptoJS.enc.Hex)));
-  const authHeader = `${apiKey}:${signature}`;
-  const apiUrl = `https://api.zadarma.com${method}?${queryString}`;
-
-  let attempt = 0;
-  const maxAttempts = 4;
-  while (true) {
-    attempt++;
-    const response = await fetch(apiUrl, { method: 'GET', headers: { 'Authorization': authHeader } });
-    if (response.status === 429) {
-      const ra = response.headers.get('Retry-After');
-      const waitMs = ra ? Number(ra) * 1000 : Math.min(60000, Math.pow(2, attempt) * 1000);
-      if (attempt >= maxAttempts) throw new Error(`Rate limited by Zadarma after ${attempt} attempts`);
-      await new Promise(r => setTimeout(r, waitMs));
-      continue;
-    }
-    if (!response.ok) throw new Error(`Error de red de Zadarma: ${response.status} ${response.statusText}`);
-    const data = await response.json();
-    if (data.status === 'error') throw new Error(`Error de API de Zadarma: ${data.message}`);
-    return data.stats || [];
-  }
-}
-
 export async function fetchZadarmaAdaptive(startDate: Date, endDate: Date, apiKey: string, apiSecret: string): Promise<any[]> {
-  // Fetch adaptativo con división recursiva para evitar truncamiento por límite por petición
-  console.log('[FETCH ADAPTIVE] Starting adaptive fetch:', { startDate, endDate });
-  
-  try {
-    const LIMIT = 1000;
-    const minWindowMinutes = 5;
+  console.log('[FETCH PAGED] Starting Zadarma fetch:', { startDate, endDate });
 
-    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+  const LIMIT = 1000;
+  const MAX_ATTEMPTS = 3;
+  const RATE_LIMIT_WAIT_MS = 60000;
+  const REQUEST_RETRY_WAIT_MS = 60000;
+  const method = '/v1/statistics/pbx/';
 
-    const allStatsMap = new Map<string, any>();
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+  const startStr = fmt(startDate);
+  const endStr = fmt(endDate);
 
-  async function fetchRangeRecursive(a: Date, b: Date) {
-    const s = fmt(a);
-    const e = fmt(b);
-    try {
-      const chunk = await fetchZadarmaDirectAdaptive(s, e, apiKey, apiSecret);
-      
-      // Si chunk está por debajo del límite, aceptarlo
-      if (chunk.length < LIMIT) {
-        for (const c of chunk) {
-          const key = `${c.pbx_call_id}__${c.callstart}`;
-          if (!allStatsMap.has(key)) allStatsMap.set(key, c);
+  const dedupeMap = new Map<string, any>();
+
+  let skip = 0;
+  let continuePaging = true;
+
+  while (continuePaging) {
+    let attempt = 0;
+    let pageLoaded = false;
+    let data: any = null;
+
+    while (!pageLoaded && attempt < MAX_ATTEMPTS) {
+      attempt++;
+
+      const params: Record<string, string | number> = {
+        start: startStr,
+        end: endStr,
+        format: 'json',
+        version: '2',
+      };
+      if (skip > 0) params.skip = skip;
+
+      const sortedKeys = Object.keys(params).sort();
+      const sortedParams = new URLSearchParams();
+      sortedKeys.forEach((key) => sortedParams.append(key, String(params[key])));
+      const queryString = sortedParams.toString();
+
+      const md5Hash = CryptoJS.MD5(queryString).toString(CryptoJS.enc.Hex);
+      const dataToSign = method + queryString + md5Hash;
+      const hmac = CryptoJS.HmacSHA1(dataToSign, apiSecret);
+      const hmacHex = hmac.toString(CryptoJS.enc.Hex);
+      const signature = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(hmacHex));
+      const authHeader = `${apiKey}:${signature}`;
+      const apiUrl = `https://api.zadarma.com${method}?${queryString}`;
+
+      console.log(`[FETCH PAGED] Requesting skip=${skip}, attempt=${attempt}`);
+
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: { Authorization: authHeader },
+        });
+
+        if (response.status === 429) {
+          console.warn('[FETCH PAGED] Rate limited, waiting before retry...');
+          await sleep(RATE_LIMIT_WAIT_MS);
+          continue;
         }
-        return;
-      }
-      
-      // Si chunk alcanza/supera límite, intentar dividir a menos que la ventana sea muy pequeña
-      const spanMs = b.getTime() - a.getTime();
-      const spanMinutes = spanMs / 60000;
-      if (spanMinutes <= minWindowMinutes) {
-        // Ventana muy pequeña, incluir lo que tenemos
-        for (const c of chunk) {
-          const key = `${c.pbx_call_id}__${c.callstart}`;
-          if (!allStatsMap.has(key)) allStatsMap.set(key, c);
+
+        data = await response.json();
+
+        if (data.status === 'error') {
+          const message = String(data.message || 'Error desconocido');
+          if (message.toLowerCase().includes('limit exceeded')) {
+            console.warn('[FETCH PAGED] Limit exceeded message, waiting before retry...');
+            await sleep(RATE_LIMIT_WAIT_MS);
+            continue;
+          }
+          throw new Error(`Error Zadarma: ${message}`);
         }
-        return;
+
+        pageLoaded = true;
+      } catch (err) {
+        console.warn('[FETCH PAGED] Request failed, retrying...', err);
+        if (attempt >= MAX_ATTEMPTS) {
+          throw err;
+        }
+        await sleep(REQUEST_RETRY_WAIT_MS);
       }
-      
-      const mid = new Date(a.getTime() + Math.floor(spanMs / 2));
-      await fetchRangeRecursive(a, mid);
-      await fetchRangeRecursive(new Date(mid.getTime() + 1000), b);
-    } catch (err) {
-      console.error(`[ADAPTIVE FETCH ERROR] ${s} to ${e}:`, err);
-      // En caso de error, no hacer nada más para este rango
+    }
+
+    const pageStats: any[] = data?.stats || [];
+    console.log(`[FETCH PAGED] Page loaded, records=${pageStats.length}, skip=${skip}`);
+
+    for (const stat of pageStats) {
+      const key = `${stat.pbx_call_id}__${stat.callstart}`;
+      if (!dedupeMap.has(key)) {
+        dedupeMap.set(key, stat);
+      }
+    }
+
+    if (pageStats.length < LIMIT) {
+      continuePaging = false;
+    } else {
+      skip += LIMIT;
     }
   }
 
-    await fetchRangeRecursive(startDate, endDate);
-    console.log('[FETCH ADAPTIVE] Completed adaptive fetch:', allStatsMap.size, 'unique calls');
-    return Array.from(allStatsMap.values()).sort((a: any, b: any) => String(a.callstart || '').localeCompare(String(b.callstart || '')));
-  } catch (error: any) {
-    console.error('[FETCH ADAPTIVE FATAL ERROR]:', error);
-    // En caso de error crítico, devolver array vacío para no romper la cadena
-    return [];
-  }
+  const results = Array.from(dedupeMap.values()).sort((a: any, b: any) => String(a.callstart || '').localeCompare(String(b.callstart || '')));
+  console.log('[FETCH PAGED] Completed Zadarma fetch:', results.length, 'unique calls');
+  return results;
 }
 
 const getLockRef = (date: Date) => db.collection('zadarma_sync_locks').doc(format(date, 'yyyy-MM-dd'));

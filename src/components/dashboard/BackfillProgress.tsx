@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Loader, Clock, CheckCircle, AlertCircle, Database } from 'lucide-react';
+import { Loader, CheckCircle, AlertCircle, Database, Activity } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface BackfillProgressProps {
@@ -26,47 +25,58 @@ interface ProgressData {
   totalTime?: number;
 }
 
+type LogStatus = 'info' | 'success' | 'warning' | 'error';
+
+interface LogEntry {
+  id: string;
+  timestamp: string;
+  message: string;
+  status: LogStatus;
+}
+
 export function BackfillProgress({ startDate, endDate, onComplete, onError }: BackfillProgressProps) {
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
-  
-  // 🎯 NUEVA LÓGICA: Estados para progreso fluido y dinámico
-  const [smoothProgress, setSmoothProgress] = useState(0);
-  const [estimatedTotalTime, setEstimatedTotalTime] = useState(0);
-  const [startTime, setStartTime] = useState(0);
-  const [lastServerUpdate, setLastServerUpdate] = useState(0);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const lastMessageRef = useRef<string>('');
+  const lastDayRef = useRef<string>('');
+  const lastStatusRef = useRef<string>('');
+  const logContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // 📊 CÁLCULOS DE PROGRESO DINÁMICO
-  const MINUTES_PER_DAY = 3; // 3 minutos por día como margen
-  
-  // Calcular tiempo total estimado basado en días
-  const calculateEstimatedTime = (totalDays: number) => {
-    return totalDays * MINUTES_PER_DAY * 60; // en segundos
-  };
-  
-  // Calcular progreso fluido basado en tiempo transcurrido
-  const calculateSmoothProgress = (currentTime: number, startTime: number, totalEstimatedTime: number, serverProgress: number) => {
-    if (totalEstimatedTime === 0) return serverProgress;
-    
-    const timeElapsed = (currentTime - startTime) / 1000; // en segundos
-    const timeBasedProgress = Math.min((timeElapsed / totalEstimatedTime) * 100, 95); // máximo 95% hasta confirmación del servidor
-    
-    // Usar el mayor entre progreso basado en tiempo y progreso del servidor
-    return Math.max(timeBasedProgress, serverProgress);
-  };
+  const appendLog = useCallback((message: string, status: LogStatus = 'info') => {
+    setLogEntries(prev => {
+      const id = `${Date.now()}-${prev.length}`;
+      const timestamp = new Date().toLocaleTimeString('es-PE', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      return [...prev, { id, timestamp, message, status }];
+    });
+  }, []);
 
-  // Formatear tiempo en formato MM:SS
-  const formatTime = (seconds: number): string => {
-    if (seconds < 60) return `${seconds}s`;
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
+  // Reset logs when range changes
+  useEffect(() => {
+    setLogEntries([]);
+    lastMessageRef.current = '';
+    lastDayRef.current = '';
+    lastStatusRef.current = '';
+  }, [startDate, endDate]);
+
+  // Auto-scroll logs
+  useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTo({ top: logContainerRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [logEntries]);
 
   // Iniciar backfill
   const startBackfill = async () => {
     try {
+      appendLog(`Solicitando backfill Zadarma para ${startDate} → ${endDate}`);
+
       const response = await fetch('/api/zadarma/backfill-progress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,17 +86,20 @@ export function BackfillProgress({ startDate, endDate, onComplete, onError }: Ba
       const data = await response.json();
       
       if (data.status === 'started') {
+        appendLog('Backfill encolado, esperando confirmación del worker...');
         setSessionId(data.sessionId);
         setIsPolling(true);
       } else if (data.status === 'already_in_progress') {
         // 🔄 Ya hay un backfill en progreso, usar esa sesión
         console.log('[BACKFILL] Ya hay proceso en progreso, usando sesión existente:', data.currentSessionId);
+        appendLog('Ya existe una sesión activa, adjuntando al progreso actual.', 'warning');
         setSessionId(data.currentSessionId);
         setIsPolling(true);
       } else {
         throw new Error(data.message || 'Error iniciando backfill');
       }
     } catch (error: any) {
+      appendLog(`Error al iniciar backfill: ${error.message}`, 'error');
       onError(error.message);
     }
   };
@@ -98,30 +111,43 @@ export function BackfillProgress({ startDate, endDate, onComplete, onError }: Ba
       const data = await response.json();
 
       if (response.ok && data.status !== 'not_found') {
-        // 🎯 INICIALIZAR TIEMPOS EN LA PRIMERA ACTUALIZACIÓN
-        if (!startTime && data.totalDays) {
-          const now = Date.now();
-          setStartTime(now);
-          setEstimatedTotalTime(calculateEstimatedTime(data.totalDays));
-          setLastServerUpdate(now);
-        }
-        
         setProgressData(data);
-        setLastServerUpdate(Date.now());
+
+        if (data.message && data.message !== lastMessageRef.current) {
+          appendLog(data.message, data.status === 'error' ? 'error' : 'info');
+          lastMessageRef.current = data.message;
+        }
+
+        if (data.currentDay && data.currentDay !== lastDayRef.current) {
+          appendLog(`Procesando ${data.currentDay}...`);
+          lastDayRef.current = data.currentDay;
+        }
+
+        if (data.status !== lastStatusRef.current) {
+          if (data.status === 'completed') {
+            appendLog('Backfill finalizado correctamente.', 'success');
+          } else if (data.status === 'error') {
+            appendLog('Backfill reporta error, revisa detalles.', 'error');
+          } else if (data.status === 'in_progress' && lastStatusRef.current !== 'in_progress') {
+            appendLog('Worker confirmó inicio del procesamiento.');
+          }
+          lastStatusRef.current = data.status;
+        }
 
         if (data.status === 'completed') {
-          setSmoothProgress(100); // Completar inmediatamente la barra
           setIsPolling(false);
-          setTimeout(() => onComplete(), 2000);
+          setTimeout(() => onComplete(), 1500);
         } else if (data.status === 'error') {
           setIsPolling(false);
           onError(data.error || 'Error durante el backfill');
         }
       } else {
         console.warn('[BACKFILL-PROGRESS] Sesión no encontrada o error');
+        appendLog('No se pudo recuperar el estado de la sesión de backfill.', 'warning');
       }
     } catch (error: any) {
       console.error('[BACKFILL-PROGRESS] Error en polling:', error);
+      appendLog(`Error consultando progreso: ${error.message}`, 'warning');
     }
   };
 
@@ -140,34 +166,31 @@ export function BackfillProgress({ startDate, endDate, onComplete, onError }: Ba
       return () => clearInterval(interval);
     }
   }, [sessionId, isPolling]);
-
-  // 🎬 Effect para progreso fluido (actualización cada segundo)
-  useEffect(() => {
-    if (!progressData || progressData.status === 'completed' || progressData.status === 'error' || !startTime) {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      const currentTime = Date.now();
-      const serverProgress = progressData.progress || 0;
-      const newSmoothProgress = calculateSmoothProgress(currentTime, startTime, estimatedTotalTime, serverProgress);
-      
-      setSmoothProgress(newSmoothProgress);
-    }, 1000); // Actualizar cada segundo para fluidez
-
-    return () => clearInterval(interval);
-  }, [progressData, startTime, estimatedTotalTime]);
-
   if (!progressData) {
     return (
       <Card className="border-blue-200 bg-blue-50">
         <CardContent className="pt-6">
-          <div className="flex items-center gap-3">
-            <Loader className="h-5 w-5 animate-spin text-blue-600" />
+          <div className="flex items-center gap-3 mb-4">
+            <Activity className="h-5 w-5 text-blue-600" />
             <div>
-              <p className="font-medium text-blue-800">Iniciando carga de datos históricos</p>
-              <p className="text-sm text-blue-600">Preparando backfill...</p>
+              <p className="font-medium text-blue-800">Sincronización en curso</p>
+              <p className="text-sm text-blue-600">Esperando la primera actualización del worker...</p>
             </div>
+          </div>
+          <div
+            ref={logContainerRef}
+            className="max-h-48 overflow-y-auto rounded-md border border-blue-200 bg-white/80 p-3 font-mono text-xs text-blue-900"
+          >
+            {logEntries.length === 0 ? (
+              <p className="text-blue-600/80">Aún no hay mensajes...</p>
+            ) : (
+              logEntries.map((entry) => (
+                <div key={entry.id} className="mb-1">
+                  <span className="mr-2 text-blue-500">[{entry.timestamp}]</span>
+                  <span>{entry.message}</span>
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>
@@ -220,37 +243,34 @@ export function BackfillProgress({ startDate, endDate, onComplete, onError }: Ba
                  progressData.status === 'error' ? 'Error cargando datos' :
                  'Cargando datos históricos'}
               </p>
-              <p className={`text-sm ${getTextColor()} opacity-80`}>
-                {progressData.message}
-              </p>
             </div>
           </div>
 
-          {/* Barra de progreso */}
-          {progressData.status !== 'error' && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className={`${getTextColor()} opacity-80`}>
-                  {progressData.processedDays} de {progressData.totalDays} días procesados
-                </span>
-                <span className={`${getTextColor()} opacity-80`}>
-                  {Math.round(smoothProgress)}%
-                </span>
-              </div>
-              <Progress 
-                value={smoothProgress} 
-                className="h-3"
-              />
-              <div className="flex items-center justify-between text-xs">
-                <span className={`${getTextColor()} opacity-60`}>
-                  Tiempo estimado: {MINUTES_PER_DAY} min/día
-                </span>
-                <span className={`${getTextColor()} opacity-60`}>
-                  Progreso fluido activado
-                </span>
-              </div>
-            </div>
-          )}
+          {/* Stream de logs */}
+          <div
+            ref={logContainerRef}
+            className="max-h-56 overflow-y-auto rounded-md border border-blue-200/70 bg-white/90 p-3 font-mono text-xs shadow-inner"
+          >
+            {logEntries.length === 0 ? (
+              <p className="text-blue-600/80">Esperando mensajes del worker...</p>
+            ) : (
+              logEntries.map((entry) => {
+                const color = entry.status === 'error'
+                  ? 'text-red-600'
+                  : entry.status === 'success'
+                    ? 'text-green-600'
+                    : entry.status === 'warning'
+                      ? 'text-amber-600'
+                      : 'text-blue-700';
+                return (
+                  <div key={entry.id} className={`mb-1 ${color}`}>
+                    <span className="mr-2 text-blue-500">[{entry.timestamp}]</span>
+                    <span>{entry.message}</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
 
           {/* Estadísticas y tiempo restante */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -277,27 +297,12 @@ export function BackfillProgress({ startDate, endDate, onComplete, onError }: Ba
               </div>
             )}
 
-            {(progressData.status === 'in_progress' || progressData.status === 'starting') && estimatedTotalTime > 0 && (
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-orange-600" />
-                <div>
-                  <p className="font-medium">
-                    {startTime ? 
-                      formatTime(Math.max(0, estimatedTotalTime - Math.floor((Date.now() - startTime) / 1000))) :
-                      formatTime(estimatedTotalTime)
-                    }
-                  </p>
-                  <p className="text-xs opacity-70">Tiempo restante est.</p>
-                </div>
-              </div>
-            )}
-
-            {progressData.status === 'completed' && progressData.totalTime && (
+            {progressData.status === 'completed' && (
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 text-green-600" />
                 <div>
-                  <p className="font-medium">{formatTime(progressData.totalTime)}</p>
-                  <p className="text-xs opacity-70">Tiempo total</p>
+                  <p className="font-medium">{progressData.totalDays} día(s) procesados</p>
+                  <p className="text-xs opacity-70">Sesión finalizada</p>
                 </div>
               </div>
             )}

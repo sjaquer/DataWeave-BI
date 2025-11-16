@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
-import { format, subDays, startOfDay, endOfDay, differenceInCalendarDays, getDay } from "date-fns";
+import { format, subDays, startOfDay, endOfDay, differenceInCalendarDays, eachDayOfInterval, getDay } from "date-fns";
 import { es } from "date-fns/locale";
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine } from "recharts";
@@ -33,7 +33,7 @@ const CALLS_PER_HOUR_TARGET = 12;
 
 // --- Types ---
 interface DaySchedule { active: boolean; start: string; end: string; }
-interface Schedule { [day: string]: DaySchedule; }
+interface Schedule { [day: string]: DaySchedule | undefined; }
 interface ZadarmaCall { 
   pbx_call_id: string; 
   callstart: string; 
@@ -53,19 +53,59 @@ interface ZadarmaCall {
 }
 interface PerformanceMetrics { totalCalls: number; effectiveCalls: number; effectivenessRate: number; totalSeconds: number; averageCallDuration: number; }
 interface ActivityMetrics { firstCallTime: string | null; lastCallTime: string | null; }
-interface AdvisorPerformance extends PerformanceMetrics, ActivityMetrics { id: string; name: string; callTarget?: number; compliance?: number; }
-interface DailyPerformanceData { [agentId: string]: { [date: string]: PerformanceMetrics & ActivityMetrics & { callTarget?: number; compliance?: number; } }; }
+interface AdvisorPerformance extends PerformanceMetrics, ActivityMetrics { id: string; name: string; callTarget?: number; compliance?: number; scheduledHours?: number; actualHours?: number; }
+interface DailyPerformanceData { [agentId: string]: { [date: string]: PerformanceMetrics & ActivityMetrics & { callTarget?: number; compliance?: number; scheduledHours?: number; actualHours?: number; }; }; }
 type SortConfig = { key: keyof AdvisorPerformance; direction: 'ascending' | 'descending'; };
 
 const dayMapping = [ "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday" ];
 
+const defaultSchedule: Schedule = {
+  monday: { active: true, start: '09:00', end: '18:00' },
+  tuesday: { active: true, start: '09:00', end: '18:00' },
+  wednesday: { active: true, start: '09:00', end: '18:00' },
+  thursday: { active: true, start: '09:00', end: '18:00' },
+  friday: { active: true, start: '09:00', end: '18:00' },
+  saturday: { active: false, start: '09:00', end: '13:00' },
+  sunday: { active: false, start: '09:00', end: '13:00' },
+};
+
+const parseTimeToMinutes = (time: string): number | null => {
+  if (!time) return null;
+  const parts = time.split(':').map(Number);
+  if (parts.length < 2 || parts.some(isNaN)) return null;
+  const [hours, minutes, seconds = 0] = parts;
+  return hours * 60 + minutes + Math.floor(seconds / 60);
+};
+
+const calculateActualHoursFromTimes = (firstTime: string | null, lastTime: string | null): number => {
+  if (!firstTime || !lastTime) return 0;
+  const startMinutes = parseTimeToMinutes(firstTime);
+  const endMinutes = parseTimeToMinutes(lastTime);
+  if (startMinutes === null || endMinutes === null) return 0;
+  let diff = endMinutes - startMinutes;
+  if (diff < 0) diff += 24 * 60; // Manejar turnos que cruzan medianoche
+  return Math.max(0, diff / 60);
+};
+
+const computeCompliancePercentage = (actualHours: number, scheduledHours: number): number | undefined => {
+  if (!scheduledHours || scheduledHours <= 0) return undefined;
+  const ratio = actualHours / scheduledHours;
+  return Math.max(0, Math.min(100, Number((ratio * 100).toFixed(1))));
+};
+
 const calculateHoursForDay = (schedule: Schedule, date: Date): number => {
-    const dayName = dayMapping[getDay(date)];
-    const daySchedule = schedule[dayName];
-    if (!daySchedule || !daySchedule.active) return 0;
-    const [startH, startM] = daySchedule.start.split(':').map(Number);
-    const [endH, endM] = daySchedule.end.split(':').map(Number);
-    return (endH + endM / 60) - (startH + startM / 60);
+  const dayName = dayMapping[getDay(date)];
+  const daySchedule = schedule[dayName];
+  if (!daySchedule || !daySchedule.active) return 0;
+
+  const startMinutes = parseTimeToMinutes(daySchedule.start);
+  const endMinutes = parseTimeToMinutes(daySchedule.end);
+  if (startMinutes === null || endMinutes === null) return 0;
+
+  let diff = endMinutes - startMinutes;
+  if (diff <= 0) diff += 24 * 60; // Manejar horarios que cruzan medianoche
+
+  return diff / 60;
 };
 
 export default function AdvisorPerformancePage() {
@@ -78,6 +118,8 @@ export default function AdvisorPerformancePage() {
   const [date, setDate] = useState<DateRange | undefined>({ from: new Date(), to: new Date() });
   const [tempDate, setTempDate] = useState<DateRange | undefined>(date);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [schedules, setSchedules] = useState<Record<string, Schedule>>({});
+  const agentIds = useMemo(() => Object.keys(agentMap), []);
   
   // Estado para backfill automático con progreso
   const [showBackfillProgress, setShowBackfillProgress] = useState(false);
@@ -92,6 +134,48 @@ export default function AdvisorPerformancePage() {
   const tableRef = useRef<HTMLDivElement>(null);
 
   const showDailyBreakdown = useMemo(() => (date?.from && date.to) ? differenceInCalendarDays(date.to, date.from) >= 0 : false, [date]);
+
+  const loadSchedules = useCallback(async () => {
+    try {
+      const scheduleEntries = await Promise.all(agentIds.map(async (id) => {
+        try {
+          const response = await fetch(`/api/schedules/${id}`);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+          return [id, { ...defaultSchedule, ...data }] as [string, Schedule];
+        } catch (error) {
+          console.warn(`[SCHEDULE] No se pudo cargar horario para ${id}, usando por defecto.`, error);
+          return [id, defaultSchedule] as [string, Schedule];
+        }
+      }));
+
+      const scheduleMap: Record<string, Schedule> = {};
+      scheduleEntries.forEach(([id, schedule]) => {
+        scheduleMap[id] = schedule;
+      });
+      setSchedules(scheduleMap);
+    } catch (error) {
+      console.error('[SCHEDULE] Error cargando horarios:', error);
+    }
+  }, [agentIds]);
+
+  useEffect(() => {
+    if (!isScheduleManagerOpen) {
+      loadSchedules();
+    }
+  }, [isScheduleManagerOpen, loadSchedules]);
+
+  const getScheduleForAgent = useCallback((agentId: string): Schedule => {
+    return schedules[agentId] ?? defaultSchedule;
+  }, [schedules]);
+
+  const calculateScheduledHoursForRange = useCallback((agentId: string, from: Date, to: Date) => {
+    const schedule = getScheduleForAgent(agentId);
+    const normalizedStart = startOfDay(from);
+    const normalizedEnd = startOfDay(to);
+    const intervalDays = eachDayOfInterval({ start: normalizedStart, end: normalizedEnd });
+    return intervalDays.reduce((total, day) => total + calculateHoursForDay(schedule, day), 0);
+  }, [getScheduleForAgent]);
 
   // Función para verificar y rellenar datos faltantes EN BACKGROUND (no bloquea UI)
   const checkAndBackfillMissingDataInBackground = useCallback(async (startDate: Date, endDate: Date): Promise<void> => {
@@ -163,7 +247,9 @@ export default function AdvisorPerformancePage() {
           totalSeconds: 0,
           averageCallDuration: 0,
           firstCallTime: null,
-          lastCallTime: null
+          lastCallTime: null,
+          compliance: undefined,
+          callTarget: undefined
         };
       } else if (displayName && performanceByAgent[id].name === `Ext ${id}`) {
         performanceByAgent[id].name = displayName;
@@ -227,24 +313,47 @@ export default function AdvisorPerformancePage() {
       }
     });
 
-    // Calcular métricas finales
-    const performance = Object.values(performanceByAgent).map(agent => {
+    // Calcular métricas finales y cumplimiento con base en horarios
+    const rangeStart = date?.from ?? new Date();
+    const rangeEnd = date?.to ?? rangeStart;
+
+    Object.values(performanceByAgent).forEach(agent => {
       agent.effectivenessRate = agent.totalCalls > 0 ? (agent.effectiveCalls / agent.totalCalls) * 100 : 0;
       agent.averageCallDuration = agent.effectiveCalls > 0 ? agent.totalSeconds / agent.effectiveCalls : 0;
-      return agent;
     });
 
-    // Calcular métricas diarias
     Object.keys(dailyPerformance).forEach(agentId => {
-      Object.keys(dailyPerformance[agentId]).forEach(date => {
-        const dayData = dailyPerformance[agentId][date];
-        dayData.effectivenessRate = dayData.totalCalls > 0 ? (dayData.effectiveCalls / dayData.totalCalls) * 100 : 0;
-        dayData.averageCallDuration = dayData.effectiveCalls > 0 ? dayData.totalSeconds / dayData.effectiveCalls : 0;
+      const agentSchedule = getScheduleForAgent(agentId);
+      let accumulatedActualHours = 0;
+
+      Object.entries(dailyPerformance[agentId]).forEach(([dayKey, stats]) => {
+        stats.effectivenessRate = stats.totalCalls > 0 ? (stats.effectiveCalls / stats.totalCalls) * 100 : 0;
+        stats.averageCallDuration = stats.effectiveCalls > 0 ? stats.totalSeconds / stats.effectiveCalls : 0;
+
+        const scheduleDate = new Date(`${dayKey}T00:00:00`);
+        const scheduledHours = calculateHoursForDay(agentSchedule, scheduleDate);
+        const actualHours = calculateActualHoursFromTimes(stats.firstCallTime, stats.lastCallTime);
+
+        stats.scheduledHours = scheduledHours;
+        stats.actualHours = actualHours;
+        stats.callTarget = scheduledHours * CALLS_PER_HOUR_TARGET;
+        stats.compliance = computeCompliancePercentage(actualHours, scheduledHours);
+
+        accumulatedActualHours += actualHours;
       });
+
+      const agentStats = performanceByAgent[agentId];
+      if (!agentStats) return;
+
+      const scheduledHoursInRange = calculateScheduledHoursForRange(agentId, rangeStart, rangeEnd);
+      agentStats.scheduledHours = scheduledHoursInRange;
+      agentStats.actualHours = accumulatedActualHours;
+      agentStats.callTarget = scheduledHoursInRange * CALLS_PER_HOUR_TARGET;
+      agentStats.compliance = computeCompliancePercentage(accumulatedActualHours, scheduledHoursInRange);
     });
 
-    return { performance, daily: dailyPerformance };
-  }, []);
+    return { performance: Object.values(performanceByAgent), daily: dailyPerformance };
+  }, [date, calculateScheduledHoursForRange, getScheduleForAgent]);
 
   // Función para verificar y rellenar datos faltantes automáticamente
   const checkAndBackfillMissingData = useCallback(async (startDate: Date, endDate: Date): Promise<boolean> => {
@@ -573,7 +682,7 @@ export default function AdvisorPerformancePage() {
       if (errorSummary) descriptionParts.push(`Errores: ${errorSummary}`);
 
       toast({
-        variant: hadErrors ? 'destructive' : hadLocks ? 'secondary' : 'default',
+        variant: hadErrors || hadLocks ? 'destructive' : 'default',
         title: hadErrors ? 'Sincronización parcial' : hadLocks ? 'Sincronización en espera' : 'Sincronización completada',
         description: descriptionParts.join(' | ')
       });

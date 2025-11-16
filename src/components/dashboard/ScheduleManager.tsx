@@ -97,7 +97,8 @@ export function ScheduleManager({ open, onOpenChange }: { open: boolean; onOpenC
             <SelectTrigger>
               <SelectValue placeholder="Selecciona un asesor..." />
             </SelectTrigger>
-            <SelectContent>
+            {/* Añadimos max-height y overflow para mostrar scrollbar si la lista es larga */}
+            <SelectContent className="max-h-64 overflow-y-auto scrollbar-thin">
               {Object.entries(agentMap).map(([id, name]) => (
                 <SelectItem key={id} value={id}>{name} ({id})</SelectItem>
               ))}

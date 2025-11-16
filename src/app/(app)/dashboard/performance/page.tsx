@@ -150,26 +150,39 @@ export default function AdvisorPerformancePage() {
     // Procesar llamadas y agrupar por agente
     const performanceByAgent: { [k: string]: AdvisorPerformance } = {};
     const dailyPerformance: DailyPerformanceData = {};
-    
-    Object.keys(agentMap).forEach(id => {
-      performanceByAgent[id] = { 
-        id, 
-        name: (agentMap as any)[id], 
-        totalCalls: 0, 
-        effectiveCalls: 0, 
-        effectivenessRate: 0, 
-        totalSeconds: 0, 
-        averageCallDuration: 0,
-        firstCallTime: null,
-        lastCallTime: null
-      };
-      dailyPerformance[id] = {};
-    });
+
+    const ensureAgent = (id: string, displayName?: string) => {
+      const fallbackName = displayName || (agentMap as any)[id] || (id && id !== 'unknown' ? `Ext ${id}` : 'Sin asignar');
+      if (!performanceByAgent[id]) {
+        performanceByAgent[id] = {
+          id,
+          name: fallbackName,
+          totalCalls: 0,
+          effectiveCalls: 0,
+          effectivenessRate: 0,
+          totalSeconds: 0,
+          averageCallDuration: 0,
+          firstCallTime: null,
+          lastCallTime: null
+        };
+      } else if (displayName && performanceByAgent[id].name === `Ext ${id}`) {
+        performanceByAgent[id].name = displayName;
+      }
+
+      if (!dailyPerformance[id]) {
+        dailyPerformance[id] = {};
+      }
+    };
+
+    Object.keys(agentMap).forEach(id => ensureAgent(id, (agentMap as any)[id]));
 
     // Procesar cada llamada
     calls.forEach((call: any) => {
-      const agentId = call.sip || call.agentId;
-      if (!performanceByAgent[agentId]) return;
+      const agentId = call.sip || call.agentId || 'unknown';
+      const agentDisplayName = call.agentName || (agentMap as any)[agentId] || (agentId === 'unknown' ? 'Sin asignar' : `Ext ${agentId}`);
+
+      ensureAgent(agentId, agentDisplayName);
+      performanceByAgent[agentId].name = agentDisplayName;
 
       const isEffective = call.disposition === 'answered' && (call.seconds || 0) > 0;
       const callDate = call.callDate || call.callstart?.substring(0, 10) || format(new Date(), 'yyyy-MM-dd');

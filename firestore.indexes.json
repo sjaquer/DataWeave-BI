@@ -96,6 +96,14 @@
       ]
     },
     {
+      "collectionGroup": "zadarma_calls",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "callDate", "order": "ASCENDING" },
+        { "fieldPath": "callstart", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "zadarma_jobs",
       "queryScope": "COLLECTION",
       "fields": [

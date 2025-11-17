@@ -2,8 +2,9 @@
 import { format, startOfDay, endOfDay, eachDayOfInterval } from 'date-fns';
 import {
   fetchZadarmaAdaptive,
-  consolidateCalls,
-  updateZadarmaCallsInFirestore,
+  // usar las versiones optimizadas para reducir latencia de escritura/transformación
+  consolidateCallsFast,
+  updateZadarmaCallsInFirestoreFast,
   saveSyncMetadata,
   setSyncLock,
   removeSyncLock,
@@ -95,12 +96,13 @@ async function processZadarmaRange({ startDate, endDate, save = true, force = fa
       const rawStats = await fetchZadarmaAdaptive(dayStart, dayEnd, apiKey, apiSecret);
       fetchedPerDay[dayKey] = rawStats.length;
 
-      const consolidated = consolidateCalls(rawStats);
+      // Usar consolidación optimizada (más rápida en CPU)
+      const consolidated = consolidateCallsFast(rawStats);
       statsAccumulator.push(...consolidated);
 
       if (save) {
         if (consolidated.length > 0) {
-          const savedCount = await updateZadarmaCallsInFirestore(consolidated, day);
+          const savedCount = await updateZadarmaCallsInFirestoreFast(consolidated, day);
           savedPerDay[dayKey] = savedCount;
           await saveSyncMetadata(day, consolidated.length, 'success');
         } else {

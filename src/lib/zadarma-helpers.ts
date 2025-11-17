@@ -13,6 +13,13 @@ const AGENT_MAP: { [key: string]: string } = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Helper reutilizable para fragmentar arrays en chunks
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
+
 export async function saveZadarmaCalls(calls: ZadarmaCall[]): Promise<number> {
   // Fragmentar en batches de tamaño permitido por Firestore (<= 500)
   if (calls.length === 0) return 0;
@@ -177,6 +184,59 @@ export async function updateZadarmaCallsInFirestore(calls: ZadarmaCall[], date: 
       console.warn('[ZADARMA SWAP] Error limpiando temporal tras fallo:', e);
     }
 
+    throw error;
+  }
+}
+
+// Versión optimizada: escritura directa en batches (menos commits que el safer-swap)
+export async function updateZadarmaCallsInFirestoreFast(calls: ZadarmaCall[], date: Date): Promise<number> {
+  const dateString = format(date, 'yyyy-MM-dd');
+  const BATCH_LIMIT = 500; // Firestore permite 500 ops/batch
+
+  try {
+    // Borrar documentos existentes para la fecha (solo ids para velocidad)
+    const existingSnapshot = await db.collection('zadarma_calls')
+      .where('callDate', '==', dateString)
+      .select() // traer solo metadatos/id
+      .get();
+
+    if (!existingSnapshot.empty) {
+      const existingRefs = existingSnapshot.docs.map((d: any) => d.ref);
+      const deleteChunks = chunkArray(existingRefs, BATCH_LIMIT);
+      for (const dchunk of deleteChunks) {
+        const batch = db.batch();
+        dchunk.forEach((r: any) => batch.delete(r));
+        await batch.commit();
+      }
+    }
+
+    // Escribir nuevos documentos directamente en batches
+    let saved = 0;
+    const chunks = chunkArray(calls, BATCH_LIMIT);
+    for (const chunk of chunks) {
+      const batch = db.batch();
+      for (const call of chunk) {
+        const callDate = call.callstart ? call.callstart.substring(0, 10) : dateString;
+        const docId = `${call.pbx_call_id}_${(call.callstart || '').replace(/[: -]/g, '')}`;
+        const docRef = db.collection('zadarma_calls').doc(docId);
+        const callDoc: any = {
+          ...call,
+          id: docId,
+          callDate,
+          agentId: call.sip,
+          agentName: AGENT_MAP[call.sip] || 'Desconocido',
+          syncedAt: new Date().toISOString(),
+          createdAt: Timestamp.now(),
+        };
+        batch.set(docRef, callDoc, { merge: true });
+      }
+      await batch.commit();
+      saved += chunk.length;
+    }
+
+    return saved;
+  } catch (error: any) {
+    console.error('[ZADARMA FAST SWAP] Error en escritura directa:', error);
     throw error;
   }
 }
@@ -507,6 +567,34 @@ export function consolidateCalls(calls: ZadarmaCall[]): ZadarmaCall[] {
     const timeB = b.callstart || '';
     return timeA.localeCompare(timeB);
   });
+}
+
+// Versión optimizada de consolidación/enriquecimiento
+export function consolidateCallsFast(calls: ZadarmaCall[]): ZadarmaCall[] {
+  if (!calls?.length) return [];
+  const callstartRegex = /^(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
+
+  return calls
+    .filter(call => call?.pbx_call_id && call?.callstart && call?.sip)
+    .map((call, index) => {
+      const match = callstartRegex.exec(call.callstart);
+      const seconds = Number(call.seconds) || 0;
+
+      return {
+        ...call,
+        seconds,
+        disposition: call.disposition || 'unknown',
+        callDate: match?.[1] || (call.callstart ? call.callstart.substring(0, 10) : ''),
+        callTime: match ? `${match[3]}:${match[4]}:${match[5]}` : (call.callstart ? call.callstart.substring(11, 19) : ''),
+        callHour: parseInt(match?.[3] || '0', 10),
+        isOutbound: (call.destination?.toString().length || 0) >= 5,
+        isAnswered: call.disposition === 'answered',
+        durationCategory: seconds === 0 ? 'no-answer' : seconds < 30 ? 'short' : seconds < 180 ? 'medium' : 'long',
+        agentName: AGENT_MAP[call.sip] || 'Desconocido',
+        originalIndex: index
+      } as ZadarmaCall;
+    })
+    .sort((a, b) => (a.callstart || '').localeCompare(b.callstart || ''));
 }
 
 export function validateZadarmaCredentials(): { valid: boolean; message?: string } {

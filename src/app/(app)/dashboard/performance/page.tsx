@@ -120,6 +120,7 @@ export default function AdvisorPerformancePage() {
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [schedules, setSchedules] = useState<Record<string, Schedule>>({});
   const agentIds = useMemo(() => Object.keys(agentMap), []);
+  const [asesoresOcultos, setAsesoresOcultos] = useState<string[]>([]);
   
   // Estado para backfill automático con progreso
   const [showBackfillProgress, setShowBackfillProgress] = useState(false);
@@ -752,6 +753,14 @@ export default function AdvisorPerformancePage() {
     }
     setDate(from ? { from, to } : undefined);
   };
+
+   const handleDateAgent = (preset: string) => {
+    if (asesoresOcultos.includes(preset)) {
+      setAsesoresOcultos(asesoresOcultos.filter((aO) => aO !== preset));
+    } else {
+      setAsesoresOcultos([...asesoresOcultos, preset]);
+    }
+  };
   
   return (
     <div className="space-y-6">
@@ -867,7 +876,33 @@ export default function AdvisorPerformancePage() {
             </div>
             
             <Card>
-                <CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Detalle por Asesor</CardTitle><CardDescription>{showDailyBreakdown ? "Haz clic en una fila para ver el desglose por día." : "Selecciona un rango de más de un día para ver desglose."}</CardDescription></div><Button variant="outline" size="icon" onClick={handleDownloadReport}><Download className="h-4 w-4" /></Button></CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5" />Detalle por Asesor</CardTitle><CardDescription>{showDailyBreakdown ? "Haz clic en una fila para ver el desglose por día." : "Selecciona un rango de más de un día para ver desglose."}</CardDescription></div>
+                  <Select onValueChange={handleDateAgent}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="Ocultar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {visiblePerformanceData.length > 0 ? (
+                      visiblePerformanceData.map((agent) => (
+                        <SelectItem
+                          key={agent.id}
+                          className={
+                            asesoresOcultos?.find((aO) => aO == agent.id)
+                              ? "opacity-40"
+                              : ""
+                          }
+                          value={agent.id}
+                        >
+                          {agent.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectValue placeholder="No Hay asesores" />
+                    )}
+                  </SelectContent>
+                </Select>
+                  <Button variant="outline" size="icon" onClick={handleDownloadReport}><Download className="h-4 w-4" /></Button>
+                </CardHeader>
                 <CardContent className="overflow-x-auto"><div ref={tableRef} className="min-w-[1000px]">
                     <Table>
                         <TableHeader><TableRow>
@@ -881,7 +916,8 @@ export default function AdvisorPerformancePage() {
                             <TableHead className="text-center"><Button variant="ghost" onClick={() => handleSort('firstCallTime')}>Primera Llamada {renderSortArrow('firstCallTime')}</Button></TableHead>
                             <TableHead className="text-right"><Button variant="ghost" onClick={() => handleSort('lastCallTime')}>Última Llamada {renderSortArrow('lastCallTime')}</Button></TableHead>
                         </TableRow></TableHeader>
-                        {sortedPerformanceData.map((agent) => (
+                        {sortedPerformanceData.filter((agnt) => !asesoresOcultos.includes(agnt.id))
+                        ?.map((agent) => (
                         <Collapsible asChild key={agent.id} open={openAdvisorId === agent.id} onOpenChange={() => showDailyBreakdown && setOpenAdvisorId(p => p === agent.id ? null : agent.id)}>
                             <TableBody>
                                 <CollapsibleTrigger asChild><TableRow className={cn(showDailyBreakdown && "cursor-pointer hover:bg-muted/50")}>

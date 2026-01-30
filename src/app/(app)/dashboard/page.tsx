@@ -26,6 +26,10 @@ import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { useAuth } from "@/contexts/AuthContext";
+import { generateDemoDaily, generateDemoProvinces, generateDemoInventory, generateDemoMetaCampaigns, generateDemoShipments } from "@/lib/demo-data";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 
 
 const CACHE_KEY = 'dashboardMetricsCache_main';
@@ -54,6 +58,7 @@ const capitalize = (s: string) => {
 };
 
 export default function Dashboard() {
+  const { isDemoMode } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [fullMetrics, setFullMetrics] = useState<GetMetricsOutput | null>(null);
   const [displayMetrics, setDisplayMetrics] = useState<GetMetricsOutput | null>(null);
@@ -199,8 +204,138 @@ export default function Dashboard() {
   }, [date, processAndSetMetrics, toast]);
 
   useEffect(() => {
-    fetchMetrics(false);
-  }, [date, fetchMetrics]);
+    if (isDemoMode) {
+      // Cargar datos demo
+      console.log('[DEMO MODE] 🎭 Cargando datos demo para dashboard principal...');
+      setIsLoading(true);
+      
+      // Simular delay para hacer la experiencia más realista
+      const timer = setTimeout(() => {
+        const demoProvinces = generateDemoProvinces();
+        const demoDaily = generateDemoDaily(
+          date?.from || subDays(new Date(), 7), 
+          date?.to || new Date()
+        );
+        
+        // Crear estructura de datos similar a la real (simplificada para demo)
+        const demoMetrics = {
+          provinceMetrics: demoProvinces.map(province => ({
+            name: province.name,
+            totalOrders: province.orders,
+            confirmedOrders: Math.floor(province.orders * 0.85), // 85% confirmación
+            totalSpent: province.sales,
+            confirmationRate: 85,
+          })),
+          storeMetrics: [
+            { 
+              name: 'Dearel', 
+              totalOrders: 1250, 
+              confirmedOrders: 1050, 
+              totalSpent: 85000, 
+              confirmationRate: 84,
+              averageTicket: 68,
+              topProducts: [
+                { name: 'Producto A', count: 145 },
+                { name: 'Producto B', count: 98 },
+                { name: 'Producto C', count: 76 }
+              ]
+            },
+            { 
+              name: 'Blumi', 
+              totalOrders: 980, 
+              confirmedOrders: 845, 
+              totalSpent: 68000, 
+              confirmationRate: 86.2,
+              averageTicket: 69.4,
+              topProducts: [
+                { name: 'Kit Premium', count: 112 },
+                { name: 'Pack Básico', count: 89 },
+                { name: 'Edición Especial', count: 67 }
+              ]
+            },
+            { 
+              name: 'Novi', 
+              totalOrders: 756, 
+              confirmedOrders: 634, 
+              totalSpent: 52000, 
+              confirmationRate: 83.9,
+              averageTicket: 68.8,
+              topProducts: [
+                { name: 'Modelo Pro', count: 87 },
+                { name: 'Versión Lite', count: 76 },
+                { name: 'Bundle Completo', count: 54 }
+              ]
+            },
+            { 
+              name: 'Trazto', 
+              totalOrders: 623, 
+              confirmedOrders: 534, 
+              totalSpent: 41000, 
+              confirmationRate: 85.7,
+              averageTicket: 65.8,
+              topProducts: [
+                { name: 'Línea Gold', count: 76 },
+                { name: 'Serie Silver', count: 65 },
+                { name: 'Pack Económico', count: 43 }
+              ]
+            },
+            { 
+              name: 'Cumbre', 
+              totalOrders: 445, 
+              confirmedOrders: 378, 
+              totalSpent: 29000, 
+              confirmationRate: 84.9,
+              averageTicket: 65.2,
+              topProducts: [
+                { name: 'Premium Plus', count: 54 },
+                { name: 'Estándar', count: 43 },
+                { name: 'Básico', count: 32 }
+              ]
+            },
+          ],
+          personnelMetrics: Object.values(MAIN_STORES).map(store => {
+            const totalOrders = 150 + Math.floor(Math.random() * 100);
+            const confirmationRate = 82 + Math.random() * 8;
+            return {
+              name: capitalize(store),
+              totalOrders,
+              confirmedOrders: Math.floor(totalOrders * (confirmationRate / 100)),
+              totalSpent: totalOrders * (180 + Math.random() * 120),
+              confirmationRate,
+            };
+          }),
+          miscMetrics: {
+            globalConfirmed: Math.floor(demoDaily.reduce((sum, day) => sum + day.orders, 0) * 0.85),
+            globalUnconfirmed: Math.floor(demoDaily.reduce((sum, day) => sum + day.orders, 0) * 0.15),
+          },
+          dailyMetrics: demoDaily.map(day => {
+            const confirmed = Math.floor(day.orders * 0.85);
+            const unconfirmed = day.orders - confirmed;
+            return {
+              date: day.date,
+              totalOrders: day.orders,
+              confirmed,
+              unconfirmed,
+              confirmationRate: day.orders > 0 ? (confirmed / day.orders) * 100 : 0,
+              revenue: day.sales,
+            };
+          }),
+        } as any; // Forzar tipo para demo
+        
+        processAndSetMetrics(demoMetrics);
+        
+        toast({
+          title: "🎭 Modo Demo",
+          description: "Dashboard principal cargado con datos de demostración",
+        });
+      }, 1200);
+      
+      return () => clearTimeout(timer);
+    } else {
+      // Cargar datos reales
+      fetchMetrics(false);
+    }
+  }, [date, isDemoMode, processAndSetMetrics, toast]);
 
 
   const filterMetricsByStore = useCallback((storeName: string) => {
@@ -480,6 +615,18 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Banner de Modo Demo */}
+      {isDemoMode && (
+        <Alert className="border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="text-amber-800 dark:text-amber-200">Modo Demostración</AlertTitle>
+          <AlertDescription className="text-amber-700 dark:text-amber-300">
+            Estás visualizando datos de demostración generados automáticamente. 
+            Esta vista muestra las capacidades completas del dashboard con datos ficticios.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -535,16 +682,37 @@ export default function Dashboard() {
               </Select>
             </div>
             <div className="flex gap-2">
-              <Button className="flex-1" variant="outline" size="sm" onClick={() => fetchMetrics(true)} disabled={isLoading}>
+              <Button 
+                className="flex-1" 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  if (isDemoMode) {
+                    // En modo demo, regenerar datos
+                    const timer = setTimeout(() => {
+                      window.location.reload(); // Recargar para regenerar datos
+                    }, 500);
+                    toast({
+                      title: "🎭 Regenerando datos demo...",
+                      description: "Se están actualizando los datos de demostración",
+                    });
+                  } else {
+                    fetchMetrics(true);
+                  }
+                }}
+                disabled={isLoading}
+              >
                 {isLoading ? <Loader className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 <span className="ml-2 hidden sm:inline">Actualizar</span>
               </Button>
-              <Link href="/dashboard/upload-data" passHref className="flex-1">
-                <Button variant="outline" size="sm" className="w-full">
-                  <Upload className="h-4 w-4" />
-                  <span className="ml-2 hidden sm:inline">Subir Datos</span>
-                </Button>
-              </Link>
+              {!isDemoMode && (
+                <Link href="/dashboard/upload-data" passHref className="flex-1">
+                  <Button variant="outline" size="sm" className="w-full">
+                    <Upload className="h-4 w-4" />
+                    <span className="ml-2 hidden sm:inline">Subir Datos</span>
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
         </div>

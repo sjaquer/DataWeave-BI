@@ -23,6 +23,7 @@ import {
   Cog,
   Target,
   BarChart2,
+  AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -94,6 +95,13 @@ import { ScheduleManager } from "@/components/dashboard/ScheduleManager";
 import { BackfillProgress } from "@/components/dashboard/BackfillProgress";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { useAuth } from "@/contexts/AuthContext";
+import { generateDemoPerformanceData, demoAgentMap, demoSchedules } from "@/lib/demo-data";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
 
 const CALLS_PER_HOUR_TARGET = 12;
 
@@ -224,6 +232,7 @@ const calculateHoursForDay = (schedule: Schedule, date: Date): number => {
 };
 
 export default function AdvisorPerformancePage() {
+  const { isDemoMode } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [performanceData, setPerformanceData] = useState<AdvisorPerformance[]>(
     []
@@ -243,9 +252,10 @@ export default function AdvisorPerformancePage() {
   const [tempDate, setTempDate] = useState<DateRange | undefined>(date);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [schedules, setSchedules] = useState<Record<string, Schedule>>({});
-  const agentIds = useMemo(() => Object.keys(agentMap), []);
+  // En modo demo, usar agentes demo; de lo contrario, usar agentes reales
+  const agentIds = useMemo(() => isDemoMode ? Object.keys(demoAgentMap) : Object.keys(agentMap), [isDemoMode]);
   const [asesoresOcultos, setAsesoresOcultos] = useState<string[]>(
-    JSON.parse(localStorage.getItem("asesoresOcultos") || "[]")
+    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem("asesoresOcultos") || "[]") : []
   );
 
   // Estado para backfill automático con progreso
@@ -903,9 +913,39 @@ export default function AdvisorPerformancePage() {
     };
   }, [date, autoRefreshEnabled, isBackfillInProgress, fetchAndProcessData]);
 
+  // Efecto para cargar datos demo cuando está en modo demo
   useEffect(() => {
-    fetchAndProcessData();
-  }, [fetchAndProcessData]);
+    if (isDemoMode && date?.from) {
+      console.log("[DEMO MODE] 🎭 Cargando datos de demostración...");
+      setIsLoading(true);
+      
+      // Simular un pequeño delay para hacer la experiencia más realista
+      const timer = setTimeout(() => {
+        const demoData = generateDemoPerformanceData(
+          date.from!,
+          date.to || date.from!
+        );
+        
+        setPerformanceData(demoData.performance);
+        setDailyPerformanceData(demoData.daily);
+        setIsLoading(false);
+        
+        toast({
+          title: "🎭 Modo Demo",
+          description: "Datos de demostración cargados exitosamente",
+        });
+      }, 800);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isDemoMode, date, toast]);
+
+  useEffect(() => {
+    // Solo cargar datos reales si no estamos en modo demo
+    if (!isDemoMode) {
+      fetchAndProcessData();
+    }
+  }, [fetchAndProcessData, isDemoMode]);
 
   // Forzar sincronización manual del rango visualizado usando la API directa de Zadarma
   const handleForceSyncSelection = useCallback(async () => {
@@ -1133,6 +1173,18 @@ export default function AdvisorPerformancePage() {
 
   return (
     <div className="space-y-6">
+      {/* Banner de Modo Demo */}
+      {isDemoMode && (
+        <Alert className="border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="text-amber-800 dark:text-amber-200">Modo Demostración</AlertTitle>
+          <AlertDescription className="text-amber-700 dark:text-amber-300">
+            Estás visualizando datos de demostración generados automáticamente. 
+            Esta vista muestra las capacidades del sistema con datos ficticios de 8 asesores.
+          </AlertDescription>
+        </Alert>
+      )}
+      
       <ScheduleManager
         open={isScheduleManagerOpen}
         onOpenChange={setIsScheduleManagerOpen}
@@ -1221,33 +1273,53 @@ export default function AdvisorPerformancePage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => fetchAndProcessData()}
+            onClick={() => {
+              if (isDemoMode) {
+                // En modo demo, regenerar datos
+                const demoData = generateDemoPerformanceData(
+                  date?.from || new Date(),
+                  date?.to || date?.from || new Date()
+                );
+                setPerformanceData(demoData.performance);
+                setDailyPerformanceData(demoData.daily);
+                toast({
+                  title: "🎭 Datos actualizados",
+                  description: "Se han regenerado los datos de demostración",
+                });
+              } else {
+                fetchAndProcessData();
+              }
+            }}
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refrescar Ahora
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleForceSyncSelection}
-            disabled={isLoading}
-          >
-            <PlayCircle className="h-4 w-4 mr-2" />
-            {forceButtonLabel}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsScheduleManagerOpen(true)}
-          >
-            <Cog className="h-4 w-4 mr-2" />
-            Gestionar Horarios
-          </Button>
+          {!isDemoMode && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleForceSyncSelection}
+                disabled={isLoading}
+              >
+                <PlayCircle className="h-4 w-4 mr-2" />
+                {forceButtonLabel}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsScheduleManagerOpen(true)}
+              >
+                <Cog className="h-4 w-4 mr-2" />
+                Gestionar Horarios
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Control de Auto-Refresh y Fuente de Datos */}
-      {format(date?.from || new Date(), "yyyy-MM-dd") ===
+      {/* Control de Auto-Refresh y Fuente de Datos - Solo en modo real */}
+      {!isDemoMode && format(date?.from || new Date(), "yyyy-MM-dd") ===
         format(new Date(), "yyyy-MM-dd") && (
         <Card>
           <CardContent className="pt-6">

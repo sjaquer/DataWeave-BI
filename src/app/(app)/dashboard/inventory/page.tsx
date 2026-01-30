@@ -17,6 +17,7 @@ import { Tooltip as UiTooltip, TooltipContent as UiTooltipContent, TooltipProvid
 import { useToast } from "@/hooks/use-toast";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { GetMetricsOutput, GetMetricsInput, CustomerReturn, PurchaseForecastItem } from "@/ai/schemas/getMetricsSchema";
+import { isDemoModeActive, generateDemoInventory, generateDemoInventorySummary, generateDemoMonthlyReturns, generateDemoProductStats, generateDemoStoreMetrics } from '@/lib/demo-data';
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -121,6 +122,36 @@ export default function InventoryDetailPage() {
     }
 
     try {
+      if (isDemoModeActive()) {
+        const startDate = date?.from ? new Date(date.from) : subDays(new Date(), 29);
+        startDate.setHours(0,0,0,0);
+        const endDate = date?.to ? new Date(date.to) : new Date();
+        endDate.setHours(23,59,59,999);
+
+        const inventory = generateDemoInventory();
+        const summary = generateDemoInventorySummary();
+        const monthly = generateDemoMonthlyReturns();
+        const topProducts = generateDemoProductStats();
+        const stores = generateDemoStoreMetrics(startDate, endDate);
+
+        const demoMetrics: any = {
+          currentInventory: inventory.map(i => ({ store: MAIN_STORES[Math.floor(Math.random()*MAIN_STORES.length)], productName: i.name, sku: i.sku, currentStock: i.stock, reserved: i.reserved, lastUpdate: i.lastUpdate })),
+          purchaseForecast: inventory.map(i => ({ productName: i.name, suggestedPurchase: Math.max(10, Math.floor(i.sold * 0.4)), urgency: i.stock < 80 ? 'Urgente (Comprar Ya)' : 'Stock Saludable' })),
+          customerReturns: Array.from({ length: 12 }).map((_, idx) => ({ id: `RET-${idx}`, date: format(subDays(new Date(), idx), 'yyyy-MM-dd'), productName: inventory[Math.floor(Math.random()*inventory.length)].name, reason: 'Daño', store: MAIN_STORES[Math.floor(Math.random()*MAIN_STORES.length)] })),
+          mostMovedProducts: topProducts.stats.slice(0,10).map(p => ({ productName: p.name, qty: p.totalSold })),
+          mostIncomingProducts: inventory.slice(0,10).map(i => ({ productName: i.name, incoming: Math.floor(Math.random()*200) })),
+          inventoryFlowTrend: Array.from({ length: 14 }).map((_, i) => ({ date: format(subDays(new Date(), i), 'yyyy-MM-dd'), store: MAIN_STORES[i % MAIN_STORES.length], inflow: Math.floor(20 + Math.random()*80), outflow: Math.floor(10 + Math.random()*50) })),
+          mostReturnedProducts: topProducts.top5.map(p => ({ productName: p.name, returns: Math.floor(Math.random()*30) })),
+          inventorySummary: summary,
+          monthlyReturns: monthly,
+          storeMetrics: stores,
+        };
+
+        try { localStorage.setItem(cacheKeyWithDate, JSON.stringify({ data: demoMetrics, timestamp: Date.now() })); } catch (e) { /* ignore */ }
+        processAndSetMetrics(demoMetrics as GetMetricsOutput);
+        return;
+      }
+
       let input: GetMetricsInput = {};
        if (date?.from) {
         const startDate = new Date(date.from);
@@ -129,7 +160,7 @@ export default function InventoryDetailPage() {
         endDate.setHours(23, 59, 59, 999);
         input = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
       }
-      
+
       const metricsData = await getMetrics(input);
 
       try {

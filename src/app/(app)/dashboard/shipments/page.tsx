@@ -27,6 +27,7 @@ import { EnviosTemporalesKPIs } from "@/components/dashboard/EnviosTemporalesKPI
 import { EstadosTemporalesTable } from "@/components/dashboard/EstadosTemporalesTable";
 import { CourierPerformanceChart } from "@/components/dashboard/CourierPerformanceChart";
 import { Separator } from "@/components/ui/separator";
+import { isDemoModeActive, generateDemoShipments, generateDemoDaily, generateDemoProvinces, generateDemoProductStats, generateDemoStoreMetrics } from '@/lib/demo-data';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82ca9d', '#ffc658', '#ff7c7c'];
 const CACHE_KEY_PREFIX = 'dashboardMetricsCache_shipments';
@@ -69,6 +70,56 @@ export default function ShipmentsPage() {
     }
     
     try {
+      if (isDemoModeActive()) {
+        const startDate = date?.from ? new Date(date.from) : subDays(new Date(), 29);
+        startDate.setHours(0,0,0,0);
+        const endDate = date?.to ? new Date(date.to) : new Date();
+        endDate.setHours(23,59,59,999);
+
+        const shipments = generateDemoShipments(startDate, endDate);
+        const dailyMetrics = generateDemoDaily(startDate, endDate);
+        const provinces = generateDemoProvinces();
+        const topProducts = generateDemoProductStats().top5.map(p => ({ name: p.name, totalOrders: p.totalSold }));
+        const stores = generateDemoStoreMetrics(startDate, endDate);
+
+        // sintetizar métricas de couriers desde envíos demo
+        const courierMap: Record<string, any> = {};
+        shipments.forEach(s => {
+          const name = s.courier || 'Courier Demo';
+          if (!courierMap[name]) courierMap[name] = { name, totalShipments: 0, totalRevenue: 0, provinceCount: 0, percentageOfTotal: 0, averageOrderValue: 0 };
+          courierMap[name].totalShipments += 1;
+          courierMap[name].totalRevenue += s.amount || 0;
+        });
+        const courierMetrics = Object.values(courierMap).map((c: any) => ({
+          ...c,
+          provinceCount: Math.max(1, Math.floor(Math.random() * 8)),
+          percentageOfTotal: 0,
+          averageOrderValue: c.totalShipments > 0 ? c.totalRevenue / c.totalShipments : 0,
+        }));
+
+        const totalConfirmed = shipments.filter((s:any) => s.status === 'entregado' || s.status === 'en-transito').length;
+
+        const metricsData: any = {
+          dailyMetrics,
+          provinceMetrics: provinces.map(p => ({ ...p, confirmedOrders: p.orders })),
+          mostPurchasedProducts: topProducts.map(tp => ({ name: tp.name, totalOrders: tp.totalOrders || tp.totalSold })),
+          courierMetrics,
+          storeMetrics: stores,
+          paymentMethodMetrics: [
+            { method: 'Tarjeta', totalOrders: Math.floor(totalConfirmed * 0.6), totalRevenue: Math.round(totalConfirmed * 0.6 * 120) },
+            { method: 'Efectivo', totalOrders: Math.floor(totalConfirmed * 0.3), totalRevenue: Math.round(totalConfirmed * 0.3 * 90) },
+            { method: 'Yape', totalOrders: Math.floor(totalConfirmed * 0.1), totalRevenue: Math.round(totalConfirmed * 0.1 * 80) },
+          ],
+          mostPurchasedProductsDetailed: topProducts,
+          miscMetrics: { globalConfirmed: totalConfirmed },
+        };
+
+        setMetrics(metricsData);
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data: metricsData, timestamp: Date.now() })); } catch (e) { /* ignore */ }
+        setLoading(false);
+        return;
+      }
+
       const input: GetMetricsInput = {};
       if (date?.from) {
         const startDate = new Date(date.from);
@@ -81,20 +132,10 @@ export default function ShipmentsPage() {
 
       const metricsData = await getMetrics(input);
       setMetrics(metricsData);
-      
-      try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ data: metricsData, timestamp: Date.now() }));
-      } catch (e) {
-        console.error("Error saving to cache", e);
-      }
-
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data: metricsData, timestamp: Date.now() })); } catch (e) { /* ignore */ }
     } catch (error) {
       console.error("Error al cargar las métricas de envíos:", error);
-      toast({
-        variant: "destructive",
-        title: "Error al Cargar Datos",
-        description: "No se pudieron obtener las métricas de envíos. Intenta de nuevo.",
-      });
+      toast({ variant: "destructive", title: "Error al Cargar Datos", description: "No se pudieron obtener las métricas de envíos. Intenta de nuevo." });
     } finally {
       setLoading(false);
     }

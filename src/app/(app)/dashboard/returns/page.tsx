@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { MonthlyProductReport, GetMetricsOutput } from "@/ai/schemas/getMetricsSchema";
+import { isDemoModeActive, generateDemoInventory, generateDemoMonthlyReturns, generateDemoProductStats } from '@/lib/demo-data';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -75,14 +76,34 @@ export default function MonthlyReportPage() {
     }
 
     try {
-      const metricsData = await getMetrics({});
+      if (isDemoModeActive()) {
+        const inventory = generateDemoInventory();
+        const monthly = generateDemoMonthlyReturns();
+        const prodStats = generateDemoProductStats();
 
-      try {
-        const cachePayload = { data: metricsData, timestamp: Date.now() };
-        localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
-      } catch (e) { console.error("Error al guardar en la caché:", e); }
+        const monthlyReport = inventory.map((p, idx) => ({
+          sku: p.sku,
+          productName: p.name,
+          currentStock: p.stock,
+          monthlySales: p.sold,
+          previousMonthSales: Math.max(0, p.sold - Math.floor(Math.random()*20)),
+          salesTrend: Number((Math.random()*10 - 5).toFixed(1)),
+          suggestedPurchase: Math.max(0, 50 - p.stock),
+        }));
 
-      processAndSetMetrics(metricsData);
+        const demoData: any = { monthlyProductReport: monthlyReport };
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data: demoData, timestamp: Date.now() })); } catch (e) { /* ignore */ }
+        processAndSetMetrics(demoData as GetMetricsOutput);
+      } else {
+        const metricsData = await getMetrics({});
+
+        try {
+          const cachePayload = { data: metricsData, timestamp: Date.now() };
+          localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
+        } catch (e) { console.error("Error al guardar en la caché:", e); }
+
+        processAndSetMetrics(metricsData);
+      }
     } catch (error) {
       console.error("Error al obtener el reporte mensual:", error);
       toast({ variant: "destructive", title: "Error de Conexión", description: "No se pudo cargar el reporte mensual." });

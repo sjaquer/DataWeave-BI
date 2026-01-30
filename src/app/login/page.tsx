@@ -106,6 +106,16 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
             </Button>
+
+            {/* Credenciales Demo */}
+            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="text-xs text-blue-800 dark:text-blue-200 text-center font-medium">
+                🎭 Modo Demo disponible
+              </p>
+              <p className="text-xs text-blue-600 dark:text-blue-300 text-center mt-1">
+                Correo: <span className="font-mono font-bold">admin@admin</span> | Contraseña: <span className="font-mono font-bold">admin</span>
+              </p>
+            </div>
           </form>
         </CardContent>
       </Card>

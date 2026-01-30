@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { CurrentInventoryItem, GetMetricsOutput } from "@/ai/schemas/getMetricsSchema";
+import { isDemoModeActive, generateDemoInventory } from '@/lib/demo-data';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -73,15 +74,23 @@ export default function InventoryStatusPage() {
 
     try {
       toast({ title: "Actualizando estado de inventario..." });
-      const metricsData = await getMetrics({});
+      if (isDemoModeActive()) {
+        const inventory = generateDemoInventory();
+        const demoMetrics: any = { currentInventory: inventory.map(i => ({ store: 'Demo', productName: i.name, sku: i.sku, currentStock: i.stock, reserved: i.reserved })) };
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data: demoMetrics, timestamp: Date.now() })); } catch (e) { /* ignore */ }
+        processAndSetMetrics(demoMetrics as GetMetricsOutput);
+        toast({ title: "Inventario Demo Cargado" });
+      } else {
+        const metricsData = await getMetrics({});
 
-      try {
-        const cachePayload = { data: metricsData, timestamp: Date.now() };
-        localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
-      } catch (e) { console.error("Error al guardar en la caché:", e); }
+        try {
+          const cachePayload = { data: metricsData, timestamp: Date.now() };
+          localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
+        } catch (e) { console.error("Error al guardar en la caché:", e); }
 
-      processAndSetMetrics(metricsData);
-      toast({ title: "Inventario Actualizado", description: "Los datos se han cargado correctamente." });
+        processAndSetMetrics(metricsData);
+        toast({ title: "Inventario Actualizado", description: "Los datos se han cargado correctamente." });
+      }
     } catch (error) {
       console.error("Error al obtener el estado del inventario:", error);
       toast({ variant: "destructive", title: "Error de Conexión", description: "No se pudo cargar el estado del inventario." });

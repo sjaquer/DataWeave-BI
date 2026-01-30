@@ -10,6 +10,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { DEMO_CREDENTIALS, DEMO_USER_PROFILE } from '@/lib/demo-data';
 
 export type UserRole = 'gerente' | 'encargado' | 'callcenter' | 'marketing';
 
@@ -25,6 +26,7 @@ interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
+  isDemoMode: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, role: UserRole, displayName?: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -36,8 +38,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+
+  // Verificar si hay una sesión demo activa al cargar
+  useEffect(() => {
+    const demoSession = typeof window !== 'undefined' ? localStorage.getItem('demoSession') : null;
+    if (demoSession === 'active') {
+      setIsDemoMode(true);
+      setUserProfile(DEMO_USER_PROFILE);
+      // Crear un usuario mock para el modo demo
+      setUser({ uid: DEMO_USER_PROFILE.uid, email: DEMO_USER_PROFILE.email } as User);
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
+    // Si estamos en modo demo, no escuchar cambios de auth de Firebase
+    if (isDemoMode) return;
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       
@@ -53,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               uid: user.uid,
               email: user.email || '',
               role: data.role || 'callcenter',
-              displayName: data.displayName || user.email,
+              displayName: data.displayName || (user.email ?? ''),
               createdAt: data.createdAt?.toDate(),
             });
           } else {
@@ -62,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               uid: user.uid,
               email: user.email || '',
               role: 'callcenter',
-              displayName: user.email,
+              displayName: user.email ?? '',
             };
             
             await setDoc(userDocRef, {
@@ -84,9 +102,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isDemoMode]);
 
   const signIn = async (email: string, password: string) => {
+    // Verificar credenciales demo
+    if (email === DEMO_CREDENTIALS.email && password === DEMO_CREDENTIALS.password) {
+      console.log('[AUTH] Modo Demo activado');
+      setIsDemoMode(true);
+      setUserProfile(DEMO_USER_PROFILE);
+      setUser({ uid: DEMO_USER_PROFILE.uid, email: DEMO_USER_PROFILE.email } as User);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('demoSession', 'active');
+      }
+      return;
+    }
+
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
@@ -116,6 +146,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    // Si estamos en modo demo, limpiar la sesión demo
+    if (isDemoMode) {
+      console.log('[AUTH] Cerrando sesión demo');
+      setIsDemoMode(false);
+      setUser(null);
+      setUserProfile(null);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('demoSession');
+      }
+      return;
+    }
+
     try {
       await firebaseSignOut(auth);
     } catch (error: any) {
@@ -128,6 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     userProfile,
     loading,
+    isDemoMode,
     signIn,
     signUp,
     signOut,

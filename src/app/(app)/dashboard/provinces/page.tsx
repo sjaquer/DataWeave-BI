@@ -18,6 +18,7 @@ import { cn, findBestProvinceMatch } from "@/lib/utils";
 import { provinceList } from "@/lib/provinces";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { ProvinceMetric, GetMetricsOutput, GetMetricsInput, StoreMetric } from "@/ai/schemas/getMetricsSchema";
+import { isDemoModeActive, generateDemoProvinces, generateDemoDaily, generateDemoStoreMetrics } from '@/lib/demo-data';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -150,6 +151,27 @@ export default function ProvincesDetailPage() {
     }
 
     try {
+      if (isDemoModeActive()) {
+        const startDate = date?.from ? new Date(date.from) : new Date();
+        startDate.setHours(0,0,0,0);
+        const endDate = date?.to ? new Date(date.to) : new Date();
+        endDate.setHours(23,59,59,999);
+
+        const provinces = generateDemoProvinces();
+        const daily = generateDemoDaily(startDate, endDate);
+        const stores = generateDemoStoreMetrics(startDate, endDate);
+
+        const demoMetrics: any = {
+          provinceMetrics: provinces.map(p => ({ name: p.name, totalOrders: p.orders, confirmedOrders: p.orders, totalSpent: p.sales })),
+          dailyMetrics: daily,
+          storeMetrics: stores,
+        };
+
+        try { localStorage.setItem(cacheKeyWithDate, JSON.stringify({ data: demoMetrics, timestamp: Date.now() })); } catch (e) { /* ignore */ }
+        processAndSetMetrics(demoMetrics as GetMetricsOutput, selectedStore);
+        return;
+      }
+
       let input: GetMetricsInput = {};
       if (date?.from) {
         const startDate = new Date(date.from);
@@ -158,7 +180,7 @@ export default function ProvincesDetailPage() {
         endDate.setHours(23, 59, 59, 999);
         input = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
       }
-      
+
       const metricsData = await getMetrics(input);
 
       try {

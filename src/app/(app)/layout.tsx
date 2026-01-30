@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { BarChart2, Briefcase, Calendar, Home, Inbox, Layers, MapPin, Settings, ShoppingCart, Users, FolderKanban, LogOut, TruckIcon, Menu, X, Eye, EyeOff, PanelLeft } from 'lucide-react';
+import { BarChart2, Briefcase, Calendar, Home, Inbox, Layers, MapPin, Settings, ShoppingCart, Users, FolderKanban, LogOut, TruckIcon, Menu, X, Eye, EyeOff, PanelLeft, AlertTriangle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Logo } from '@/components/icons';
@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarFooter, SidebarTrigger } from '@/components/ui/sidebar';
+import { Badge } from '@/components/ui/badge';
 
 const menuItems = [
     { path: '/dashboard', icon: Home, label: 'Dashboard', roles: ['gerente', 'encargado', 'callcenter', 'marketing'] },
@@ -35,7 +36,7 @@ const menuItems = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, userProfile, loading, signOut } = useAuth();
+  const { user, userProfile, loading, signOut, isDemoMode } = useAuth();
   
   useEffect(() => {
     if (!loading && !user) {
@@ -68,6 +69,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Logo className="h-7 w-7 text-primary" />
           <span className="text-xl group-data-[collapsible=icon]:hidden">DataWeave</span>
         </Link>
+        {isDemoMode && (
+          <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 text-xs group-data-[collapsible=icon]:hidden">
+            🎭 Demo
+          </Badge>
+        )}
         <SidebarTrigger />
       </SidebarHeader>
 

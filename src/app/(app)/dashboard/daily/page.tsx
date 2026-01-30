@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getMetrics } from "@/ai/flows/getMetricsFlow";
 import type { DailyMetric, GetMetricsOutput, GetMetricsInput } from "@/ai/schemas/getMetricsSchema";
+import { isDemoModeActive, generateDemoDaily, generateDemoStoreMetrics, generateDemoProvinces } from '@/lib/demo-data';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -122,6 +123,22 @@ export default function DailyDetailPage() {
     }
 
     try {
+      if (isDemoModeActive()) {
+        const startDate = date?.from ? new Date(date.from) : subDays(new Date(), 6);
+        startDate.setHours(0,0,0,0);
+        const endDate = date?.to ? new Date(date.to) : new Date();
+        endDate.setHours(23,59,59,999);
+
+        const daily = generateDemoDaily(startDate, endDate);
+        const stores = generateDemoStoreMetrics(startDate, endDate);
+        const provinces = generateDemoProvinces();
+
+        const demoMetrics: any = { dailyMetrics: daily, storeMetrics: stores, provinceMetrics: provinces };
+        try { localStorage.setItem(cacheKeyWithDate, JSON.stringify({ data: demoMetrics, timestamp: Date.now() })); } catch (e) { /* ignore */ }
+        processAndSetMetrics(demoMetrics as GetMetricsOutput);
+        return;
+      }
+
       let input: GetMetricsInput = {};
       if (date?.from) {
         const startDate = new Date(date.from);
@@ -135,7 +152,7 @@ export default function DailyDetailPage() {
           endDate: endDate.toISOString(),
         };
       }
-      
+
       const metricsData = await getMetrics(input);
 
       try {

@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line, BarChart, Bar } from 'recharts';
 import { DollarSign, MousePointerClick, Percent } from 'lucide-react';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { isDemoModeActive, generateDemoMetaCampaigns, generateDemoCampaignMetrics } from '@/lib/demo-data';
 
 // DateRangePicker (si existe como componente separado)
 // Asumimos que tienes un componente DatePickerWithRange en ui/date-range-picker.tsx
@@ -54,6 +55,17 @@ export default function MetaCampaignsPage() {
       const url = `/api/meta/campaigns?startDate=${startDate}&endDate=${endDate}`;
 
       try {
+        if (isDemoModeActive()) {
+          const startDate = format(dateRange.from, 'yyyy-MM-dd');
+          const endDate = format(dateRange.to, 'yyyy-MM-dd');
+          const campaignsDemo = generateDemoCampaignMetrics(new Date(startDate), new Date(endDate));
+          // generateDemoCampaignMetrics retorna estructura con métricas, convertir a la forma esperada
+          const flat = campaignsDemo.map((c:any) => ({ id: c.id, name: c.name, status: c.status === 'active' ? 'ACTIVE' : 'PAUSED', objective: 'Conversion', spend: c.spent || c.spent, cpc: c.cpc || 1.0, ctr: c.ctr || 1.0, impressions: c.impressions || 0, clicks: c.clicks || 0 }));
+          setCampaigns(flat);
+          setLoading(false);
+          return;
+        }
+
         const response = await fetch(url);
         if (!response.ok) {
           const errorData = await response.json();

@@ -1,6 +1,8 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import DataUploader from "@/components/DataUploader";
+import { isDemoModeActive } from '@/lib/demo-data';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,7 +37,13 @@ export default function UploadDataPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <DataUploader />
+                    {isDemoModeActive() ? (
+                        <Alert>
+                            <AlertDescription>Modo demo activo: la carga de datos está deshabilitada en la versión de demostración.</AlertDescription>
+                        </Alert>
+                    ) : (
+                        <DataUploader />
+                    )}
                 </CardContent>
             </Card>
         </div>
